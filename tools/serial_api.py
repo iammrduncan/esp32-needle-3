@@ -13,6 +13,10 @@ import serial
 
 CATALOG = json.loads((Path(__file__).with_name('model-catalog.json')).read_text())
 
+# Printed when the startup log turns out to be interleaved with echoed console
+# probes: past this point it must not be parsed as boot output.
+_NOISY_LOG = "WARN boot_log_interleaved"
+
 
 def metric(line, key):
     match = re.search(rf"\b{key}=([0-9.]+)", line)
@@ -28,36 +32,199 @@ def validate_prompt(prompt):
 
 
 class Device:
+    # Declared at class level only so an instance built without __init__ (the
+    # unit tests) has the attributes _line and state() touch.
+    last_line = ""
+    status_credit = 0
+    _log_clean = True
+    # Echo the startup log as it is read; turned off for probe replies.
+    _log_open = True
+    _warned_noisy_log = False
+
     def __init__(self, port, baud, boot_timeout, request_timeout, think):
-        self.serial = serial.Serial(port, baudrate=baud, timeout=1, write_timeout=5, exclusive=True)
+        self.port = port
+        self.baud = baud
         self.lock = threading.RLock()
         self.request_timeout = request_timeout
         self.ready_line = None
         self.available = False
         self.think = think
+        self.status_credit = 0
+        self._log_open = True
+        self._warned_noisy_log = False
+        self._open(port, baud)
+        self._handshake(boot_timeout)
+
+    def _open(self, port, baud):
+        # Both of this board's ports are USB-Serial/JTAG, and a DTR/RTS edge
+        # around the open resets the chip. That restarts the ~2 min model-cache
+        # priming and makes the first "!think" land in the ESP-ROM loader, whose
+        # banner then breaks sync. pyserial raises dtr/rts before opening and
+        # drops them again afterwards, so they have to be pinned down on either
+        # side of the open. Measured on the connected board: an otherwise
+        # identical open reset it (rst:0x15 USB_UART_CHIP_RESET); with this, no.
+        self.serial = serial.Serial()
+        self.serial.port = port
+        self.serial.baudrate = baud
+        self.serial.timeout = 1
+        self.serial.write_timeout = 5
+        self.serial.exclusive = True
+        self.serial.dtr = False
+        self.serial.rts = False
+        self.serial.open()
+        self.serial.dtr = False
+        self.serial.rts = False
+
+    def _handshake(self, boot_timeout):
+        """Attach, then re-attach quietly if the board was busy on arrival.
+
+        The console echoes whatever is written to it while the firmware is
+        working, so a probe sent during the ~2 min post-reset priming comes back
+        as a request line and is answered "ERR unknown_command" or
+        "ERR incomplete_call". Those replies belong to the handshake and not to
+        any request: failing on them, or leaving them queued for the first real
+        request, is what aborted the first three-board baseline batch.
+
+        So: read until the firmware answers a status we asked for. A board that
+        was busy answers only behind those echoes, so reconnect without
+        resetting - by then it is idle - and take one clean status off it. That
+        costs the buffered startup log, which on such an attach is interleaved
+        anyway; requests go out only after this returns, so the measurement is
+        unaffected.
+        """
         self._set_think()
-        until = time.monotonic() + boot_timeout
+        state = self._await_attach(boot_timeout)
+        if state is None:
+            self._reconnect()
+            state = self._request_state(min(boot_timeout, 30.0))
+        if state is None:
+            raise TimeoutError("ESP32 did not become ready; check serial port and firmware boot logs")
+        if state.get("schema") != "agent-watch-v2":
+            raise RuntimeError("flash the agent watch firmware before starting this bridge")
+        self.available = True
+
+    def _await_attach(self, timeout):
+        """Watch the startup log until the board answers a status of ours.
+
+        Read the way the original handshake read it - echoing, and stopping at
+        the think ack - so bench.py still gets the boot bench and the per-phase
+        profile. Two differences, both learned the hard way: an "ERR" is no
+        longer fatal (it is usually the answer to an echoed probe), and a
+        firmware "READY" banner is welcome rather than required, because a
+        reconnect can only attach after that banner has already scrolled past.
+        """
+        self._log_open = True
+        self._log_clean = True
+        self._warned_noisy_log = False
+        until = time.monotonic() + timeout
         while time.monotonic() < until:
             line = self._line()
-            if line:
-                print(line, flush=True)
-            if line.startswith("EVT  READY"):
+            if not line:
+                continue
+            if self._is_echo_reply(line):
+                self._log_clean = False
+            elif line.startswith("EVT  READY"):
                 self.ready_line = line
                 self._set_think()
-            if line == f"EVT think={int(self.think)}":
+            elif line == f"EVT think={int(self.think)}":
+                # The ack is ours: bench.py starts reading at the next line, so
+                # leaving it here would hand it to the first case.
                 self.ready_line = self.ready_line or "attached to running firmware"
                 self.available = True
-                current = self.state()
-                if current.get("schema") != "agent-watch-v2":
-                    raise RuntimeError("flash the agent watch firmware before starting this bridge")
-                return
-            if line.startswith("ERR "):
-                raise RuntimeError(f"ESP32 boot error: {line}")
-        raise TimeoutError("ESP32 did not become ready; check serial port and firmware boot logs")
+                if not self._log_clean:
+                    return None
+                return self._request_state(max(timeout - (time.monotonic() - (until - timeout)), 5.0))
+        return None
+
+    def _reconnect(self):
+        """Re-attach to an idle board, keeping its state but not its backlog.
+
+        Everything before the first clean "!status" belongs to the handshake, so
+        it must never reach bench.py: the board prints its startup log once, at
+        boot, and on a reconnect that log is already in the queue behind a wall
+        of echoed probe replies. reset_input_buffer() is not enough - pyserial
+        only clears bytes nobody has read yet, the driver has already delivered
+        them to this process. So the backlog is drained with reads instead.
+        """
+        try:
+            self.serial.close()
+        except Exception:
+            pass
+        self._open(self.port, self.baud)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and self.serial.readline():
+            pass
+        self.available = False
+        self.ready_line = None
+        self.status_credit = 0
+        # Nothing more to learn from this board's startup log, and provoking an
+        # ack here would queue a reply that the next reader mistakes for the end
+        # of a request.
+        self._log_open = False
+
+    def _request_state(self, timeout):
+        """Ask for the state and return only the frame that answers this ask.
+
+        The firmware has no request/response framing: it answers whatever it
+        reads from the console, so a probe written while it was busy is echoed
+        and answered inside the next reply. A "STATE" frame in the stream is
+        therefore not necessarily an answer to us. Crediting each "!status" and
+        accepting only frames that pay a credit is what stops an echoed STATE
+        being taken for the reply to a later, unrelated request.
+        """
+        self.status_credit += 1
+        self.serial.write(b"!status\n")
+        self.serial.flush()
+        until = time.monotonic() + timeout
+        while time.monotonic() < until:
+            line = self._line()
+            if line.startswith("STATE ") and self.status_credit > 0:
+                self.status_credit -= 1
+                return json.loads(line[6:])
+        self.status_credit -= 1
+        return None
+
+    def _is_echo_reply(self, line):
+        """True if `line` can only be the answer to a probe we wrote.
+
+        The firmware answers whatever it reads from the console, so anything
+        written while it is working is echoed and answered as if it were a
+        prompt: "ERR" for a command it cannot parse, "STATE" for a "!status" we
+        never asked for. If that happens the startup log is interleaved, and
+        bench.py must not read it as boot output.
+        """
+        if line.startswith("ERR ") or (line.startswith("STATE ") and
+                                       self.status_credit <= 0):
+            if self._log_open and not self._warned_noisy_log:
+                print(_NOISY_LOG, flush=True)
+                self._warned_noisy_log = True
+                self._log_open = False     # nothing after this is boot output
+            return True
+        return False
+
+    def _skip_until(self, wanted, timeout):
+        """Drain up to and including `wanted`, or give up after `timeout`."""
+        until = time.monotonic() + timeout
+        while time.monotonic() < until:
+            if self._line_quiet() == wanted:
+                return True
+        return False
 
     def _line(self):
         # Preserve spaces in tokens. strip() corrupts the generated text.
-        return self.serial.readline().decode("utf-8", "replace").rstrip("\r\n")
+        line = self.serial.readline().decode("utf-8", "replace").rstrip("\r\n")
+        self.last_line = line
+        if line and self._log_open:
+            print(line, flush=True)
+        return line
+
+    def _line_quiet(self):
+        """A read whose reply is ours, not the caller's boot log."""
+        log_open, self._log_open = self._log_open, False
+        try:
+            return self._line()
+        finally:
+            self._log_open = log_open
 
     def _set_think(self):
         self.serial.write(f"!think {int(self.think)}\n".encode())
@@ -70,15 +237,11 @@ class Device:
     def state(self):
         with self.lock:
             self._require_ready()
-            self.serial.write(b"!status\n")
-            self.serial.flush()
-            until = time.monotonic() + 5
-            while time.monotonic() < until:
-                line = self._line()
-                if line.startswith("STATE "):
-                    return json.loads(line[6:])
-            self.available = False
-            raise TimeoutError("ESP32 status request timed out")
+            state = self._request_state(5)
+            if state is None:
+                self.available = False
+                raise TimeoutError("ESP32 status request timed out")
+            return state
 
     def complete(self, prompt, phase="tools"):
         validate_prompt(prompt)
@@ -95,7 +258,7 @@ class Device:
             done = False
             try:
                 while time.monotonic() - start < self.request_timeout:
-                    line = self._line()
+                    line = self._line_quiet()
                     if line.startswith("TOK "):
                         output.append(line[4:].replace("\\n", "\n"))
                     elif line.startswith("JSON "):

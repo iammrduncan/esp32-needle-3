@@ -833,34 +833,77 @@ static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
             uint32_t base  = run ? c->rfirst : 0;
             uint32_t count = run ? c->rcount : c->sinks;
 
-            for (p = 0; p < count; p++) {
+            /* Two positions per iteration. The same two scores are compared
+             * against the running max in slot order, so "a is the new max" and
+             * "then b is" is the same pair of rescales in the same order;
+             * "a is, b is not" folds to exp(b-mx_new), which is what the
+             * one-at-a-time loop computed; "neither" rescales by
+             * exp(m_old-m_new) once instead of not at all, which is the
+             * normalisation this loop does at the end anyway. */
+            for (p = 0; p + 1 < count; p += 2) {
+                uint32_t      sl0 = kv_slot(m, base + p);
+                uint32_t      sl1 = kv_slot(m, base + p + 1);
+                size_t        o0  = (size_t)li * m->window + sl0;
+                size_t        o1  = (size_t)li * m->window + sl1;
+                const int8_t *kp0 = m->k_cache + o0 * m->k_dim + (size_t)kvh * qk_hd;
+                const int8_t *kp1 = m->k_cache + o1 * m->k_dim + (size_t)kvh * qk_hd;
+                const int8_t *vp0 = m->v_cache + o0 * m->v_dim + (size_t)kvh * v_hd;
+                const int8_t *vp1 = m->v_cache + o1 * m->v_dim + (size_t)kvh * v_hd;
+                float         sc0 = m->k_scale[o0 * nkv + kvh] * c->scale;
+                float         sc1 = m->k_scale[o1 * nkv + kvh] * c->scale;
+                float         s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
+
+                for (i = 0; i < qk_hd; i += 2) {
+                    s0 += qh[i] * (float)kp0[i] + qh[i + 1] * (float)kp0[i + 1];
+                    s1 += qh[i] * (float)kp1[i] + qh[i + 1] * (float)kp1[i + 1];
+                }
+                s0 *= sc0;
+                s1 *= sc1;
+
+                mnew = (s0 > s1) ? s0 : s1;
+                if (mnew > mx) {
+                    if (denom > 0.0f) {
+                        rescale = nd_expf(mx - mnew);
+                        for (i = 0; i < v_hd; i++)
+                            oh[i] *= rescale;
+                        denom *= rescale;
+                    }
+                    mx = mnew;
+                }
+                w0 = nd_expf(s0 - mx);
+                w1 = nd_expf(s1 - mx);
+                denom += w0 + w1;
+                {
+                    float wv0 = w0 * m->v_scale[o0 * nkv + kvh];
+                    float wv1 = w1 * m->v_scale[o1 * nkv + kvh];
+                    for (i = 0; i < v_hd; i++)
+                        oh[i] += wv0 * (float)vp0[i] + wv1 * (float)vp1[i];
+                }
+            }
+            if (p < count) {                    /* odd tail, unchanged path */
                 uint32_t      sl = kv_slot(m, base + p);
-                size_t        kb = ((size_t)li * m->window + sl) * m->k_dim
-                                   + (size_t)kvh * qk_hd;
-                size_t        vb = ((size_t)li * m->window + sl) * m->v_dim
-                                   + (size_t)kvh * v_hd;
-                size_t        sb = ((size_t)li * m->window + sl) * nkv + kvh;
-                const int8_t *kp = m->k_cache + kb;
-                const int8_t *vp = m->v_cache + vb;
+                size_t        o  = (size_t)li * m->window + sl;
+                const int8_t *kp = m->k_cache + o * m->k_dim + (size_t)kvh * qk_hd;
+                const int8_t *vp = m->v_cache + o * m->v_dim + (size_t)kvh * v_hd;
                 float         dot = 0.0f, w;
 
                 for (i = 0; i < qk_hd; i++)
                     dot += qh[i] * (float)kp[i];
-                dot *= m->k_scale[sb] * c->scale;
+                dot *= m->k_scale[o * nkv + kvh] * c->scale;
 
                 if (dot > mx) {
                     if (denom > 0.0f) {
-                        float rescale = nd_expf(mx - dot);
+                        float r = nd_expf(mx - dot);
                         for (i = 0; i < v_hd; i++)
-                            oh[i] *= rescale;
-                        denom *= rescale;
+                            oh[i] *= r;
+                        denom *= r;
                     }
                     mx = dot;
                 }
                 w = nd_expf(dot - mx);
                 denom += w;
                 {
-                    float wv = w * m->v_scale[sb];
+                    float wv = w * m->v_scale[o * nkv + kvh];
                     for (i = 0; i < v_hd; i++)
                         oh[i] += wv * (float)vp[i];
                 }

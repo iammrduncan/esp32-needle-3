@@ -60,6 +60,7 @@ typedef struct {
 
 typedef struct {
     uint8_t  n_tools;
+    uint8_t  single_call;          /* require exactly one selection, if set */
     nd_tool  tools[ND_GR_MAX_TOOLS];
 } nd_grammar;
 

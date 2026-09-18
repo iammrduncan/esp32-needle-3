@@ -547,6 +547,68 @@ void nd_model_rewind(nd_model *m)
     }
 }
 
+struct nd_prefix {
+    const nd_model *owner;
+    uint32_t pos, sink, eg_pos, hist[8];
+    unsigned char data[];
+};
+
+/* Copy all persistent prefix state, including KV slots that can be overwritten
+ * by a different schema. Existing snapshot buffers are reused on restore. */
+static size_t prefix_copy(nd_model *m, unsigned char *data, int restore)
+{
+    size_t offset = 0;
+    size_t sc = (size_t)m->n_layers * m->window * m->n_kv_heads;
+#define PREFIX_BUFFER(ptr, bytes) do { \
+    size_t count = (bytes); \
+    if (data && count) { \
+        if (restore) memcpy((ptr), data + offset, count); \
+        else memcpy(data + offset, (ptr), count); \
+    } \
+    offset += count; \
+} while (0)
+    PREFIX_BUFFER(m->k_cache, (size_t)m->n_layers * m->window * m->k_dim);
+    PREFIX_BUFFER(m->v_cache, (size_t)m->n_layers * m->window * m->v_dim);
+    PREFIX_BUFFER(m->k_scale, sc * sizeof(float));
+    PREFIX_BUFFER(m->v_scale, sc * sizeof(float));
+    PREFIX_BUFFER(m->snap_eg_hist, (size_t)m->n_sites * ND_EG_HIST * m->d_model * sizeof(float));
+    PREFIX_BUFFER(m->snap_q_hist, (size_t)m->n_layers * m->c.h.qkv_conv_taps * m->n_heads * m->qk_head_dim * sizeof(float));
+    PREFIX_BUFFER(m->snap_k_hist, (size_t)m->n_layers * m->c.h.qkv_conv_taps * m->k_dim * sizeof(float));
+    PREFIX_BUFFER(m->snap_v_hist, (size_t)m->n_layers * m->c.h.qkv_conv_taps * m->v_dim * sizeof(float));
+    if (m->has_conf) {
+        PREFIX_BUFFER(m->snap_pool_acc, (size_t)m->n_probes * m->d_model * sizeof(float));
+        PREFIX_BUFFER(m->snap_pool_max, m->n_probes * sizeof(float));
+        PREFIX_BUFFER(m->snap_pool_sum, m->n_probes * sizeof(float));
+    }
+#undef PREFIX_BUFFER
+    return offset;
+}
+
+nd_prefix *nd_model_prefix_save(nd_model *m)
+{
+    if (!m->has_snap || m->pos != m->snap_pos) return NULL;
+    nd_prefix *p = (nd_prefix *)ND_ALLOC(sizeof(*p) + prefix_copy(m, NULL, 0));
+    if (!p) return NULL;
+    p->owner = m; p->pos = m->snap_pos; p->sink = m->n_sink;
+    p->eg_pos = m->snap_eg_pos;
+    memcpy(p->hist, m->snap_hist, sizeof(p->hist));
+    prefix_copy(m, p->data, 0);
+    return p;
+}
+
+int nd_model_prefix_restore(nd_model *m, const nd_prefix *p)
+{
+    if (!p || p->owner != m) return -1;
+    prefix_copy(m, (unsigned char *)p->data, 1);
+    m->snap_pos = p->pos; m->snap_eg_pos = p->eg_pos; m->n_sink = p->sink;
+    memcpy(m->snap_hist, p->hist, sizeof(p->hist));
+    m->has_snap = 1;
+    nd_model_rewind(m);
+    return 0;
+}
+
+void nd_model_prefix_free(nd_prefix *p) { ND_FREE(p); }
+
 void nd_model_reset(nd_model *m)
 {
     m->pos    = 0;

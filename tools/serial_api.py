@@ -6,9 +6,12 @@ import json
 import re
 import threading
 import time
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import serial
+
+CATALOG = json.loads((Path(__file__).with_name('model-catalog.json')).read_text())
 
 
 def metric(line, key):
@@ -27,7 +30,7 @@ def validate_prompt(prompt):
 class Device:
     def __init__(self, port, baud, boot_timeout, request_timeout, think):
         self.serial = serial.Serial(port, baudrate=baud, timeout=1, write_timeout=5, exclusive=True)
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.request_timeout = request_timeout
         self.ready_line = None
         self.available = False
@@ -45,8 +48,8 @@ class Device:
                 self.ready_line = self.ready_line or "attached to running firmware"
                 self.available = True
                 current = self.state()
-                if current.get("schema") != "telemetry-router-v1":
-                    raise RuntimeError("flash the telemetry router firmware before starting this bridge")
+                if current.get("schema") != "agent-watch-v2":
+                    raise RuntimeError("flash the agent watch firmware before starting this bridge")
                 return
             if line.startswith("ERR "):
                 raise RuntimeError(f"ESP32 boot error: {line}")
@@ -77,12 +80,14 @@ class Device:
             self.available = False
             raise TimeoutError("ESP32 status request timed out")
 
-    def complete(self, prompt):
+    def complete(self, prompt, phase="tools"):
         validate_prompt(prompt)
+        if phase not in ("tools", "route"):
+            raise ValueError("unknown inference phase")
         with self.lock:
             self._require_ready()
             start = time.monotonic()
-            self.serial.write(prompt.encode() + b"\n")
+            self.serial.write((b"!route " if phase == "route" else b"") + prompt.encode() + b"\n")
             self.serial.flush()
             output, calls, results = [], None, None
             prefill_ms = decode_ms = prefill_tps = decode_tps = None
@@ -129,7 +134,39 @@ class Device:
                 "decode_tokens": int(tokens) if tokens is not None else None,
                 "latency_ms": round((time.monotonic() - start) * 1000, 1),
                 "device": "esp32-s3", "reasoning": self.think,
+                "phase": phase,
             }
+
+    def agent(self, prompt):
+        """A real model decision, then either stop or make a second model call."""
+        validate_prompt(prompt)
+        # Keep the two model passes and their outcomes together on this device.
+        with self.lock:
+            start = time.monotonic()
+            route = self.complete(prompt, phase="route")
+            result = {"input": prompt, "success": False, "routing": route,
+                      "execution": None, "selected_model": None,
+                      "remote_called": False, "inference_passes": 1}
+            calls = route["function_calls"]
+            if not route["success"] or len(calls) != 1:
+                result.update(outcome="route_failed", error=route.get("error") or "invalid_model_choice")
+            else:
+                choice = next((key for key, model in CATALOG.items() if calls[0].get("name") in model["route_tools"]), None)
+                model = CATALOG.get(choice)
+                if model is None:
+                    result.update(outcome="route_failed", error="unknown_model")
+                else:
+                    result["selected_model"] = {"key": choice, **model}
+                    if model["execution"] == "local":
+                        # Original request is passed unchanged under a new schema.
+                        execution = self.complete(prompt, phase="tools")
+                        result.update(execution=execution, inference_passes=2,
+                                      success=execution["success"], error=execution["error"],
+                                      outcome="local_executed" if execution["success"] else "local_failed")
+                    else:
+                        result.update(success=True, error=None, outcome="external_selected")
+            result["latency_ms"] = round((time.monotonic() - start) * 1000, 1)
+            return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -140,6 +177,9 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.settimeout(10)
 
     def do_GET(self):
+        if self.path == "/models":
+            self._json(200, CATALOG)
+            return
         if self.path not in ("/health", "/state"):
             self._json(404, {"error": "not found"})
             return
@@ -150,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(503, {"ready": False, "error": str(exc)})
 
     def do_POST(self):
-        if self.path != "/complete":
+        if self.path not in ("/complete", "/agent", "/route"):
             self._json(404, {"error": "not found"})
             return
         try:
@@ -160,7 +200,10 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict) or "input" not in body:
                 raise ValueError('body must be an object with an "input" string')
-            result = self.device.complete(body["input"])
+            if self.path == "/agent":
+                result = self.device.agent(body["input"])
+            else:
+                result = self.device.complete(body["input"], phase="route" if self.path == "/route" else "tools")
             self._json(200 if result["success"] else 502, result)
         except (ValueError, KeyError, UnicodeError) as exc:
             self._json(400, {"error": str(exc)})
@@ -184,7 +227,7 @@ def main():
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8081)
-    parser.add_argument("--boot-timeout", type=float, default=300)
+    parser.add_argument("--boot-timeout", type=float, default=600)
     parser.add_argument("--request-timeout", type=float, default=300)
     parser.add_argument("--think", action="store_true", help="include model reasoning (slower; does not guarantee correctness)")
     args = parser.parse_args()

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "get_status",
+    "description": "Local Needle: device status.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "set_timer",
+    "description": "Local Needle: countdown timers.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "set_sampling_interval",
+    "description": "Local Needle: telemetry cadence.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "translate_or_write",
+    "description": "Route translation, rewriting and summaries to Qwen.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "write_code",
+    "description": "Route code generation, debugging and math to GPT OSS.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "research_and_plan",
+    "description": "Route complex research, design, architecture and plans to Claude Opus.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]

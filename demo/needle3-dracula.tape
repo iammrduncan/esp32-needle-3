@@ -16,7 +16,7 @@ Hide
 Type "python3 demo/showcase.py"
 Enter
 Show
-Wait+Screen@90s /DEMO COMPLETE/
+Wait+Screen@150s /DEMO COMPLETE/
 Screenshot demo/needle3-router-cover.png
 Sleep 1s
 Hide

@@ -206,6 +206,7 @@ int main(int argc, char **argv)
                 return 1;
             }
         }
+        if (argc > 7 && !strcmp(argv[7], "onecall")) gram.single_call = 1;
         nd_sampler_init(&smp, &m.tok, &gram);
         printf("EVT ready model=needle3 layers=%u d_model=%u tools=%u\n",
                m.n_layers, m.d_model, gram.n_tools);
@@ -262,7 +263,7 @@ int main(int argc, char **argv)
                 forced[nf++] = ND_THINK_END_ID;
                 {
                     uint32_t tmp[4];
-                    int tn = nd_tok_encode(&m.tok, nl, 1, tmp, 4);
+                    int tn = nd_tok_encode_ex(&m.tok, nl, 1, tmp, 4, 0);
                     for (fi = 0; fi < (uint32_t)tn; fi++)
                         forced[nf++] = tmp[fi];
                 }

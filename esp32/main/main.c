@@ -23,9 +23,10 @@
 #include "freertos/semphr.h"
 
 #define MAX_NEW        128
-#define ND_LINE_MAX    256   /* not LINE_MAX: that is taken by limits.h */
+#define ND_LINE_MAX    272   /* not LINE_MAX: that is taken by limits.h */
 
 #include "tools_schema.h"
+#include "routes_schema.h"
 
 /* The schema is generated from tools/demo-tools.json at build time; see
  * main/CMakeLists.txt. Edit that JSON, not this file. */
@@ -37,7 +38,11 @@ static const char TOOLS_RAW[] = ND_TOOLS_JSON;
 static char TOOLS_JSON[sizeof(TOOLS_RAW)];
 
 static nd_model             s_model;
-static nd_grammar           s_grammar;
+static const char ROUTES_RAW[] = ND_ROUTES_JSON;
+static char ROUTES_JSON[sizeof(ROUTES_RAW)];
+static nd_grammar s_grammars[2];
+static nd_prefix *s_prefixes[2];
+/* 0: local tools; 1: choose a model. Shared weights and inference scratch. */
 
 /* ------------------------------------------------- second-core GEMV worker
  *
@@ -96,7 +101,7 @@ static int s_show_think = 1;   /* toggled from the host with "!think" */
 /* Prefill the constant part of the prompt once and snapshot it. Every request
  * then resumes from here, so only the query and the assistant header are
  * prefilled per turn - ~13 tokens instead of ~171. */
-static int prime_prefix(void)
+static int prime_prefix(int phase)
 {
     static uint32_t ids[512];
     static char     pre[4096];
@@ -104,7 +109,7 @@ static int prime_prefix(void)
     int             n;
     int             i;
 
-    snprintf(pre, sizeof(pre), "<|im_start|>user\n<tools>%s</tools>", TOOLS_JSON);
+    snprintf(pre, sizeof(pre), "<|im_start|>user\n<tools>%s</tools>", phase ? ROUTES_JSON : TOOLS_JSON);
 
     nd_model_reset(&s_model);
     ids[0] = ND_BOS_ID;
@@ -138,10 +143,12 @@ static int prime_prefix(void)
     printf("EVT prefix tokens=%d ms=%.0f sink=%u (cached for all requests)\n",
            n, (esp_timer_get_time() - t0) / 1000.0, (unsigned)s_model.n_sink);
     fflush(stdout);
+    s_prefixes[phase] = nd_model_prefix_save(&s_model);
+    if (!s_prefixes[phase]) { printf("ERR prefix_cache_allocation\n"); return -1; }
     return 0;
 }
 
-static void run_inference(const char *query)
+static void run_inference(const char *query, int phase)
 {
     static uint32_t ids[512];
     static char     out[1024];
@@ -157,8 +164,10 @@ static void run_inference(const char *query)
              "\n%s<|im_end|>\n<|im_start|>assistant\n", query);
 
     /* Resume from the cached prefix rather than re-running it. */
-    nd_model_rewind(&s_model);
-    nd_sampler_init(&smp, &s_model.tok, &s_grammar);
+    if (nd_model_prefix_restore(&s_model, s_prefixes[phase]) != 0) {
+        printf("ERR prefix_restore\nEND\n"); fflush(stdout); return;
+    }
+    nd_sampler_init(&smp, &s_model.tok, &s_grammars[phase]);
 
     n = nd_tok_encode_ex(&s_model.tok, suf, strlen(suf), ids,
                          (uint32_t)(sizeof(ids) / sizeof(ids[0])), 0);
@@ -250,7 +259,8 @@ static void run_inference(const char *query)
         fflush(stdout);
     }
 
-    router_dispatch(out);
+    if (phase) router_select(out, &s_grammars[1]);
+    else router_dispatch(out);
 }
 
 /* ------------------------------------------------------------------- main */
@@ -299,6 +309,10 @@ void app_main(void)
         return;
     }
 
+    if (nd_json_compact(ROUTES_RAW, strlen(ROUTES_RAW), ROUTES_JSON, sizeof(ROUTES_JSON)) < 0) {
+        printf("ERR route_schema_too_large\n"); return;
+    }
+
     part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "model");
     if (!part) {
         printf("ERR no_model_partition\n");
@@ -320,20 +334,25 @@ void app_main(void)
         printf("ERR model_open\n");
         return;
     }
-    if (nd_grammar_compile(&s_grammar, TOOLS_JSON, strlen(TOOLS_JSON), &gerr) != 0) {
+    if (nd_grammar_compile(&s_grammars[0], TOOLS_JSON, strlen(TOOLS_JSON), &gerr) != 0) {
         printf("ERR grammar %s\n", gerr ? gerr : "?");
         return;
     }
+
+    if (nd_grammar_compile(&s_grammars[1], ROUTES_JSON, strlen(ROUTES_JSON), &gerr) != 0) {
+        printf("ERR route_grammar %s\n", gerr ? gerr : "?"); return;
+    }
+    s_grammars[1].single_call = 1;
 
     printf("EVT ready model=needle3 layers=%u d_model=%u vocab=%u window=%u "
            "tools=%u psram_free=%u internal_free=%u\n",
            (unsigned)s_model.n_layers, (unsigned)s_model.d_model,
            (unsigned)s_model.vocab, (unsigned)s_model.window,
-           (unsigned)s_grammar.n_tools,
+           (unsigned)s_grammars[0].n_tools,
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     fflush(stdout);
-    if (prime_prefix() != 0) return;
+    if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;
     router_init(s_model.n_layers, model_bytes);
 
     /* Startup benchmark: a fixed number of steps with the KV cache cold, so
@@ -375,7 +394,7 @@ void app_main(void)
     printf("EVT ==================================================\n");
     printf("EVT  READY - type a request and press enter\n");
     printf("EVT  e.g. \"Sample telemetry every 5 seconds\"\n");
-    printf("EVT  commands: !think (toggle reasoning), !status\n");
+    printf("EVT  commands: !think (toggle reasoning), !status, !route <request>\n");
     printf("EVT ==================================================\n\n");
     fflush(stdout);
 
@@ -415,7 +434,8 @@ void app_main(void)
         }
 
         if (!strcmp(line, "!status")) { router_print_state(); continue; }
+        if (!strncmp(line, "!route ", 7)) { run_inference(line + 7, 1); continue; }
         if (line[0] == '!') { printf("ERR unknown_command\nEND\n"); fflush(stdout); continue; }
-        run_inference(line);
+        run_inference(line, 0);
     }
 }

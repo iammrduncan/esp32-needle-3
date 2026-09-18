@@ -97,6 +97,12 @@ int main(void)
            "{\"name\":\"set_led\",\"arguments\":{\"color\":\"blue\",\"mode\":\"off\"}}]",
            1, "two calls");
 
+    g.single_call = 1;
+    expect(&g, "[]", 0, "model selection cannot be empty");
+    expect(&g, "[{\"name\":\"set_led\",\"arguments\":{\"color\":\"red\",\"mode\":\"flash\"}}]", 1, "single selection");
+    expect(&g, "[{\"name\":\"set_led\",\"arguments\":{\"color\":\"red\",\"mode\":\"flash\"}},"
+           "{\"name\":\"set_led\",\"arguments\":{\"color\":\"blue\",\"mode\":\"off\"}}]", 0, "model selection cannot contain two calls");
+
     printf("\n%s (%d failure%s)\n", fails ? "FAIL" : "PASS", fails,
            fails == 1 ? "" : "s");
     return fails ? 1 : 0;

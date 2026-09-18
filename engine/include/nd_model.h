@@ -165,7 +165,7 @@ void nd_model_reset(nd_model *m);
  * relies on them staying visible for the whole turn; without pinning, a long
  * prompt plus a long generation scrolls the <tools> block out and the model
  * starts inventing tool names. Call after prefilling the pinned prefix.
- * `n` is clamped to leave at least half the window for recent context. */
+ * `n` is clamped to leave at least 64 positions for recent context. */
 void nd_model_set_sink(nd_model *m, uint32_t n);
 
 /* Freeze the current position as a reusable prefix: pins it as the KV sink and
@@ -174,6 +174,14 @@ int  nd_model_snapshot(nd_model *m);
 
 /* Resume from the snapshot, discarding everything decoded since. */
 void nd_model_rewind(nd_model *m);
+
+/* Independent schema-prefix caches for one model. Includes KV, convolution,
+ * engram and confidence state; scratch and weights remain shared. Restore only
+ * into the same live model instance. The caller owns/frees the cache. */
+typedef struct nd_prefix nd_prefix;
+nd_prefix *nd_model_prefix_save(nd_model *m);
+int nd_model_prefix_restore(nd_model *m, const nd_prefix *prefix);
+void nd_model_prefix_free(nd_prefix *prefix);
 
 /* Feed one token at the current position and return logits[vocab].
  * The pointer stays valid until the next call. */

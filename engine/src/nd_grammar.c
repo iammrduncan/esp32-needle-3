@@ -416,7 +416,7 @@ int nd_gstate_byte(nd_gstate *s, char c)
         return 1;
 
     case ND_G_ARRAY_FIRST:
-        if (c == ']') { s->phase = ND_G_DONE; return 1; }   /* the empty call */
+        if (c == ']' && !g->single_call) { s->phase = ND_G_DONE; return 1; }
         if (c != '{') return 0;
         s->cand = (uint16_t)((1u << g->n_tools) - 1u);
         s->lit  = "\"name\":\"";
@@ -658,7 +658,7 @@ int nd_gstate_byte(nd_gstate *s, char c)
         return 0;
 
     case ND_G_CLOSE_CALL:
-        if (c == ',') { s->phase = ND_G_OBJ_OPEN; return 1; }
+        if (c == ',' && !g->single_call) { s->phase = ND_G_OBJ_OPEN; return 1; }
         if (c == ']') { s->phase = ND_G_DONE; return 1; }
         return 0;
 

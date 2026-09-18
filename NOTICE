@@ -7,7 +7,8 @@ The C engine, firmware scaffold, and host test utilities derive from:
   Licensed under Apache License 2.0 (included in LICENSE and engine/NOTICE-LICENSE).
 
 This project modifies that code for the Needle 3 archive and architecture,
-adds a telemetry tool router and HTTP bridge, and supplies reproducible demos.
+adds model selection, a two-pass local telemetry agent and HTTP bridge,
+and supplies reproducible demos.
 
 Needle 3 architecture and model weights are by Cactus Compute:
   https://cactuscompute.com/needle

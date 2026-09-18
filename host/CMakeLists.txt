@@ -26,3 +26,9 @@ target_link_libraries(nd_gtest PRIVATE needle_engine)
 
 enable_testing()
 add_test(NAME grammar COMMAND nd_gtest)
+
+add_executable(nd_ptest nd_ptest.c)
+target_link_libraries(nd_ptest PRIVATE needle_engine)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../model/needle3.cact")
+  add_test(NAME prefix_isolation COMMAND nd_ptest "${CMAKE_CURRENT_SOURCE_DIR}/../model/needle3.cact")
+endif()

@@ -51,7 +51,7 @@ static cJSON *snapshot(void)
     portEXIT_CRITICAL(&mux);
     cJSON *o = cJSON_CreateObject();
     cJSON_AddStringToObject(o, "device", "esp32-s3");
-    cJSON_AddStringToObject(o, "schema", "telemetry-router-v1");
+    cJSON_AddStringToObject(o, "schema", "agent-watch-v2");
     cJSON_AddNumberToObject(o, "layers", model_layers);
     cJSON_AddNumberToObject(o, "model_bytes", archive_bytes);
     cJSON_AddNumberToObject(o, "uptime_ms", now / 1000);
@@ -92,6 +92,41 @@ void router_init(uint32_t layers, size_t model_bytes)
     ESP_ERROR_CHECK(esp_timer_create(&a, &countdown));
     sample(NULL);
     ESP_ERROR_CHECK(esp_timer_start_periodic(sample_timer, 30000000));
+}
+
+/* Model selection ends at a decision. Remote inference is never invoked here. */
+void router_select(const char *generated, const nd_grammar *routes)
+{
+    const char *start = strstr(generated, "<tool_call>");
+    const char *end = start ? strstr(start, "</tool_call>") : NULL;
+    cJSON *calls = NULL;
+    if (!start || !end) goto invalid_route;
+    start += strlen("<tool_call>");
+    const char *parsed_end = NULL;
+    calls = cJSON_ParseWithLengthOpts(start, end - start, &parsed_end, 0);
+    if (!cJSON_IsArray(calls) || cJSON_GetArraySize(calls) != 1) goto invalid_route;
+    while (parsed_end < end && (*parsed_end == ' ' || *parsed_end == '\n')) parsed_end++;
+    if (parsed_end != end) goto invalid_route;
+    const cJSON *call = cJSON_GetArrayItem(calls, 0);
+    const cJSON *name = cJSON_GetObjectItemCaseSensitive(call, "name");
+    const cJSON *args = cJSON_GetObjectItemCaseSensitive(call, "arguments");
+    if (!cJSON_IsString(name) || !cJSON_IsObject(args) || cJSON_GetArraySize(args)) goto invalid_route;
+    int found = 0;
+    for (int i = 0; i < routes->n_tools; i++)
+        if (!strcmp(name->valuestring, routes->tools[i].name)) found = 1;
+    if (!found) goto invalid_route;
+    emit("JSON", calls);
+    cJSON *results = cJSON_CreateArray(), *result = cJSON_CreateObject();
+    cJSON_AddStringToObject(result, "name", name->valuestring);
+    cJSON_AddBoolToObject(result, "success", 1);
+    cJSON_AddStringToObject(result, "outcome", "model_selected");
+    cJSON_AddItemToArray(results, result);
+    emit("RESULT", results);
+    cJSON_Delete(results); cJSON_Delete(calls);
+    printf("END\n"); fflush(stdout); return;
+invalid_route:
+    cJSON_Delete(calls);
+    printf("ERR invalid_route\nEND\n"); fflush(stdout);
 }
 
 /* Validate every call before executing any. Grammar is only the first check. */

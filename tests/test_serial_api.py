@@ -2,8 +2,9 @@ import json
 import threading
 import unittest
 from collections import deque
+from pathlib import Path
 
-from tools.serial_api import Device, validate_prompt
+from tools.serial_api import CATALOG, Device, validate_prompt
 
 
 class Serial:
@@ -24,7 +25,7 @@ class Serial:
 def device(lines, timeout=0.05):
     d = Device.__new__(Device)
     d.serial = Serial(lines)
-    d.lock = threading.Lock()
+    d.lock = threading.RLock()
     d.available = True
     d.request_timeout = timeout
     d.think = False
@@ -32,6 +33,43 @@ def device(lines, timeout=0.05):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_catalog_maps_each_firmware_route_to_one_model(self):
+        routes = json.loads((Path(__file__).resolve().parents[1]/'tools/model-routes.json').read_text())
+        names = [name for model in CATALOG.values() for name in model['route_tools']]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertEqual(set(names), {tool['name'] for tool in routes})
+
+    def test_external_choice_stops_after_one_inference(self):
+        for model in ('qwen', 'gpt_oss', 'opus'):
+            calls = [{'name': CATALOG[model]['route_tools'][0], 'arguments': {}}]
+            d = device(['EVT done tokens=10 ms=100 tps=100', 'JSON ' + json.dumps(calls),
+                        'RESULT [{"success":true}]', 'END'])
+            response = d.agent('Help with my task')
+            self.assertEqual(response['selected_model']['key'], model)
+            self.assertEqual(response['outcome'], 'external_selected')
+            self.assertIsNone(response['execution'])
+            self.assertFalse(response['remote_called'])
+            self.assertEqual(d.serial.written, [b'!route Help with my task\n'])
+
+    def test_local_choice_runs_original_task_under_tool_schema(self):
+        d = device(['EVT done tokens=10 ms=100 tps=100',
+                    'JSON [{"name":"set_timer","arguments":{}}]',
+                    'RESULT [{"success":true}]', 'END',
+                    'EVT done tokens=10 ms=100 tps=100',
+                    'JSON [{"name":"set_timer","arguments":{"seconds":60}}]',
+                    'RESULT [{"success":true,"state":{"timer_status":"running"}}]', 'END'])
+        response = d.agent('Start a 60 second timer')
+        self.assertEqual(response['outcome'], 'local_executed')
+        self.assertEqual(response['inference_passes'], 2)
+        self.assertEqual(response['execution']['function_calls'][0]['name'], 'set_timer')
+        self.assertEqual(d.serial.written, [b'!route Start a 60 second timer\n', b'Start a 60 second timer\n'])
+
+    def test_invalid_route_does_not_execute_tools(self):
+        d = device(['ERR invalid_route', 'END'])
+        response = d.agent('some task')
+        self.assertFalse(response['success'])
+        self.assertEqual(len(d.serial.written), 1)
+
     def test_multi_call_results_are_consumed_through_end(self):
         calls = [{'name': 'get_status', 'arguments': {}}, {'name': 'set_timer', 'arguments': {'seconds': 60}}]
         results = [{'name': c['name'], 'success': True, 'state': {}} for c in calls]

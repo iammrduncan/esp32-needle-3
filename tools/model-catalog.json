@@ -1,0 +1,40 @@
+{
+  "needle": {
+    "id": "needle-local",
+    "label": "Needle 3 / on watch",
+    "policy": "Device status, telemetry settings and countdown timers",
+    "execution": "local",
+    "route_tools": [
+      "get_status",
+      "set_timer",
+      "set_sampling_interval"
+    ]
+  },
+  "qwen": {
+    "id": "qwen-deployment",
+    "label": "Qwen 3.8 27B",
+    "policy": "Quick writing, rewriting, translation and summaries",
+    "execution": "handoff",
+    "route_tools": [
+      "translate_or_write"
+    ]
+  },
+  "gpt_oss": {
+    "id": "gpt-oss-120b",
+    "label": "GPT OSS 120B",
+    "policy": "Coding, debugging, math and data analysis",
+    "execution": "handoff",
+    "route_tools": [
+      "write_code"
+    ]
+  },
+  "opus": {
+    "id": "claude-opus",
+    "label": "Claude Opus",
+    "policy": "Complex research, architecture and strategic planning",
+    "execution": "handoff",
+    "route_tools": [
+      "research_and_plan"
+    ]
+  }
+}

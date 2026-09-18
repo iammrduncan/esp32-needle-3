@@ -1,49 +1,113 @@
-# Needle 3 on ESP32-S3
+# Needle 3: an agent-watch model router on ESP32
 
-**Plain English → local device actions.** An 8-layer Needle 3 model selects and
-calls real telemetry and timer functions on an ESP32-S3. Inference, JSON grammar
-constraints, argument validation, and execution all run on the microcontroller.
+**Which model should handle this request?** Needle runs on an ESP32-S3 and routes
+tasks to one of four configured choices: **Claude Opus, Qwen 3.8 27B, GPT OSS
+120B, or local Needle**. External choices end at selection. A local choice invokes
+Needle a second time with a device-tool schema, then executes and verifies the
+actual device operations.
 
-[Watch the MP4](demo/needle3-router.mp4) · [Download the GIF](demo/needle3-router.gif) · [Hardware recording](demo/recording.json)
+[Watch MP4](demo/needle3-router.mp4) · [Download GIF](demo/needle3-router.gif) · [Recorded responses](demo/recording.json)
 
-![Dracula-themed ESP32 routing demo](demo/needle3-router.gif)
+![Dracula agent-watch model routing demo](demo/needle3-router.gif)
 
-The 33-second Dracula demo presents five requests captured from the actual board.
-Inference waits are condensed; every scene displays the measured request latency.
-See [how to capture and render it](demo/README.md).
+This is a watch-brain proof of concept on an ESP32 development board. The 51-second Dracula video
+shows real recorded inference with waits condensed and actual timings displayed.
+The HTTP bridge on the computer orchestrates both passes; both model inferences
+and all local tool handlers execute on the ESP32. No external LLM is called.
 
-## What the router does
+## Scenarios
 
-| Request | On-device tool | Real effect |
+| Request | Configured model | What happens next |
 | --- | --- | --- |
-| How much free memory does this device have? | `get_status()` | Reports heap, PSRAM, uptime, sampling and timer state |
-| Sample telemetry every 5 seconds | `set_sampling_interval(seconds=5)` | Reconfigures a periodic `esp_timer` sampling heap and uptime |
-| Start a 60 second timer | `set_timer(seconds=60)` | Starts an asynchronous countdown |
-| Sample every 10 seconds and start a 30 second timer | Both configuration tools | Executes two validated calls from one sentence |
-| Show device status | `get_status()` | Reads the changed device state |
+| Translate good morning into Spanish | Qwen 3.8 27B | Show selected model; end scenario |
+| Write a Python function to deduplicate a list | GPT OSS 120B | Show selected model; end scenario |
+| Design a secure architecture for a fleet of agent watches | Claude Opus | Show selected model; end scenario |
+| How much free memory does this device have? | Local Needle | Second inference → `get_status()` → real device snapshot |
+| Sample telemetry every 5 seconds | Local Needle | Second inference → `set_sampling_interval(5)` → actual periodic sampler |
+| Start a 60 second timer | Local Needle | Second inference → `set_timer(60)` → real countdown |
+| Sample every 10 seconds and start a 30 second timer | Local Needle | Second inference → two calls → changed cadence and running countdown |
 
-The captured run matched all five supported requests. It collected **18 telemetry
-samples** while inference ran, changed sampling to 10 seconds, and verified a
-countdown expiry on the ESP32. The sampler retains the latest sample and count;
-there are no external sensors or imaginary GPIO actions.
+## How model routing works
 
-This is a small local control plane: the model routes a user's request to a fixed
-set of handlers. The entire call array is checked against an allowlist and bounded
-integer arguments (1–3600 seconds) before execution. Tool definitions live in
-[`tools/demo-tools.json`](tools/demo-tools.json); CMake embeds this schema in the firmware.
+```mermaid
+flowchart TD
+  A[User request] --> B[Pass 1: Needle on ESP32]
+  B --> C[Model catalog: selected capability maps to a model]
+  C --> D[Qwen / GPT OSS / Opus]
+  D --> E[Return model name and stop]
+  C --> F[Local Needle]
+  F --> G[Pass 2: same task, device-tool schema]
+  G --> H[Validate and execute on ESP32]
+  H --> I[Return tool calls and device state]
+```
 
-### Current limits
+The small tool-calling model works better with concrete capability names than
+bare model-name classification. [`tools/model-routes.json`](tools/model-routes.json)
+therefore presents six capability routes, each bound to a model by
+[`tools/model-catalog.json`](tools/model-catalog.json):
 
-- Five supported examples are a demonstration, not a general accuracy benchmark.
-  The recorded unrelated question “What is the weather in Tokyo?” incorrectly
-  selected `get_status`. Schema constraints ensure structure, not correct intent.
-- The confidence head is not implemented; the API returns `confidence: null`.
-- Requests take **19–41 seconds** in this capture. This suits occasional device
-  configuration, not a real-time control loop. Device timers continue independently.
-- The **HTTP server runs on the attached computer**, bridging USB UART. The model
-  and handlers run on the ESP32. This build does not serve HTTP over board Wi-Fi.
-- The API is a local development service bound to `127.0.0.1`, without authentication.
-  Requests and state reads share one serial connection and are serialized.
+- `translate_or_write` → Qwen 3.8 27B.
+- `write_code` → GPT OSS 120B.
+- `research_and_plan` → Claude Opus.
+- `get_status`, `set_timer`, `set_sampling_interval` → local Needle.
+
+**Pass 1 executes no device tools.** Its grammar permits exactly one route with
+empty arguments. The model selects that route through inference; the bridge
+only looks up its configured model mapping. There is no keyword classifier or
+expected-answer override. Model names and task assignments are deployment labels
+and demo policy supplied in the catalog, not a benchmark of those larger models.
+
+If Needle is selected, the bridge sends the **unchanged original request** back
+to the same ESP32 under [`tools/demo-tools.json`](tools/demo-tools.json).
+This second inference generates tool arguments and can produce multiple calls.
+The firmware validates all calls before executing any. Timer/cadence arguments
+must be integers from 1 to 3600 seconds.
+
+Both schema prefixes have independent caches including KV, convolution and
+engram state, sharing one model's weights and scratch memory. Switching schemas
+does not require a full prefill. The route phase uses a 213-token prefix; the
+execution phase uses 143 tokens. The model now has a **384-token context** so
+both schemas fit with room for the request and generation.
+
+## Scope and limits
+
+- These are curated development scenarios, not a held-out routing benchmark.
+  Early experiments with bare model-name selection misrouted many tasks. Routing
+  remains sensitive to schema and phrasing; a successful demo does not imply
+  general reliability or optimal model choice.
+- The confidence head is not implemented (`confidence: null`). Structural
+  validation cannot guarantee correct intent.
+- Local requests require **two real inference passes**. The recording includes
+  both latencies and total time; the video condenses the waits. This is for
+  occasional commands, not a real-time control loop.
+- The sampler stores the latest heap/uptime sample and count. Countdown expiry
+  increments a real device counter. There are no external sensors, watch display,
+  home-automation devices or physical lights connected in this demo.
+- The computer serves HTTP through USB UART; this build does not serve HTTP over
+  ESP32 Wi-Fi. The API is bound to localhost without authentication. The bridge
+  serializes each entire two-pass transaction, including state reads.
+- External selections stop at the model label. No credentials, remote endpoints,
+  provider responses or simulated cloud answers are involved.
+
+## Measured capture
+
+Recorded on 2026-09-18 with the eight-layer ESP32 model. Routing and
+execution times include the USB/HTTP bridge. External scenarios do not include
+a larger-model inference because they end at selection.
+
+| Scenario | Selected model | Route | Local tools | Total |
+| --- | --- | ---: | ---: | ---: |
+| translation | Qwen 3.8 27B | 25.72 s | — | 25.72 s |
+| coding | GPT OSS 120B | 28.99 s | — | 28.99 s |
+| architecture | Claude Opus | 33.17 s | — | 33.17 s |
+| status | Needle 3 / on watch | 24.02 s | 23.39 s | 47.41 s |
+| sampling | Needle 3 / on watch | 27.38 s | 29.08 s | 56.46 s |
+| timer | Needle 3 / on watch | 20.73 s | 23.43 s | 44.16 s |
+| batch | Needle 3 / on watch | 29.88 s | 40.51 s | 70.39 s |
+
+The device collected **31 telemetry samples** during the sequence and
+recorded **2 timer expiries**. All seven expected model selections and
+all second-pass tool calls matched. These are curated examples, not an accuracy estimate.
 
 ## Hardware and dependencies
 
@@ -72,9 +136,11 @@ make verify-model
 ```
 
 `make model` downloads the pinned public archive, verifies its SHA-256, slices
-the already quantized tensors to **8 layers / 256 tokens**, and verifies the
+the already quantized tensors to **8 layers / 384 tokens**, and verifies the
 result. [`model/manifest.json`](model/manifest.json) records the revision and
 hashes. Model archives and generated build files are excluded from Git.
+Upgrading from the earlier tool-only demo requires both `make model` and a full
+`make flash`: the model context changed from 256 to 384 tokens.
 
 In a shell with ESP-IDF activated (`. /path/to/esp-idf/export.sh`):
 
@@ -84,8 +150,9 @@ make flash FLASH_PORT=/dev/ttyACM0
 
 This builds and flashes the application, then writes the model at `0x210000`.
 For later firmware-only changes, use `make flash-app`. Stop the API service and
-any serial monitor before flashing. The 143-token tool prefix is cached at boot;
-a cold start takes roughly two minutes. The bridge waits up to five minutes.
+any serial monitor before flashing. Two schema prefixes are cached at boot
+(143 tool tokens and 213 routing tokens);
+a cold start takes roughly five minutes. The bridge waits up to ten minutes.
 
 Run the bridge in the foreground:
 
@@ -110,84 +177,68 @@ the checkout. It starts with your user session. Uninstall with
 ## API
 
 ```sh
+curl -sS http://127.0.0.1:8081/models
 curl -sS http://127.0.0.1:8081/health
-curl -sS http://127.0.0.1:8081/state
-curl -sS --max-time 300 -H 'Content-Type: application/json' \
+curl -sS --max-time 600 -H 'Content-Type: application/json' \
   -d '{"input":"Sample every 10 seconds and start a 30 second timer"}' \
-  http://127.0.0.1:8081/complete
+  http://127.0.0.1:8081/agent
 ```
 
-`GET /health` checks the device and includes `ready`. `GET /state` reads current
-state directly without inference. `POST /complete` runs the model and executes
-valid tool calls. Its response includes:
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /models` | Configured model labels, policies and capability mappings |
+| `GET /health` | Readiness and live device state |
+| `GET /state` | Read current device state without inference |
+| `POST /agent` | Select model; stop if external, or make a second local inference and execute |
+| `POST /route` | One routing inference only; return the selected capability |
+| `POST /complete` | Bypass routing and run the device-tool inference directly |
 
-```json
-{
-  "success": true,
-  "function_calls": [
-    {"name": "set_sampling_interval", "arguments": {"seconds": 10}},
-    {"name": "set_timer", "arguments": {"seconds": 30}}
-  ],
-  "confidence": null,
-  "decode_tps": 1.22,
-  "latency_ms": 40515.4
-}
-```
-
-This excerpt omits `results` (each tool's execution status and device snapshot),
-`raw` generated text, and additional prefill/decode metrics. See the complete
-responses in [`demo/recording.json`](demo/recording.json).
+All POST endpoints accept `{"input":"your request"}`. `/agent` returns
+`selected_model`, `outcome`, `inference_passes`, `remote_called: false`,
+`routing` (the first pass), `execution` (the second pass or `null`), and total
+`latency_ms`. Each pass includes generated `function_calls`, raw model text,
+execution results, and prefill/decode timing. Outcomes are `external_selected`,
+`local_executed`, `route_failed`, or `local_failed`.
 
 Inputs must be single lines of at most 255 UTF-8 bytes and fit the remaining model
 context. Control characters and serial command prefixes are rejected. Errors use
 400 for invalid requests, 502 for firmware/tool failures, 503 for unavailable
 hardware, and 504 for inference timeout. After a serial timeout, finish/reset the
-board and restart the bridge to restore stream synchronization. Reasoning is off
-by default; pass `--think` directly to `tools/serial_api.py` to enable it.
+board and restart the bridge to restore synchronization. Reasoning is disabled
+by default; `tools/serial_api.py --think` enables it.
 
-## Measured performance
-
-This capture uses cached schema prefix, 8 layers, 256-token context, CPU at
-240 MHz, and reasoning disabled. End-to-end times include the HTTP/USB bridge.
-
-| Request | Generated tokens | Decode tokens/s | End to end |
-| --- | ---: | ---: | ---: |
-| Free memory | 10 | 1.22 | 23.37 s |
-| Set sampling to 5 s | 18 | 1.23 | 29.07 s |
-| Start 60 s timer | 14 | 1.23 | 23.41 s |
-| Sampling + timer | 29 | 1.22 | 40.52 s |
-| Read changed status | 10 | 1.22 | 19.36 s |
-
-## Development and verification
+## Capture, render and test
 
 ```sh
-make test        # builds the host engine, tests grammar and serial protocol
-make capture     # runs six real requests; needs the board and API
-make demo        # renders MP4 + GIF from the saved recording
+make test        # host grammar, prefix isolation, and bridge protocol tests
+make capture     # seven real end-to-end scenarios; requires board + API
+make demo        # render MP4 + GIF with VHS from the saved recording
 ```
 
-CI builds the host engine and runs its grammar tests and the bridge protocol
-tests. Firmware was built and exercised on the actual board. Protocol tests cover
-multiple calls, preserving generated spaces, consuming responses through `END`,
-firmware errors, and refusing to reuse a timed-out stream.
+See [demo instructions](demo/README.md). The capture saves expected routes,
+actual model outputs, both inference passes, state snapshots, timings and
+model/schema hashes. It checks all seven routes, actual local tool calls,
+external stop behavior, advancing telemetry, changed cadence and timer expiry.
+The renderer refuses to present a success demo if those checks fail.
 
-Optional numerical reference checks require
-`python -m pip install -r requirements-dev.txt`. The
-[`tools/reference_forward.py`](tools/reference_forward.py) script compares the
-host C forward pass against NumPy. Profiling is off by default; configure with
-`idf.py -C esp32 -DNEEDLE_PROFILE=ON build` when measuring individual kernels.
+Tests verify that external selections stop after one inference and local
+selections submit the original request for a second inference. C tests verify
+single-selection grammar and bit-identical logits after alternating prefix caches
+(the latter runs when the model archive is present). Protocol tests also cover
+multiple tool calls, stream boundaries, firmware errors and timeout recovery.
+
+Optional NumPy reference checks use `requirements-dev.txt` and
+[`tools/reference_forward.py`](tools/reference_forward.py). Profiling is disabled
+by default; enable it with `idf.py -C esp32 -DNEEDLE_PROFILE=ON build`.
 
 ## Implementation and provenance
 
-[`engine/`](engine/) adapts the Apache-2.0
-[Needle 2 ESP32 port](https://github.com/andrisgauracs/needle-2-esp32) by
-andrisgauracs. Changes add the Needle 3 archive layout, QKV causal convolution,
-separate Q/K and V widths, Monarch Hadamard MLP, and mHC lane handling.
-[`esp32/main/router.c`](esp32/main/router.c) owns the actual telemetry and timer
-handlers; [`tools/serial_api.py`](tools/serial_api.py) provides the HTTP bridge.
+The eight-layer archive is 16,155,796 bytes, mapped from flash. The port adapts
+the Apache-2.0 [Needle 2 ESP32 engine](https://github.com/andrisgauracs/needle-2-esp32)
+with Needle 3 archive support, QKV convolution, separate Q/K and V widths,
+Monarch Hadamard MLP and mHC lanes. Weights are from
+[Cactus Compute](https://cactuscompute.com/needle) and downloaded separately from
+the pinned [Needle 3 model repository](https://huggingface.co/Cactus-Compute/needle3).
 
-Code is licensed under [Apache-2.0](LICENSE); see [NOTICE](NOTICE) for attribution.
-Weights originate from [Cactus Compute](https://cactuscompute.com/needle) and are
-downloaded separately from the pinned
-[Needle 3 model repository](https://huggingface.co/Cactus-Compute/needle3).
-Media is rendered with [Charm's VHS](https://github.com/charmbracelet/vhs).
+Code: [Apache-2.0](LICENSE). Attribution: [NOTICE](NOTICE).
+Media: [Charmbracelet VHS](https://github.com/charmbracelet/vhs), Dracula theme.

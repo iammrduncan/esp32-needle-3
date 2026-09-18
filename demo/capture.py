@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture reproducible hardware evidence; never synthesizes model responses."""
+"""Capture model routing and real second-pass tool execution on the ESP32."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -10,19 +10,20 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = [
-    ("status", "How much free memory does this device have?", [("get_status", {})]),
-    ("sampling", "Sample telemetry every 5 seconds", [("set_sampling_interval", {"seconds": 5})]),
-    ("timer", "Start a 60 second timer", [("set_timer", {"seconds": 60})]),
-    ("batch", "Sample every 10 seconds and start a 30 second timer", [("set_sampling_interval", {"seconds": 10}), ("set_timer", {"seconds": 30})]),
-    ("status_after", "Show device status", [("get_status", {})]),
-    ("unsupported", "What is the weather in Tokyo?", []),
+    ("translation", "Translate good morning into Spanish", "qwen", []),
+    ("coding", "Write a Python function to deduplicate a list", "gpt_oss", []),
+    ("architecture", "Design a secure architecture for a fleet of agent watches", "opus", []),
+    ("status", "How much free memory does this device have?", "needle", [("get_status", {})]),
+    ("sampling", "Sample telemetry every 5 seconds", "needle", [("set_sampling_interval", {"seconds": 5})]),
+    ("timer", "Start a 60 second timer", "needle", [("set_timer", {"seconds": 60})]),
+    ("batch", "Sample every 10 seconds and start a 30 second timer", "needle", [("set_sampling_interval", {"seconds": 10}), ("set_timer", {"seconds": 30})]),
 ]
 
 
 def http(base, path, data=None):
     request = urllib.request.Request(base + path, data=json.dumps(data).encode() if data is not None else None,
                                      headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=300) as response:
+    with urllib.request.urlopen(request, timeout=600) as response:
         return json.load(response)
 
 
@@ -38,21 +39,27 @@ def main():
     parser.add_argument('--url', default='http://127.0.0.1:8081')
     parser.add_argument('--out', type=Path, default=ROOT/'demo/recording.json')
     args = parser.parse_args()
-    doc = {'recorded_at': datetime.now(timezone.utc).isoformat(), 'source': 'real ESP32-S3 UART via local HTTP bridge',
-           'schema_sha256': hashlib.sha256((ROOT/'tools/demo-tools.json').read_bytes()).hexdigest(),
-           'model_sha256': hashlib.sha256((ROOT/'model/needle3.cact').read_bytes()).hexdigest(),
+    hashes = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in
+              ['tools/model-routes.json', 'tools/demo-tools.json', 'tools/model-catalog.json', 'model/needle3.cact']}
+    doc = {'recorded_at': datetime.now(timezone.utc).isoformat(),
+           'source': 'real ESP32-S3; host orchestrates two on-device inference passes',
+           'hashes': hashes, 'catalog': http(args.url, '/models'),
            'before': http(args.url, '/health'), 'cases': []}
-    for case_id, prompt, expected in CASES:
-        response = http(args.url, '/complete', {'input': prompt})
+    for case_id, prompt, expected_model, expected in CASES:
+        response = http(args.url, '/agent', {'input': prompt})
         expected_calls = [{'name': name, 'arguments': arguments} for name, arguments in expected]
-        row = {'id': case_id, 'input': prompt, 'expected_calls': expected_calls,
-               'exact_match': response.get('success') and response.get('function_calls') == expected_calls,
+        choice = (response.get('selected_model') or {}).get('key')
+        execution = response.get('execution')
+        row = {'id': case_id, 'input': prompt, 'expected_model': expected_model,
+               'expected_calls': expected_calls,
+               'route_match': choice == expected_model,
+               'tools_match': (execution['function_calls'] if execution else []) == expected_calls,
                'response': response, 'state_after': http(args.url, '/state')}
         doc['cases'].append(row)
         save(args.out, doc)
-        print(json.dumps({'id': case_id, 'match': row['exact_match'], 'calls': response.get('function_calls'),
-                          'latency_ms': response.get('latency_ms')}), flush=True)
-    # Prove callbacks continue independently of the model's blocking request loop.
+        print(json.dumps({'id': case_id, 'selected': choice, 'route_match': row['route_match'],
+                          'tools_match': row['tools_match'], 'outcome': response['outcome'],
+                          'latency_ms': response['latency_ms']}), flush=True)
     until = time.monotonic() + 35
     while True:
         doc['after'] = http(args.url, '/state')
@@ -60,16 +67,20 @@ def main():
             break
         time.sleep(1)
     doc['verification'] = {
-        'supported_cases_match': all(row['exact_match'] for row in doc['cases'] if row['id'] != 'unsupported'),
+        'routes_match': all(row['route_match'] for row in doc['cases']),
+        'tools_match': all(row['tools_match'] for row in doc['cases']),
+        'requests_succeeded': all(row['response']['success'] for row in doc['cases']),
+        'no_external_calls': all(not row['response']['remote_called'] for row in doc['cases']),
+        'local_has_two_passes': all(row['response']['inference_passes'] == 2 for row in doc['cases'] if row['expected_model'] == 'needle'),
+        'external_stops_at_selection': all(row['response']['execution'] is None for row in doc['cases'] if row['expected_model'] != 'needle'),
         'telemetry_progressed': doc['after']['samples'] > doc['before']['samples'],
         'sampling_interval_applied': doc['after']['sample_period_s'] == 10,
         'timer_expired': doc['after']['timer_status'] == 'expired' and doc['after']['timer_fired_count'] > doc['before']['timer_fired_count'],
-        'unsupported_rejected': doc['cases'][-1]['exact_match'],
     }
     save(args.out, doc)
     print(json.dumps(doc['verification']), flush=True)
-    if not all(v for k, v in doc['verification'].items() if k != 'unsupported_rejected'):
-        raise SystemExit('Hardware verification failed; recording retained for diagnosis.')
+    if not all(doc['verification'].values()):
+        raise SystemExit('Hardware capture has mismatches; retained for review.')
 
 
 if __name__ == '__main__':

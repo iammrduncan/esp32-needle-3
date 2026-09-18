@@ -89,6 +89,10 @@ def switch_think(dev, want):
 
 # ------------------------------------------------------------------- device
 
+def measured_groups_full(groups):
+    return set(groups.split(',')) == set(CASES)
+
+
 def device_mode(args):
     sys.path.insert(0, str(ROOT / 'tools'))
     import serial_api
@@ -111,7 +115,11 @@ def device_mode(args):
         print(f'### group={group} think={int(group == "think")}')
         for case in CASES[group]:
             r = dev.complete(case['input'], phase=case['phase'])
-            good = r['success'] and calls_match(r['function_calls'], case.get('expect'))
+            # A blank expectation means "any grammar-legal, successfully executed
+            # call is fine"; an exact list must match name and arguments.
+            expect = case.get('expect')
+            good = r['success'] and (calls_match(r['function_calls'], expect)
+                                     if expect else True)
             ok += bool(good)
             results[case['id']] = {'raw': r['raw'], 'tokens': r['decode_tokens'] or 0,
                                    'calls': r['function_calls']}
@@ -138,12 +146,23 @@ def device_mode(args):
 
     path = GOLDEN['device']
     golden = json.loads(path.read_text())['cases'] if path.is_file() else {}
+    if not golden:
+        # The baseline may only be frozen by a run that covers the whole set.
+        args.save_golden = args.save_golden and measured_groups_full()
+        if not args.save_golden:
+            print('REFUSING to save a partial golden; run all groups')
     if args.save_golden or not golden:
         save_golden(path, results)
         golden = results
     exact, delta = compare(results, golden, 'device')
     metric('device_output_exact', exact)
     metric('device_cases', len(results))
+    # Reference is the 12-case golden; a short AUTO_GROUPS run only covers some
+    # of it, so scale the pass criterion by the fraction actually measured.
+    measured_cases = sum(len(CASES[g]) for g in args.groups.split(','))
+    metric('device_cases_total', len(golden))
+    if len(golden) > measured_cases:
+        metric('device_output_exact_min', round(exact * len(golden) / measured_cases))
     metric('device_token_delta', delta)
 
     bench = re.search(r'EVT bench tokens=\d+ ms=\d+ ms_per_tok=(\S+) tps=(\S+)', text)

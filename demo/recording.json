@@ -1,0 +1,507 @@
+{
+  "recorded_at": "2026-09-18T04:14:20.536385+00:00",
+  "source": "real ESP32-S3 UART via local HTTP bridge",
+  "schema_sha256": "305a99e4cc84f1c2605473d9cedf9776121a70785684eca7306472cc43cb3267",
+  "model_sha256": "1eaa92c24262e5629b92e9fb74305be851845feccc65e4aa0bda5f3a85c2e82a",
+  "before": {
+    "ready": true,
+    "device": "esp32-s3",
+    "schema": "telemetry-router-v1",
+    "layers": 8,
+    "model_bytes": 16155796,
+    "uptime_ms": 160307,
+    "free_internal_bytes": 106671,
+    "free_psram_bytes": 15713436,
+    "sample_period_s": 30,
+    "samples": 2,
+    "last_sample_uptime_ms": 140782,
+    "last_sample_free_internal_bytes": 107055,
+    "timer_status": "idle",
+    "timer_remaining_ms": 0,
+    "timer_fired_count": 0
+  },
+  "cases": [
+    {
+      "id": "status",
+      "input": "How much free memory does this device have?",
+      "expected_calls": [
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ],
+      "exact_match": true,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "get_status",
+            "arguments": {}
+          }
+        ],
+        "results": [
+          {
+            "name": "get_status",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 183664,
+              "free_internal_bytes": 106223,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 30,
+              "samples": 3,
+              "last_sample_uptime_ms": 170782,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "idle",
+              "timer_remaining_ms": 0,
+              "timer_fired_count": 0
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 11929.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 8187.0,
+        "decode_tps": 1.22,
+        "decode_tokens": 10,
+        "latency_ms": 23366.0,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 183713,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 30,
+        "samples": 3,
+        "last_sample_uptime_ms": 170782,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "idle",
+        "timer_remaining_ms": 0,
+        "timer_fired_count": 0
+      }
+    },
+    {
+      "id": "sampling",
+      "input": "Sample telemetry every 5 seconds",
+      "expected_calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 5
+          }
+        }
+      ],
+      "exact_match": true,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "set_sampling_interval",
+            "arguments": {
+              "seconds": 5
+            }
+          }
+        ],
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 212767,
+              "free_internal_bytes": 106139,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 5,
+              "samples": 4,
+              "last_sample_uptime_ms": 200782,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "idle",
+              "timer_remaining_ms": 0,
+              "timer_fired_count": 0
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 11132.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 14683.0,
+        "decode_tps": 1.23,
+        "decode_tokens": 18,
+        "latency_ms": 29066.2,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 212819,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 5,
+        "samples": 4,
+        "last_sample_uptime_ms": 200782,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "idle",
+        "timer_remaining_ms": 0,
+        "timer_fired_count": 0
+      }
+    },
+    {
+      "id": "timer",
+      "input": "Start a 60 second timer",
+      "expected_calls": [
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 60
+          }
+        }
+      ],
+      "exact_match": true,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "set_timer",
+            "arguments": {
+              "seconds": 60
+            }
+          }
+        ],
+        "results": [
+          {
+            "name": "set_timer",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 236215,
+              "free_internal_bytes": 106163,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 5,
+              "samples": 8,
+              "last_sample_uptime_ms": 232767,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "running",
+              "timer_remaining_ms": 59999,
+              "timer_fired_count": 0
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 8741.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 11420.0,
+        "decode_tps": 1.23,
+        "decode_tokens": 14,
+        "latency_ms": 23406.2,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 236266,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 5,
+        "samples": 8,
+        "last_sample_uptime_ms": 232767,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "running",
+        "timer_remaining_ms": 59948,
+        "timer_fired_count": 0
+      }
+    },
+    {
+      "id": "batch",
+      "input": "Sample every 10 seconds and start a 30 second timer",
+      "expected_calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 10
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 30
+          }
+        }
+      ],
+      "exact_match": true,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "set_sampling_interval",
+            "arguments": {
+              "seconds": 10
+            }
+          },
+          {
+            "name": "set_timer",
+            "arguments": {
+              "seconds": 30
+            }
+          }
+        ],
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 276734,
+              "free_internal_bytes": 105899,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 10,
+              "samples": 16,
+              "last_sample_uptime_ms": 272767,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "running",
+              "timer_remaining_ms": 19480,
+              "timer_fired_count": 0
+            }
+          },
+          {
+            "name": "set_timer",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 276735,
+              "free_internal_bytes": 104691,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 10,
+              "samples": 16,
+              "last_sample_uptime_ms": 272767,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "running",
+              "timer_remaining_ms": 29999,
+              "timer_fired_count": 0
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":10}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":30}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 13526.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 23677.0,
+        "decode_tps": 1.22,
+        "decode_tokens": 29,
+        "latency_ms": 40515.4,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 276823,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 10,
+        "samples": 16,
+        "last_sample_uptime_ms": 272767,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "running",
+        "timer_remaining_ms": 29911,
+        "timer_fired_count": 0
+      }
+    },
+    {
+      "id": "status_after",
+      "input": "Show device status",
+      "expected_calls": [
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ],
+      "exact_match": true,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "get_status",
+            "arguments": {}
+          }
+        ],
+        "results": [
+          {
+            "name": "get_status",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 296171,
+              "free_internal_bytes": 106223,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 10,
+              "samples": 17,
+              "last_sample_uptime_ms": 286734,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "running",
+              "timer_remaining_ms": 10563,
+              "timer_fired_count": 0
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 7944.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 8171.0,
+        "decode_tps": 1.22,
+        "decode_tokens": 10,
+        "latency_ms": 19357.3,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 296222,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 10,
+        "samples": 17,
+        "last_sample_uptime_ms": 286734,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "running",
+        "timer_remaining_ms": 10512,
+        "timer_fired_count": 0
+      }
+    },
+    {
+      "id": "unsupported",
+      "input": "What is the weather in Tokyo?",
+      "expected_calls": [],
+      "exact_match": false,
+      "response": {
+        "type": "call",
+        "success": true,
+        "error": null,
+        "function_calls": [
+          {
+            "name": "get_status",
+            "arguments": {}
+          }
+        ],
+        "results": [
+          {
+            "name": "get_status",
+            "success": true,
+            "state": {
+              "device": "esp32-s3",
+              "schema": "telemetry-router-v1",
+              "layers": 8,
+              "model_bytes": 16155796,
+              "uptime_ms": 320380,
+              "free_internal_bytes": 106223,
+              "free_psram_bytes": 15713436,
+              "sample_period_s": 10,
+              "samples": 20,
+              "last_sample_uptime_ms": 316734,
+              "last_sample_free_internal_bytes": 107055,
+              "timer_status": "expired",
+              "timer_remaining_ms": 0,
+              "timer_fired_count": 1
+            }
+          }
+        ],
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+        "confidence": null,
+        "prefill_ms": 12727.0,
+        "prefill_tps": 1.26,
+        "decode_ms": 8190.0,
+        "decode_tps": 1.22,
+        "decode_tokens": 10,
+        "latency_ms": 24166.6,
+        "device": "esp32-s3",
+        "reasoning": false
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "telemetry-router-v1",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 320430,
+        "free_internal_bytes": 106671,
+        "free_psram_bytes": 15713436,
+        "sample_period_s": 10,
+        "samples": 20,
+        "last_sample_uptime_ms": 316734,
+        "last_sample_free_internal_bytes": 107055,
+        "timer_status": "expired",
+        "timer_remaining_ms": 0,
+        "timer_fired_count": 1
+      }
+    }
+  ],
+  "after": {
+    "device": "esp32-s3",
+    "schema": "telemetry-router-v1",
+    "layers": 8,
+    "model_bytes": 16155796,
+    "uptime_ms": 320469,
+    "free_internal_bytes": 106671,
+    "free_psram_bytes": 15713436,
+    "sample_period_s": 10,
+    "samples": 20,
+    "last_sample_uptime_ms": 316734,
+    "last_sample_free_internal_bytes": 107055,
+    "timer_status": "expired",
+    "timer_remaining_ms": 0,
+    "timer_fired_count": 1
+  },
+  "verification": {
+    "supported_cases_match": true,
+    "telemetry_progressed": true,
+    "sampling_interval_applied": true,
+    "timer_expired": true,
+    "unsupported_rejected": false
+  }
+}

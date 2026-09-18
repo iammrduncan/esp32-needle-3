@@ -1,0 +1,13 @@
+model/*.cact
+esp32/build/
+esp32/sdkconfig
+esp32/sdkconfig.old
+__pycache__/
+*.pyc
+host/build/
+.venv/
+.runtime/
+model/*.download
+model/*.tmp
+*.log
+.DS_Store

@@ -1,0 +1,11 @@
+{
+  "repository": "Cactus-Compute/needle3",
+  "revision": "9da75122d4ca11aa4a667281c9c8ba38a7eed679",
+  "source_file": "needle3.cact",
+  "source_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+  "source_bytes": 35335380,
+  "layers": 8,
+  "context": 256,
+  "output_bytes": 16155796,
+  "output_sha256": "1eaa92c24262e5629b92e9fb74305be851845feccc65e4aa0bda5f3a85c2e82a"
+}

@@ -1,0 +1,19 @@
+Needle 3 on ESP32-S3
+
+The C engine, firmware scaffold, and host test utilities derive from:
+  andrisgauracs/needle-2-esp32
+  https://github.com/andrisgauracs/needle-2-esp32
+  revision 61cafad7014a5664bb3ffd5f0c457ce5aa6598ae
+  Licensed under Apache License 2.0 (included in LICENSE and engine/NOTICE-LICENSE).
+
+This project modifies that code for the Needle 3 archive and architecture,
+adds a telemetry tool router and HTTP bridge, and supplies reproducible demos.
+
+Needle 3 architecture and model weights are by Cactus Compute:
+  https://cactuscompute.com/needle
+  https://huggingface.co/Cactus-Compute/needle3
+Weights are downloaded separately. See model/manifest.json for provenance.
+
+Demo recordings are produced with Charmbracelet VHS (MIT license):
+  https://github.com/charmbracelet/vhs
+VHS and its dependencies are not vendored in this repository.

@@ -1,5 +1,6 @@
 {
   "_comment": "Frozen benchmark prompt set. `primary` defines the primary metric and is NOT to be edited during the session (adding coverage to `extended` is fine). Expectations are asserted only where the correct tool call is unambiguous from the prompt text; `expect: null` means grammar validity + successful execution + golden exactness still apply but no specific tool is prescribed. Device RAW text is compared token-for-token against .auto/golden/device.json.",
+  "probe_ids": [2, 101, 7, 512, 305, 1288, 42, 4096, 900, 63],
   "primary": [
     {
       "id": "sampling5",

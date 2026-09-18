@@ -86,3 +86,15 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   live in L1 and the only saving is the F2F instruction; on the S3 the fp16
   loads plus per-element conversion compete with the streaming activation.
   Lesson: do not predict device gains from a host ratio, in either direction.
+- **4-bit row norm hoist: neutral.** Same change that was a free refactor in the
+  2-bit LUT path, applied to `gemv_rows_offset`/`gemv_rows_generic`: boot bench
+  370 vs 370 ms/tok, images flashed back to back. Norm conversion is off the
+  critical path in both flavours.
+- **Packing the 2-bit row walker into 32-bit loads: broken, reverted.** Trying
+  to read two packed bytes as one word changed results (the LUT index is
+  per-pair, and the byte order is not what the shift made it), so this is not a
+  safe one-liner. The row bytes are only 32 per group anyway.
+- **Sinkhorn 20 -> 6: vetoed, not a dead end for a re-tuned budget.** Costs a
+  real logit change (max_delta 7.8, top1 6/10) for +0.8% decode. If a future
+  session re-derives a convergence-tested iteration count that keeps the probe
+  bit-exact, the win is there; 6 is not it.

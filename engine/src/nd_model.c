@@ -79,16 +79,18 @@ static void fp16_row(const uint16_t *h, float *dst, uint32_t n)
 static void zcrms(const nd_model *m, const nd_tensor *scale, const float *x,
                   uint32_t n, float *out)
 {
-    const uint16_t *s  = (const uint16_t *)nd_cact_data(&m->c, scale);
     float           ss = 0.0f;
     uint32_t        i;
 
+    /* Stage the scale once: the multiply loop then reads floats instead of
+     * unpacking a half per element, and zcrms is called four times a layer. */
+    fp16_row((const uint16_t *)nd_cact_data(&m->c, scale), m->scale_f, n);
     for (i = 0; i < n; i++)
         ss += x[i] * x[i];
     {
         float inv = 1.0f / sqrtf(ss / (float)n + ND_EPS);
         for (i = 0; i < n; i++)
-            out[i] = (1.0f + nd_f16(s[i])) * x[i] * inv;
+            out[i] = (1.0f + m->scale_f[i]) * x[i] * inv;
     }
 }
 
@@ -378,6 +380,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         m->eg_hist   = (float *)ND_ALLOC(sizeof(float) * m->n_sites * ND_EG_HIST * dm);
         m->logits    = (float *)ND_ALLOC(sizeof(float) * m->vocab);
         m->row       = (float *)ND_ALLOC_FAST(sizeof(float) * (dm > 128 ? dm : 128));
+        m->scale_f   = (float *)ND_ALLOC_FAST(sizeof(float) * dm);
         m->k_cache   = (int8_t *)ND_ALLOC(kn);
         m->v_cache   = (int8_t *)ND_ALLOC(vn);
         m->k_scale   = (float *)ND_ALLOC(sizeof(float) * scn);
@@ -401,7 +404,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             !m->q_hist || !m->k_hist || !m->v_hist ||
             !m->hada_a || !m->hada_b || !m->hada_c ||
             !m->eg_k || !m->eg_v || !m->eg_hist || !m->logits ||
-            !m->row || !m->k_cache || !m->v_cache || !m->k_scale || !m->v_scale) {
+            !m->row || !m->scale_f || !m->k_cache || !m->v_cache || !m->k_scale || !m->v_scale) {
             nd_model_close(m);
             return -12;
         }
@@ -433,6 +436,7 @@ void nd_model_close(nd_model *m)
         nd_tok_free(&m->tok);
     ND_FREE(m->layer);
     ND_FREE(m->fp16_pool);
+    ND_FREE(m->scale_f);
     ND_FREE(m->lane); ND_FREE(m->lane_next); ND_FREE(m->nx); ND_FREE(m->xh);
     ND_FREE(m->u); ND_FREE(m->ublk); ND_FREE(m->n1); ND_FREE(m->n2);
     ND_FREE(m->y); ND_FREE(m->tmp); ND_FREE(m->tmp2);

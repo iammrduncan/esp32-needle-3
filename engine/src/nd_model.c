@@ -1069,12 +1069,27 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
                        uint32_t na, uint32_t nb)
 {
     uint32_t i, j, k, l;
-    for (k = 0; k < na; k++) {
-        for (j = 0; j < nb; j++) {
-            float sum = 0.0f;
-            for (i = 0; i < na; i++)
-                sum += src[(size_t)i * nb + j] * a[(size_t)i * na + k];
-            m->hada_c[(size_t)k * nb + j] = sum;
+    /* Same column blocking on the first half. Here the reuse runs the other
+     * way: one src row is read once and multiplied against na entries of a, so
+     * the loop is restructured to accumulate over i and emit nb outputs at a
+     * time. Products summed per output are unchanged. */
+    {
+        uint32_t k0;
+        for (k0 = 0; k0 < na; k0 += 4) {
+            uint32_t kn = (k0 + 3 < na) ? 4 : na - k0;
+            for (j = 0; j < nb; j++) {
+                float s[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+                for (i = 0; i < na; i++) {
+                    float v = src[(size_t)i * nb + j];
+                    const float *ar = a + (size_t)i * na + k0;
+                    s[0] += v * ar[0];
+                    if (kn > 1) s[1] += v * ar[1];
+                    if (kn > 2) s[2] += v * ar[2];
+                    if (kn > 3) s[3] += v * ar[3];
+                }
+                { uint32_t t; for (t = 0; t < kn; t++)
+                        m->hada_c[(size_t)(k0 + t) * nb + j] = s[t]; }
+            }
         }
     }
     /* Column-blocked: nb columns share the same hada_c row, so a block of four

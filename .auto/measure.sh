@@ -44,6 +44,12 @@ fi
 
 ARGS=(device)
 [ -n "${AUTO_GROUPS:-}" ] && ARGS+=(--groups "$AUTO_GROUPS")
-[ "${AUTO_SAVE:-0}" = 1 ] && ARGS+=(--save-golden)
+# The baseline run (iteration 1) freezes the device goldens; later runs compare
+# against them and must stay byte-exact.
+SAVE=$( [ "$(wc -l < .auto/log.jsonl 2>/dev/null || echo 0)" -le 1 ] && echo 1 || echo 0 )
 cd "$ROOT"
-.venv/bin/python .auto/bench.py "${ARGS[@]}"
+if [ "$SAVE" = 1 ]; then
+    .venv/bin/python .auto/bench.py "${ARGS[@]}" --save-golden
+else
+    .venv/bin/python .auto/bench.py "${ARGS[@]}"
+fi

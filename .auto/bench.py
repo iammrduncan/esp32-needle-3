@@ -218,37 +218,27 @@ def host_mode(args):
 
 # --------------------------------------------------------------- fidelity
 
-# Fixed probe sequence: one forward step per id, full logits dumped. Any change
-# to the maths shows up here even when the greedy text still happens to match.
-PROBE_IDS = [2, 101, 7, 512, 305, 1288, 42, 4096, 900, 63]
+# The probe sequence lives in prompts.json. `nd_dump logits` prints one block of
+# logits per id, so the probe must be a true prefix of the frozen dump: run the
+# ids in order and never compare a shorter run against a longer golden.
+PROBE_IDS = json.loads((ROOT / '.auto/prompts.json').read_text())['probe_ids']
 
 
 def fidelity_mode(args):
-    out = subprocess.run([ND_DUMP, MODEL, 'logits'] + [str(i) for i in PROBE_IDS],
-                         capture_output=True, text=True, timeout=900).stdout
-    vals = [float(line) for line in out.split()]
-    path = ROOT / '.auto/golden/logits.txt'
-    if args.save_golden or not path.is_file():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('\n'.join('%.6f' % v for v in vals) + '\n')
-        print(f'golden saved: {path} ({len(vals)} values)')
-        metric('logit_max_delta', 0.0)
-        metric('logit_top1_match', len(PROBE_IDS))
-        return
-    ref = [float(line) for line in path.read_text().split()]
-    if len(ref) != len(vals):
-        print(f'FIDELITY shape changed: {len(ref)} -> {len(vals)}')
-        metric('logit_max_delta', 999.0)
-        metric('logit_top1_match', 0)
-        return
-    worst, agree, v = 0.0, 0, len(vals) // len(PROBE_IDS)
-    for step in range(len(vals) // v):
-        a, b = ref[step * v:(step + 1) * v], vals[step * v:(step + 1) * v]
-        worst = max(worst, max(abs(x - y) for x, y in zip(a, b)))
-        agree += (max(range(v), key=lambda i: a[i]) == max(range(v), key=lambda i: b[i]))
-    metric('logit_max_delta', round(worst, 6))
-    metric('logit_top1_match', agree)
-    print(f'FIDELITY steps={len(vals) // v} vocab={v} max|delta|={worst:.3e} top1={agree}/{len(PROBE_IDS)}')
+    # nd_ftest is the C-side gate: it opens the model, runs the probe and
+    # compares against the frozen dump, exiting non-zero on drift.
+    r = subprocess.run([ND_DUMP.replace('nd_dump', 'nd_ftest'), MODEL,
+                        str(ROOT / '.auto/golden/logits.txt')] +
+                       [str(i) for i in PROBE_IDS],
+                       capture_output=True, text=True, timeout=900)
+    line = (r.stdout or r.stderr).strip().splitlines()[-1] if (r.stdout or r.stderr) else 'no output'
+    print(line)
+    delta = re.search(r'max_delta=(\S+)', line)
+    top1 = re.search(r'top1=(\d+)/(\d+)', line)
+    metric('logit_max_delta', float(delta.group(1)) if delta else 999.0)
+    metric('logit_top1_match', int(top1.group(1)) if top1 else 0)
+    if r.returncode != 0:
+        print('FIDELITY FAILED: forward pass drifted from the frozen baseline')
 
 
 def main():

@@ -98,3 +98,16 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   real logit change (max_delta 7.8, top1 6/10) for +0.8% decode. If a future
   session re-derives a convergence-tested iteration count that keeps the probe
   bit-exact, the win is there; 6 is not it.
+- **Attention: 4 KV positions per online-softmax iteration is SLOWER than 2.**
+  2.56 tok/s vs 2.7933 control on board2 in the same batch (-8.4%), byte-exact.
+  The quad block spills off the LX7's register file; pairing is the sweet spot.
+- **2-bit LUT GEMV: two rows at a time is slightly slower.** 2.7733 vs 2.7933
+  (-0.7%) on board2, byte-exact. The GEMV is flash-bandwidth bound, not issue
+  bound, so a second row stream competes for the same bus instead of hiding
+  latency. Row-loop unrolling in this kernel is not the lever.
+- **Constrained-logits gather: norm hoist is a small real win (+0.18%).** Kept
+  (13373e7); byte-exact, and it lifts the think path with the primary metric.
+- **Two dead-end families, so far, on top of the fp32 staging wins:** arithmetic
+  hoisting inside the GEMVs (3 nulls) and loop unrolling in the GEMVs (2 nulls).
+  Everything that has moved the needle changed *what is read* or *how many times*
+  a value is touched, not how the inner loop is scheduled.

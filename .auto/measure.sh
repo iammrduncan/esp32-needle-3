@@ -30,6 +30,11 @@ idf.py -C esp32 ${CFG[@]+"${CFG[@]}"} build > /tmp/auto_build.log 2>&1 || {
     grep -E 'error:|ERROR' /tmp/auto_build.log | head -25
     exit 1; }
 echo "build_s=$(( $(date +%s) - t0 ))"
+# A rebuild that silently no-ops is the one failure mode that makes every number
+# below meaningless: it measures the previous candidate. Record what went in.
+{ echo "engine_md5=$(md5sum engine/src/*.c engine/include/*.h | md5sum | cut -c1-12)"
+  echo "app_md5=$(md5sum esp32/build/needle_demo.bin | cut -c1-12)"; } > /tmp/auto_build_id.txt
+cat /tmp/auto_build_id.txt
 
 if [ "${AUTO_NOFLASH:-0}" != 1 ]; then
     t0=$(date +%s)

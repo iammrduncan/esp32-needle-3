@@ -76,29 +76,27 @@ static void fp16_row(const uint16_t *h, float *dst, uint32_t n)
         dst[i] = nd_f16(h[i]);
 }
 
-static void zcrms(const nd_model *m, const nd_tensor *scale, const float *x,
+static void zcrms(const nd_model *m, const float *s, const float *x,
                   uint32_t n, float *out)
 {
     float           ss = 0.0f;
     uint32_t        i;
 
-    /* Stage the scale once: the multiply loop then reads floats instead of
-     * unpacking a half per element, and zcrms is called four times a layer. */
-    fp16_row((const uint16_t *)nd_cact_data(&m->c, scale), m->scale_f, n);
+    /* The scale arrives already float32: it is one of the staged per-layer
+     * tensors, so the multiply loop never unpacks a half per element. */
     for (i = 0; i < n; i++)
         ss += x[i] * x[i];
     {
         float inv = 1.0f / sqrtf(ss / (float)n + ND_EPS);
         for (i = 0; i < n; i++)
-            out[i] = (1.0f + m->scale_f[i]) * x[i] * inv;
+            out[i] = (1.0f + s[i]) * x[i] * inv;
     }
 }
 
 /* In-place per-head ZCRMSNorm over head_dim, shared scale across heads. */
-static void zcrms_heads(const nd_model *m, const nd_tensor *scale, float *x,
+static void zcrms_heads(const nd_model *m, const float *s, float *x,
                         uint32_t nheads, uint32_t dim)
 {
-    const uint16_t *s = (const uint16_t *)nd_cact_data(&m->c, scale);
     uint32_t        h, i;
 
     for (h = 0; h < nheads; h++) {
@@ -109,7 +107,7 @@ static void zcrms_heads(const nd_model *m, const nd_tensor *scale, float *x,
         {
             float inv = 1.0f / sqrtf(ss / (float)dim + ND_EPS);
             for (i = 0; i < dim; i++)
-                v[i] = (1.0f + nd_f16(s[i])) * v[i] * inv;
+                v[i] = (1.0f + s[i]) * v[i] * inv;
         }
     }
 }
@@ -235,7 +233,9 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                                     15, 16, 17, 18,           /* d2 b2 d3 d4 */
                                     26,                       /* cond_u */
                                     4, 5, 6,                  /* q/k/v taps */
-                                    14, 25 };                 /* d1, cond_v */
+                                    14, 25,                   /* d1, cond_v */
+                                    0, 11, 13,                /* norm_in, post_norm, pre_hada */
+                                    7, 8 };                   /* q_norm, k_norm */
         const uint32_t taps = m->c.h.qkv_conv_taps;
         uint32_t li;
         size_t   total = 0;
@@ -974,8 +974,8 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
     tap_projection(m, 5, m->kbuf, m->k_hist, li, m->k_dim);
     tap_projection(m, 6, m->vbuf, m->v_hist, li, m->v_dim);
 
-    zcrms_heads(m, &L->q_norm, m->q, nh, qk_hd);
-    zcrms_heads(m, &L->k_norm, m->kbuf, nkv, qk_hd);
+    zcrms_heads(m, m->fp16_slot[li][7], m->q, nh, qk_hd);
+    zcrms_heads(m, m->fp16_slot[li][8], m->kbuf, nkv, qk_hd);
 
     apply_rope(m, m->q, nh, qk_hd);
     apply_rope(m, m->kbuf, nkv, qk_hd);
@@ -1157,9 +1157,9 @@ static void block(nd_model *m, uint32_t li, float *u)
     }
 
     /* attention sub-block */
-    zcrms(m, &L->norm_in, u, dm, m->n1);
+    zcrms(m, m->fp16_slot[li][0], u, dm, m->n1);
     attention(m, li, m->n1, m->aout);
-    zcrms(m, &L->post_norm, m->aout, dm, m->n2);
+    zcrms(m, m->fp16_slot[li][11], m->aout, dm, m->n2);
     {
         float g = sigmoidf_(fp16_get(m, &L->attn_gate, 0));
         for (i = 0; i < dm; i++)
@@ -1169,7 +1169,7 @@ static void block(nd_model *m, uint32_t li, float *u)
     /* Hadamard MLP sub-block. The MLP writes into a padded buffer, so n2 must
      * hold next_pow2(d_model) floats; for d_model=512 that is exact. */
     { ND_T0(tm);
-    zcrms(m, &L->pre_hada, u, dm, m->n1);
+    zcrms(m, m->fp16_slot[li][13], u, dm, m->n1);
     hadamard_mlp(m, li, m->n1, m->n2);
     ND_T1(tm, ND_P_MLP); }
     for (i = 0; i < dm; i++)
@@ -1316,7 +1316,11 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
             acc += m->lane[j * dm + i];
         m->tmp[i] = acc / (float)n;
     }
-    zcrms(m, &m->final_norm, m->tmp, dm, m->y);
+        /* final_norm is not per-layer, so it is not in the staged set: convert the
+     * one row into the scratch the staged vectors already have. */
+    fp16_row((const uint16_t *)nd_cact_data(&m->c, &m->final_norm), m->scale_f,
+             dm);
+    zcrms(m, m->scale_f, m->tmp, dm, m->y);
 
     m->pos++;
     return m->y;

@@ -1058,6 +1058,12 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 
 /* JAX reference: einsum("ij,ik,jl->kl", z, a, b). Keep only one 1024-float
  * intermediate rather than materialising a 1024x1024 matrix. */
+/* Both halves of (A (x) B) applied to src. The inner products are written as
+ * accumulations over the *row* index rather than the output index: the naive
+ * form has one loop-carried sum per output element, so every FMA waits for the
+ * previous one on the LX7. Unrolling the row loop by two gives two independent
+ * chains per output and, in the first pass, lets a[i] and a[i+1] stay in
+ * registers across the nb columns they both touch. */
 static void kron_apply(nd_model *m, const float *src, float *dst,
                        const float *a, const float *b,
                        uint32_t na, uint32_t nb)
@@ -1071,11 +1077,31 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
             m->hada_c[(size_t)k * nb + j] = sum;
         }
     }
+    /* Column-blocked: nb columns share the same hada_c row, so a block of four
+     * keeps four accumulators and one loaded c[j] live across them instead of
+     * reloading c[j] for every column. Column-major access into b is unchanged,
+     * and the products summed are the same numbers in the same order. */
     for (k = 0; k < na; k++) {
-        for (l = 0; l < nb; l++) {
+        const float *crow = m->hada_c + (size_t)k * nb;
+        for (l = 0; l + 3 < nb; l += 4) {
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            for (j = 0; j < nb; j++) {
+                float cj = crow[j];
+                const float *br = b + (size_t)j * nb + l;
+                s0 += cj * br[0];
+                s1 += cj * br[1];
+                s2 += cj * br[2];
+                s3 += cj * br[3];
+            }
+            dst[(size_t)k * nb + l + 0] = s0;
+            dst[(size_t)k * nb + l + 1] = s1;
+            dst[(size_t)k * nb + l + 2] = s2;
+            dst[(size_t)k * nb + l + 3] = s3;
+        }
+        for (; l < nb; l++) {
             float sum = 0.0f;
             for (j = 0; j < nb; j++)
-                sum += m->hada_c[(size_t)k * nb + j] * b[(size_t)j * nb + l];
+                sum += crow[j] * b[(size_t)j * nb + l];
             dst[(size_t)k * nb + l] = sum;
         }
     }

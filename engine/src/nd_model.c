@@ -291,6 +291,24 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     base += m->n_sites * 4;
     nd_cact_tensor(&m->c, base, &m->final_norm);
 
+    /* The engram tap matrices are fp16 and read `taps` times per site per
+     * token, so they join the staged-float set. */
+    {
+        uint32_t ss2;
+        for (ss2 = 0; ss2 < m->n_sites; ss2++) {
+            nd_tensor  t;
+            uint32_t   k, nn;
+            nd_cact_tensor(&m->c, base - m->n_sites * 4 + ss2 * 4 + 3, &t);
+            nn = t.nbytes / 2;
+            m->eg_taps_f[ss2] = (float *)ND_ALLOC(sizeof(float) * nn);
+            if (!m->eg_taps_f[ss2])
+                return -11;
+            for (k = 0; k < nn; k++)
+                m->eg_taps_f[ss2][k] =
+                    nd_f16(((const uint16_t *)nd_cact_data(&m->c, &t))[k]);
+        }
+    }
+
     /* Probe heads, if this blob carries them. Layout after final_norm:
      * a manifest of H head codes (1 contrastive, 2 confidence), then H fixed
      * triples [probes, proj, bias]; the tokenizer is the final tensor. */
@@ -437,6 +455,7 @@ void nd_model_close(nd_model *m)
     ND_FREE(m->layer);
     ND_FREE(m->fp16_pool);
     ND_FREE(m->scale_f);
+    { uint32_t z; for (z = 0; z < ND_MAX_SITES; z++) ND_FREE(m->eg_taps_f[z]); }
     ND_FREE(m->lane); ND_FREE(m->lane_next); ND_FREE(m->nx); ND_FREE(m->xh);
     ND_FREE(m->u); ND_FREE(m->ublk); ND_FREE(m->n1); ND_FREE(m->n2);
     ND_FREE(m->y); ND_FREE(m->tmp); ND_FREE(m->tmp2);
@@ -756,8 +775,7 @@ static void engram_step(nd_model *m, uint32_t token)
 
         /* Dilated causal tap convolution over the raw v history. */
         {
-            const uint16_t *tp = (const uint16_t *)nd_cact_data(&m->c,
-                                                               &m->engram[s].taps);
+            const float *tp = m->eg_taps_f[s];
             float *out = m->eg_v + (size_t)s * dm;
             uint32_t d;
 
@@ -770,7 +788,7 @@ static void engram_step(nd_model *m, uint32_t token)
                 src = m->eg_hist + ((size_t)s * ND_EG_HIST +
                                     ((m->eg_pos - back) % ND_EG_HIST)) * dm;
                 for (d = 0; d < dm; d++)
-                    out[d] += nd_f16(tp[j * dm + d]) * src[d];
+                    out[d] += tp[j * dm + d] * src[d];
             }
         }
     }

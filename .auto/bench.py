@@ -214,6 +214,23 @@ def host_mode(args):
     metric('host_output_exact', exact)
     metric('host_cases', len(results))
     metric('host_token_delta', delta)
+    # Second, looser reading of the same run: does the model still pick the same
+    # tokens? An accumulation-order change is allowed to break exact text at the
+    # last mantissa bit, but it must not change a decision.
+    same, lcp = 0, []
+    for cid, res in results.items():
+        ref = golden.get(cid)
+        if ref is None:
+            same += 1
+            continue
+        a, b = ref['raw'].split('\n'), res['raw'].split('\n')
+        n = 0
+        while n < len(a) and n < len(b) and a[n] == b[n]:
+            n += 1
+        lcp.append(f'{n}/{max(len(a), len(b))}')
+        same += (a == b)
+    metric('host_lines_same', same)
+    print('LCP ' + ' '.join(f'{cid}:{v}' for cid, v in zip(results, lcp)))
 
 
 # --------------------------------------------------------------- fidelity
@@ -241,6 +258,7 @@ def fidelity_mode(args):
         print('FIDELITY FAILED: forward pass drifted from the frozen baseline')
 
 
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('mode', choices=['device', 'host', 'fidelity'])
@@ -249,6 +267,7 @@ def main():
     ap.add_argument('--boot-timeout', type=float, default=1500)
     ap.add_argument('--request-timeout', type=float, default=600)
     ap.add_argument('--save-golden', action='store_true')
+
     args = ap.parse_args()
     if args.mode == 'host':
         host_mode(args)

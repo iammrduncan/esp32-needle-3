@@ -1,0 +1,49 @@
+#!/bin/bash
+# Primary metric: mean device-reported decode tps over the frozen primary
+# prompt set, measured through the real request path on the attached board.
+#
+# Env knobs (never change what the metric means):
+#   AUTO_GROUPS=primary,...   restrict groups (diagnostics only; default all)
+#   AUTO_SAVE=1               rewrite the device golden (only for a documented
+#                             re-baseline, never to make a run look good)
+#   AUTO_PROFILE=1            build with ND_PROFILE=ON for the phase breakdown
+#                             (adds timers: do not use for keep/discard)
+#   AUTO_NOFLASH=1            re-measure the already-flashed app (noise checks)
+#   AUTO_MODEL=1              also rewrite the model partition
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ROOT=$PWD
+[ -n "${IDF_PATH:-}" ] || . /opt/esp/idf/export.sh >/dev/null 2>&1
+FLASH_PORT=${FLASH_PORT:-/dev/ttyACM0}
+
+# Fast pre-check: the engine has to compile at all (seconds, no hardware).
+cmake -S host -B host/build > /tmp/auto_host.log 2>&1
+cmake --build host/build -j8 >> /tmp/auto_host.log 2>&1 || {
+    echo HOST_BUILD_FAILED; grep -E 'error' /tmp/auto_host.log | head -20; exit 1; }
+.venv/bin/python tools/download_model.py --verify-only > /dev/null
+
+CFG=()
+[ "${AUTO_PROFILE:-0}" = 1 ] && CFG+=(-DNEEDLE_PROFILE=ON)
+t0=$(date +%s)
+idf.py -C esp32 ${CFG[@]+"${CFG[@]}"} build > /tmp/auto_build.log 2>&1 || {
+    echo FIRMWARE_BUILD_FAILED
+    grep -E 'error:|ERROR' /tmp/auto_build.log | head -25
+    exit 1; }
+echo "build_s=$(( $(date +%s) - t0 ))"
+
+if [ "${AUTO_NOFLASH:-0}" != 1 ]; then
+    t0=$(date +%s)
+    if [ "${AUTO_MODEL:-0}" = 1 ]; then
+        .venv/bin/python -m esptool --chip esp32s3 --port "$FLASH_PORT" \
+            --baud 921600 write_flash 0x210000 model/needle3.cact > /tmp/auto_model.log 2>&1
+    fi
+    idf.py -C esp32 -p "$FLASH_PORT" flash > /tmp/auto_flash.log 2>&1 || {
+        echo FLASH_FAILED; tail -20 /tmp/auto_flash.log; exit 1; }
+    echo "flash_s=$(( $(date +%s) - t0 ))"
+fi
+
+ARGS=(device)
+[ -n "${AUTO_GROUPS:-}" ] && ARGS+=(--groups "$AUTO_GROUPS")
+[ "${AUTO_SAVE:-0}" = 1 ] && ARGS+=(--save-golden)
+cd "$ROOT"
+.venv/bin/python .auto/bench.py "${ARGS[@]}"

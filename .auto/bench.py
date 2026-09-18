@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Decode benchmark and quality gate for the Needle 3 ESP32 firmware.
+
+  bench.py device   [--port P] [--groups primary,extended,think] [--save-golden]
+  bench.py host     [--save-golden]
+  bench.py fidelity [--save-golden]
+
+`device` drives the real request path over the console UART and reports the
+timings the firmware measures itself (EVT done tps=...), so nothing in the host
+bridge can inflate the number. `host` runs the same prompts through the host
+build of the same engine (nd_dump genp) and compares the generated text against
+a frozen golden file: that is the quality gate that keeps a speedup honest.
+
+Golden file: {"cases": {id: {"raw": str, "tokens": int, "calls": [...]}}}
+"""
+import argparse
+import json
+import re
+import subprocess
+import sys
+import time
+from contextlib import redirect_stdout
+from io import StringIO
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CASES = {k: v for k, v in json.loads((ROOT / '.auto/prompts.json').read_text()).items()
+         if isinstance(v, list)}
+TOOLS = str(ROOT / 'tools/demo-tools.json')
+ROUTES = str(ROOT / 'tools/model-routes.json')
+ND_DUMP = str(ROOT / 'host/build/nd_dump')
+MODEL = str(ROOT / 'model/needle3.cact')
+GOLDEN = {'device': ROOT / '.auto/golden/device.json',
+          'host': ROOT / '.auto/golden/host.json'}
+
+
+def metric(name, value):
+    print(f'METRIC {name}={value}')
+
+
+def mean(values):
+    return sum(values) / len(values) if values else 0.0
+
+
+def calls_match(actual, expect):
+    """Name and arguments must match exactly, in order. No partial credit."""
+    def norm(calls):
+        return [(c.get('name'), c.get('arguments') or {}) for c in calls or []]
+    return norm(actual) == norm(expect)
+
+
+def compare(results, golden, tag):
+    """Exactness against the frozen baseline: (exact_count, token_delta)."""
+    exact, delta = 0, 0
+    for cid, res in results.items():
+        ref = golden.get(cid)
+        if ref is None:
+            exact += 1
+            continue
+        if res['raw'] == ref['raw'] and res['tokens'] == ref['tokens']:
+            exact += 1
+            continue
+        delta += abs(res['tokens'] - ref['tokens'])
+        print(f'DIVERGE[{tag}] {cid}: golden {ref["tokens"]}tok {ref["raw"][:70]!r}')
+        print(f'DIVERGE[{tag}] {cid}: now    {res["tokens"]}tok {res["raw"][:70]!r}')
+    return exact, delta
+
+
+def save_golden(path, results):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(
+        {'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
+         'cases': {k: {m: v[m] for m in ('raw', 'tokens', 'calls')}
+                   for k, v in results.items()}}, indent=1) + '\n')
+    print(f'golden saved: {path} ({len(results)} cases)')
+
+
+def switch_think(dev, want):
+    """Set the firmware reasoning mode and wait for its ack."""
+    dev.think = want
+    dev._set_think()
+    until = time.monotonic() + 10
+    while time.monotonic() < until:
+        if dev._line().startswith('EVT think='):
+            return
+    print('WARN think ack missing')
+
+
+# ------------------------------------------------------------------- device
+
+def device_mode(args):
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import serial_api
+
+    boot = StringIO()
+    with redirect_stdout(boot):
+        dev = serial_api.Device(args.port, 115200, args.boot_timeout,
+                                args.request_timeout, False)
+    text = boot.getvalue()
+    print(text.rstrip())
+
+    for name, value in sorted(dict(re.findall(r'EVT prof (\S+)\s+([\d.]+) ms', text))
+                              .items(), key=lambda kv: -float(kv[1])):
+        print(f'PROF {name}={value}')
+
+    results = {}
+    for group in args.groups.split(','):
+        switch_think(dev, group == 'think')
+        tps, ptps, ok, group_tps = [], [], 0, []
+        print(f'### group={group} think={int(group == "think")}')
+        for case in CASES[group]:
+            r = dev.complete(case['input'], phase=case['phase'])
+            good = r['success'] and calls_match(r['function_calls'], case.get('expect'))
+            ok += bool(good)
+            results[case['id']] = {'raw': r['raw'], 'tokens': r['decode_tokens'] or 0,
+                                   'calls': r['function_calls']}
+            tps.append(r['decode_tps'] or 0.0)
+            ptps.append(r['prefill_tps'] or 0.0)
+            group_tps.append({'id': case['id'], 'tps': r['decode_tps'] or 0.0,
+                              'tokens': r['decode_tokens'] or 0})
+            print(f'CASE {case["id"]} phase={case["phase"]} tps={r["decode_tps"]:.3f} '
+                  f'tokens={r["decode_tokens"]} decode_ms={r["decode_ms"]:.0f} '
+                  f'prefill_tps={r["prefill_tps"]:.2f} calls_ok={int(good)} '
+                  f'calls={json.dumps(r["function_calls"], separators=(",", ":"))[:90]}')
+            if not good:
+                print(f'  BAD {r["error"]} raw={r["raw"][:140]!r}')
+        print(f'GROUP {group} mean_tps={mean(tps):.3f} calls_ok={ok}/{len(CASES[group])}')
+        if group == 'primary':
+            metric('decode_tps', round(mean(tps), 4))
+            metric('prefill_tps', round(mean(ptps), 4))
+            metric('gen_tokens', sum(c['tokens'] for c in group_tps))
+            metric('min_case_tps', round(min(c['tps'] for c in group_tps), 4))
+        elif group == 'extended':
+            metric('ext_decode_tps', round(mean(tps), 4))
+        elif group == 'think':
+            metric('think_tps', round(mean(tps), 4))
+
+    path = GOLDEN['device']
+    golden = json.loads(path.read_text())['cases'] if path.is_file() else {}
+    if args.save_golden or not golden:
+        save_golden(path, results)
+        golden = results
+    exact, delta = compare(results, golden, 'device')
+    metric('device_output_exact', exact)
+    metric('device_cases', len(results))
+    metric('device_token_delta', delta)
+
+    bench = re.search(r'EVT bench tokens=\d+ ms=\d+ ms_per_tok=(\S+) tps=(\S+)', text)
+    if bench:
+        print(f'BOOT ms_per_tok={bench.group(1)}')
+        metric('boot_bench_tps', float(bench.group(2)))
+    heaps = re.search(r'EVT ready .*psram_free=(\d+) internal_free=(\d+)', text)
+    if heaps:
+        metric('psram_free', int(heaps.group(1)))
+        metric('internal_free', int(heaps.group(2)))
+    dev.serial.close()
+
+
+# --------------------------------------------------------------------- host
+
+def host_case(case):
+    """The firmware request path, mirrored in the host build of the engine."""
+    schema = ROUTES if case['phase'] == 'route' else TOOLS
+    cmd = [ND_DUMP, MODEL, 'genp', schema, case['input'], '128', 'nothink']
+    if case['phase'] == 'route':
+        cmd.append('onecall')
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=900).stdout
+    lines = out.split('\n')
+    # The payload after the RAW marker is the full generated text and may span
+    # several lines (the model emits literal newlines); it ends at END.
+    start = next((i for i, ln in enumerate(lines) if ln.startswith('RAW ')), None)
+    if start is None:
+        raw = ''
+    else:
+        body = [lines[start][4:]] + lines[start + 1:]
+        raw = '\n'.join(body[:body.index('END')] if 'END' in body else body)
+    toks = re.search(r'EVT done tokens=(\d+)', out)
+    return {'raw': raw, 'tokens': int(toks.group(1)) if toks else 0, 'calls': None}
+
+
+def host_mode(args):
+    results = {}
+    for group in ('primary', 'extended'):
+        for case in CASES[group]:
+            r = host_case(case)
+            results[case['id']] = r
+            print(f'HOST {case["id"]} tokens={r["tokens"]} raw={r["raw"][:90]!r}')
+    path = GOLDEN['host']
+    golden = json.loads(path.read_text())['cases'] if path.is_file() else {}
+    if args.save_golden or not golden:
+        save_golden(path, results)
+        golden = results
+    exact, delta = compare(results, golden, 'host')
+    metric('host_output_exact', exact)
+    metric('host_cases', len(results))
+    metric('host_token_delta', delta)
+
+
+# --------------------------------------------------------------- fidelity
+
+# Fixed probe sequence: one forward step per id, full logits dumped. Any change
+# to the maths shows up here even when the greedy text still happens to match.
+PROBE_IDS = [2, 101, 7, 512, 305, 1288, 42, 4096, 900, 63]
+
+
+def fidelity_mode(args):
+    out = subprocess.run([ND_DUMP, MODEL, 'logits'] + [str(i) for i in PROBE_IDS],
+                         capture_output=True, text=True, timeout=900).stdout
+    vals = [float(line) for line in out.split()]
+    path = ROOT / '.auto/golden/logits.txt'
+    if args.save_golden or not path.is_file():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('\n'.join('%.6f' % v for v in vals) + '\n')
+        print(f'golden saved: {path} ({len(vals)} values)')
+        metric('logit_max_delta', 0.0)
+        metric('logit_top1_match', len(PROBE_IDS))
+        return
+    ref = [float(line) for line in path.read_text().split()]
+    if len(ref) != len(vals):
+        print(f'FIDELITY shape changed: {len(ref)} -> {len(vals)}')
+        metric('logit_max_delta', 999.0)
+        metric('logit_top1_match', 0)
+        return
+    worst, agree, v = 0.0, 0, len(vals) // len(PROBE_IDS)
+    for step in range(len(vals) // v):
+        a, b = ref[step * v:(step + 1) * v], vals[step * v:(step + 1) * v]
+        worst = max(worst, max(abs(x - y) for x, y in zip(a, b)))
+        agree += (max(range(v), key=lambda i: a[i]) == max(range(v), key=lambda i: b[i]))
+    metric('logit_max_delta', round(worst, 6))
+    metric('logit_top1_match', agree)
+    print(f'FIDELITY steps={len(vals) // v} vocab={v} max|delta|={worst:.3e} top1={agree}/{len(PROBE_IDS)}')
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('mode', choices=['device', 'host', 'fidelity'])
+    ap.add_argument('--port', default='/dev/ttyACM1')
+    ap.add_argument('--groups', default='primary,extended,think')
+    ap.add_argument('--boot-timeout', type=float, default=1500)
+    ap.add_argument('--request-timeout', type=float, default=600)
+    ap.add_argument('--save-golden', action='store_true')
+    args = ap.parse_args()
+    if args.mode == 'host':
+        host_mode(args)
+    elif args.mode == 'fidelity':
+        fidelity_mode(args)
+    else:
+        device_mode(args)
+
+
+if __name__ == '__main__':
+    main()

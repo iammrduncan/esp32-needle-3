@@ -232,7 +232,8 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         static const int SLOT[] = { 19, 20, 21, 22, 23, 24,   /* w1a..w3b */
                                     15, 16, 17, 18,           /* d2 b2 d3 d4 */
                                     26,                       /* cond_u */
-                                    4, 5, 6 };                /* q/k/v taps */
+                                    4, 5, 6,                  /* q/k/v taps */
+                                    14, 25 };                 /* d1, cond_v */
         const uint32_t taps = m->c.h.qkv_conv_taps;
         uint32_t li;
         size_t   total = 0;
@@ -1020,9 +1021,9 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     const nd_layer *L = &m->layer[li];
     uint32_t dm = m->d_model, n = m->c.h.hada_n, i, j;
     float *const *fp = m->fp16_slot[li];
-    const uint16_t *d1 = (const uint16_t *)nd_cact_data(&m->c, &L->d1);
+    const float *d1 = fp[14];
     const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17], *d4 = fp[18];
-    const uint16_t *cv = (const uint16_t *)nd_cact_data(&m->c, &L->cond_v);
+    const float *cv = fp[25];
     const float    *cu = fp[26];
     const float *p1 = (const float *)nd_cact_data(&m->c, &m->hada_p1);
     const float *p2 = (const float *)nd_cact_data(&m->c, &m->hada_p2);
@@ -1032,7 +1033,7 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     /* Softmax(x @ cond_v), with the eight conditioning channels in this blob. */
     for (i = 0; i < dm; i++)
         for (j = 0; j < 8; j++)
-            cond[j] += x[i] * nd_f16(cv[(size_t)i * 8 + j]);
+            cond[j] += x[i] * cv[(size_t)i * 8 + j];
     max_cond = cond[0];
     for (j = 1; j < 8; j++) if (cond[j] > max_cond) max_cond = cond[j];
     sum_cond = 0.0f;
@@ -1042,7 +1043,7 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     }
     for (j = 0; j < 8; j++) cond[j] /= sum_cond;
 
-    for (i = 0; i < dm; i++) m->hada_a[i] = nd_f16(d1[i]) * x[i];
+    for (i = 0; i < dm; i++) m->hada_a[i] = d1[i] * x[i];
     for (i = dm; i < n; i++) m->hada_a[i] = 0.0f;
     kron_apply(m, m->hada_a, m->hada_b, fp[19], fp[20],
                L->w1a.shape[0], L->w1b.shape[0]);

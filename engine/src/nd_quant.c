@@ -369,10 +369,11 @@ ND_HOT void nd_cq_gemv_gather(const nd_cact *c, const nd_tensor *t, const void *
         float           acc = 0.0f;
         uint32_t        gi;
 
-        for (gi = 0; gi < ngroup; gi++)
-            acc += nd_f16(nrm[gi]) *
-                   dot_group(row, gi * g * t->bits, t->bits, g, cb,
-                             xh + (size_t)gi * g);
+        for (gi = 0; gi < ngroup; gi++) {
+            float nf = nd_f16(nrm[gi]);   /* same value, converted once */
+            acc += nf * dot_group(row, gi * g * t->bits, t->bits, g, cb,
+                                  xh + (size_t)gi * g);
+        }
         y[i] = acc;
     }
 }

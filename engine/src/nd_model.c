@@ -231,7 +231,8 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     {
         static const int SLOT[] = { 19, 20, 21, 22, 23, 24,   /* w1a..w3b */
                                     15, 16, 17, 18,           /* d2 b2 d3 d4 */
-                                    26 };                     /* cond_u */
+                                    26,                       /* cond_u */
+                                    4, 5, 6 };                /* q/k/v taps */
         const uint32_t taps = m->c.h.qkv_conv_taps;
         uint32_t li;
         size_t   total = 0;
@@ -850,21 +851,24 @@ static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
     }
 }
 
-static void tap_projection(nd_model *m, const nd_tensor *tap_tensor,
+static void tap_projection(nd_model *m, uint32_t tap_slot,
                            float *projection, float *history,
                            uint32_t li, uint32_t dim)
 {
     uint32_t taps = m->c.h.qkv_conv_taps;
     uint32_t slot = m->pos % taps;
     uint32_t i, j;
-    const uint16_t *weights = (const uint16_t *)nd_cact_data(&m->c, tap_tensor);
+    /* Staged float32 (see the slot table in nd_model_open): the tap weights are
+     * read once per element per tap, so converting inside the loop cost
+     * taps*dim conversions per projection. */
+    const float *weights = m->fp16_slot[li][tap_slot];
     float *layer_history = history + (size_t)li * taps * dim;
     memcpy(layer_history + (size_t)slot * dim, projection, dim * sizeof(float));
     for (i = 0; i < dim; i++) {
         float value = 0.0f;
         for (j = 0; j < taps && j <= m->pos; j++) {
             uint32_t prior = (m->pos - j) % taps;
-            value += nd_f16(weights[(size_t)j * dim + i]) *
+            value += weights[(size_t)j * dim + i] *
                      layer_history[(size_t)prior * dim + i];
         }
         projection[i] = value;
@@ -900,9 +904,9 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
       nd_cq_gemv_lut2(&L->gate_proj, nd_cact_data(&m->c, &L->gate_proj), m->lut, m->gate);
       ND_T1(tg, ND_P_PROJ); }
 
-    tap_projection(m, &L->q_taps, m->q, m->q_hist, li, nh * qk_hd);
-    tap_projection(m, &L->k_taps, m->kbuf, m->k_hist, li, m->k_dim);
-    tap_projection(m, &L->v_taps, m->vbuf, m->v_hist, li, m->v_dim);
+    tap_projection(m, 4, m->q, m->q_hist, li, nh * qk_hd);
+    tap_projection(m, 5, m->kbuf, m->k_hist, li, m->k_dim);
+    tap_projection(m, 6, m->vbuf, m->v_hist, li, m->v_dim);
 
     zcrms_heads(m, &L->q_norm, m->q, nh, qk_hd);
     zcrms_heads(m, &L->k_norm, m->kbuf, nkv, qk_hd);

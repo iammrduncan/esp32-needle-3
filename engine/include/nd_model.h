@@ -102,7 +102,8 @@ typedef struct {
      * model, against 49K distinct elements), and tap_projection re-read a tap
      * vector dim times. */
     float        *fp16_pool;
-    float        *scale_f;   /* scratch: one staged norm scale vector */
+    float        *scale_f;
+    float        *eg_taps_f[ND_MAX_SITES];  /* staged fp32 engram taps */   /* scratch: one staged norm scale vector */
     /* fp16_f[slot][layer] above, viewed per layer for the forward pass. */
     float        *fp16_slot[ND_MAX_MLP_LAYERS][ND_FP16_COPY_COUNT];
     nd_engram     engram[ND_MAX_SITES];

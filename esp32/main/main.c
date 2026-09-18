@@ -10,6 +10,7 @@
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
 #include "esp_timer.h"
+#include "esp_private/esp_clk.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -354,6 +355,8 @@ void app_main(void)
     fflush(stdout);
     if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;
     router_init(s_model.n_layers, model_bytes);
+    printf("EVT clk cpu_hz=%d xtal_hz=%d\n",
+           (int)esp_clk_cpu_freq(), (int)esp_clk_xtal_freq());
 
     /* Startup benchmark: a fixed number of steps with the KV cache cold, so
      * kernel changes can be measured in seconds instead of running a whole

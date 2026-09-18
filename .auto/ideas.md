@@ -44,11 +44,14 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   split (core 1 runs the MLP of the previous lane-mix stage while core 0 streams
   weights) is complicated; a simple one may be to overlap the *out_proj* GEMV
   with attention tails.
-- **Board power mode is a 2x decode lever.** The measured board idles in
-  light-sleep at 80 MHz: 160/160/240 MHz gives 1.22/1.83/2.44 tok/s (816/546/
-  406 ms per token, roughly 0.66/1.47/2.00x). The firmware's boot bench shows
-  the same 816 -> 406 ms/tok. Confirm what the harness and the shipping
-  firmware actually request before treating either number as the metric.
+- **DISPROVEN, and it nearly cost the run #2 win.** A note here claimed the
+  board downclocked to 80 MHz and that 816 -> 406 ms/tok was a power-mode
+  effect. It is not: `esp_clk_cpu_freq()` reports 240 MHz and the xtal 40 MHz
+  for both binaries, PM is disabled, and the same 2x appears from a flash A/B
+  of the two images. The 2x is the fp32 MLP-factor change (run #2).
+  Lesson: measure the clock and diff the binaries before believing any
+  "impossible" speedup is an artefact - and revert accidental `cp`s of a
+  baseline file into the tree (that is what produced the phantom 1.22).
 
 ## Candidate optimisations (revised after the above)
 
@@ -62,13 +65,24 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
 
 ## Measured dead ends (fill in as found)
 
-- (none yet)
+- **fp32 staging of the Monarch factors is NOT a dead end: it is run #2,
+  +99.9% decode** (1.2217 -> 2.4417 tok/s). It sits in "what worked" now. What
+  is worth recording here is the *method* mistake: a host ratio of 1.24x made
+  the 2.01x device number look impossible, so it was written off as an
+  artefact, and a stale baseline copy left in `engine/` then made the device
+  appear to agree. Both binaries were later flashed back-to-back at a reported
+  240 MHz: BASE 816 ms/tok, CAND 406 ms/tok. Host speed is not a proxy for
+  device speed in either direction. The earlier tap_projection part of this
+  entry remains genuinely untried (see below).
 
 ## Measured dead ends (fill in as found)
 
-- **fp32 staging of the Monarch Kronecker factors (w1a..w3b) + d2/b2/d3/d4.**
-  Idea said ~1.6M `nd_f16` calls/token is the head. It is not, on device: the
-  factors are 2KB each, permanently in the 64KB L1D, so the conversion is L1
-  hits plus one F2F instruction. Host: 1.93s -> 1.55s (1.24x). Device: 816 ->
-  406 ms/tok (2.01x) - which is impossible for ~4K ops/token and therefore is
-  not this change. Revert; look at the cache configuration instead.
+- **fp32 staging of the Monarch Kronecker factors (w1a..w3b) + d2/b2/d3/d4:
+  NOT a dead end - it is run #2, +99.9% decode.** Recorded here because the
+  first reading (host 1.24x, device 2.01x) looked too good for ~4K ops/token
+  and was written off. The device number is real: both binaries flashed
+  back-to-back, cpu_hz=240 MHz reported by both, boot bench 816 -> 406 ms/tok,
+  text byte-identical. Host and device diverge because on x86 the 2KB factors
+  live in L1 and the only saving is the F2F instruction; on the S3 the fp16
+  loads plus per-element conversion compete with the streaming activation.
+  Lesson: do not predict device gains from a host ratio, in either direction.

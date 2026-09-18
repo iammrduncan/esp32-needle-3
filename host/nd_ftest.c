@@ -17,7 +17,9 @@
 
 int main(int argc, char **argv)
 {
-    static float probe[MAX_V * 16];
+    static float probe[MAX_V * 64];   /* one block per probe step: the model hands
+                                   * back a pointer into its own buffer, so all
+                                   * steps must be copied out as they are made */
     const char  *golden_path;
     FILE        *f;
     long         n = 0, cap = 0, step, v, ids_n;
@@ -77,7 +79,10 @@ int main(int argc, char **argv)
                 const float *lg;
                 i = (uint32_t)atoi(argv[3 + step]);
                 lg = nd_model_step(&m, i);
-                memcpy(got + step * v, lg, sizeof(float) * (size_t)v);
+                /* Copy before the next step: nd_model_step returns a pointer
+                 * into the model's own logits buffer, which the next call
+                 * overwrites. */
+                memcpy(got + (size_t)step * (size_t)v, lg, sizeof(float) * (size_t)v);
             }
             nd_model_close(&m);
         }

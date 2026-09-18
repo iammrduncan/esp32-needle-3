@@ -302,10 +302,25 @@ static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
         float           acc = 0.0f;
         uint32_t        gi;
 
-        for (gi = 0; gi < c->ngroup; gi++)
-            acc += nd_f16(nrm[gi]) *
-                   dot_group_lut2(row + (size_t)gi * c->gbytes,
-                                  c->lut + (size_t)gi * c->gpairs * 16, c->g);
+        /* Same value as nd_f16(nrm[gi]), hoisted: nrm is read once per row and
+         * the conversion does not depend on the group's data. */
+        for (gi = 0; gi < c->ngroup; gi++) {
+            float   nf = nd_f16(nrm[gi]);
+            float   s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            const uint8_t *qq = row + (size_t)gi * c->gbytes;
+            const float   *T  = c->lut + (size_t)gi * c->gpairs * 16;
+            uint32_t       j;
+            for (j = 0; j < c->g; j += 8) {
+                uint8_t b0 = qq[0], b1 = qq[1];
+                qq += 2;
+                s0 += T[b0 & 15u];
+                s1 += T[16 + (b0 >> 4)];
+                s2 += T[32 + (b1 & 15u)];
+                s3 += T[48 + (b1 >> 4)];
+                T += 64;
+            }
+            acc += nf * ((s0 + s1) + (s2 + s3));
+        }
         c->y[r] = acc;
     }
 }

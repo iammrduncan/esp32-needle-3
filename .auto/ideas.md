@@ -44,6 +44,14 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   split (core 1 runs the MLP of the previous lane-mix stage while core 0 streams
   weights) is complicated; a simple one may be to overlap the *out_proj* GEMV
   with attention tails.
+- **Board power mode is a 2x decode lever.** The measured board idles in
+  light-sleep at 80 MHz: 160/160/240 MHz gives 1.22/1.83/2.44 tok/s (816/546/
+  406 ms per token, roughly 0.66/1.47/2.00x). The firmware's boot bench shows
+  the same 816 -> 406 ms/tok. Confirm what the harness and the shipping
+  firmware actually request before treating either number as the metric.
+
+## Candidate optimisations (revised after the above)
+
 - **Iteration speed (not the metric):** priming two schema prefixes at boot costs
   ~5 min per flash. Priming both prefixes concurrently on the two cores, or
   caching a primed prefix in flash, would roughly halve experiment latency
@@ -55,3 +63,12 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
 ## Measured dead ends (fill in as found)
 
 - (none yet)
+
+## Measured dead ends (fill in as found)
+
+- **fp32 staging of the Monarch Kronecker factors (w1a..w3b) + d2/b2/d3/d4.**
+  Idea said ~1.6M `nd_f16` calls/token is the head. It is not, on device: the
+  factors are 2KB each, permanently in the 64KB L1D, so the conversion is L1
+  hits plus one F2F instruction. Host: 1.93s -> 1.55s (1.24x). Device: 816 ->
+  406 ms/tok (2.01x) - which is impossible for ~4K ops/token and therefore is
+  not this change. Revert; look at the cache configuration instead.

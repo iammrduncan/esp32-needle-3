@@ -67,6 +67,15 @@ static void rms_unit(const float *x, uint32_t n, float *out)
 }
 
 /* ZCRMSNorm: (1 + scale) * x / sqrt(mean(x^2) + eps) */
+/* fp16 -> fp32 into a caller buffer. Only called at open: the hot loops below
+ * must never convert per element. */
+static void fp16_row(const uint16_t *h, float *dst, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        dst[i] = nd_f16(h[i]);
+}
+
 static void zcrms(const nd_model *m, const nd_tensor *scale, const float *x,
                   uint32_t n, float *out)
 {
@@ -221,7 +230,8 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     memset(m->fp16_slot, 0, sizeof(m->fp16_slot));
     {
         static const int SLOT[] = { 19, 20, 21, 22, 23, 24,   /* w1a..w3b */
-                                    15, 16, 17, 18 };         /* d2 b2 d3 d4 */
+                                    15, 16, 17, 18,           /* d2 b2 d3 d4 */
+                                    26 };                     /* cond_u */
         const uint32_t taps = m->c.h.qkv_conv_taps;
         uint32_t li;
         size_t   total = 0;
@@ -1009,7 +1019,7 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     const uint16_t *d1 = (const uint16_t *)nd_cact_data(&m->c, &L->d1);
     const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17], *d4 = fp[18];
     const uint16_t *cv = (const uint16_t *)nd_cact_data(&m->c, &L->cond_v);
-    const uint16_t *cu = (const uint16_t *)nd_cact_data(&m->c, &L->cond_u);
+    const float    *cu = fp[26];
     const float *p1 = (const float *)nd_cact_data(&m->c, &m->hada_p1);
     const float *p2 = (const float *)nd_cact_data(&m->c, &m->hada_p2);
     float cond[8] = {0};
@@ -1037,7 +1047,7 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     for (i = 0; i < n; i++) {
         float scale = 1.0f;
         for (j = 0; j < 8; j++)
-            scale += cond[j] * nd_f16(cu[(size_t)j * n + i]);
+            scale += cond[j] * cu[(size_t)j * n + i];
         float z = d2[i] * scale * m->hada_a[i] + b2[i];
         m->hada_a[i] = z * sigmoidf_(z);
     }

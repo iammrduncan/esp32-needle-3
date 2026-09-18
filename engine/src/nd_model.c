@@ -216,6 +216,44 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     for (i = 0; i < m->n_layers; i++)
         bind_layer(m, i);
 
+    /* Convert the multiply-read fp16 weights once. Layout is [slot][layer], so
+     * a lookup is a name, never an offset into someone else's buffer. */
+    memset(m->fp16_slot, 0, sizeof(m->fp16_slot));
+    {
+        static const int SLOT[] = { 19, 20, 21, 22, 23, 24,   /* w1a..w3b */
+                                    15, 16, 17, 18 };         /* d2 b2 d3 d4 */
+        const uint32_t taps = m->c.h.qkv_conv_taps;
+        uint32_t li;
+        size_t   total = 0;
+        int      f;
+
+        for (f = 0; f < (int)(sizeof(SLOT) / sizeof(SLOT[0])); f++)
+            for (li = 0; li < m->n_layers; li++) {
+                nd_tensor t;
+                nd_cact_tensor(&m->c, 1 + li * (taps ? 27 : 24) + SLOT[f], &t);
+                total += t.nbytes / 2;
+            }
+        m->fp16_pool = (float *)ND_ALLOC(sizeof(float) * total);
+        if (!m->fp16_pool)
+            return -11;
+        {
+            float *p = m->fp16_pool;
+            for (f = 0; f < (int)(sizeof(SLOT) / sizeof(SLOT[0])); f++)
+                for (li = 0; li < m->n_layers; li++) {
+                    nd_tensor        t;
+                    const uint16_t  *h;
+                    uint32_t         k, n;
+                    nd_cact_tensor(&m->c, 1 + li * (taps ? 27 : 24) + SLOT[f], &t);
+                    h = (const uint16_t *)nd_cact_data(&m->c, &t);
+                    n = t.nbytes / 2;
+                    m->fp16_slot[li][SLOT[f]] = p;
+                    for (k = 0; k < n; k++)
+                        p[k] = nd_f16(h[k]);
+                    p += n;
+                }
+        }
+    }
+
     base = 1 + m->n_layers * (m->c.h.qkv_conv_taps ? 27 : 24);
     nd_cact_tensor(&m->c, base + 0, &m->mhc_a_pre);
     nd_cact_tensor(&m->c, base + 1, &m->mhc_a_post);
@@ -382,6 +420,7 @@ void nd_model_close(nd_model *m)
     if (m->tok_ready)
         nd_tok_free(&m->tok);
     ND_FREE(m->layer);
+    ND_FREE(m->fp16_pool);
     ND_FREE(m->lane); ND_FREE(m->lane_next); ND_FREE(m->nx); ND_FREE(m->xh);
     ND_FREE(m->u); ND_FREE(m->ublk); ND_FREE(m->n1); ND_FREE(m->n2);
     ND_FREE(m->y); ND_FREE(m->tmp); ND_FREE(m->tmp2);
@@ -940,17 +979,15 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 /* JAX reference: einsum("ij,ik,jl->kl", z, a, b). Keep only one 1024-float
  * intermediate rather than materialising a 1024x1024 matrix. */
 static void kron_apply(nd_model *m, const float *src, float *dst,
-                       const nd_tensor *a_tensor, const nd_tensor *b_tensor)
+                       const float *a, const float *b,
+                       uint32_t na, uint32_t nb)
 {
-    const uint16_t *a = (const uint16_t *)nd_cact_data(&m->c, a_tensor);
-    const uint16_t *b = (const uint16_t *)nd_cact_data(&m->c, b_tensor);
-    uint32_t na = a_tensor->shape[0], nb = b_tensor->shape[0];
     uint32_t i, j, k, l;
     for (k = 0; k < na; k++) {
         for (j = 0; j < nb; j++) {
             float sum = 0.0f;
             for (i = 0; i < na; i++)
-                sum += src[(size_t)i * nb + j] * nd_f16(a[(size_t)i * na + k]);
+                sum += src[(size_t)i * nb + j] * a[(size_t)i * na + k];
             m->hada_c[(size_t)k * nb + j] = sum;
         }
     }
@@ -958,7 +995,7 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
         for (l = 0; l < nb; l++) {
             float sum = 0.0f;
             for (j = 0; j < nb; j++)
-                sum += m->hada_c[(size_t)k * nb + j] * nd_f16(b[(size_t)j * nb + l]);
+                sum += m->hada_c[(size_t)k * nb + j] * b[(size_t)j * nb + l];
             dst[(size_t)k * nb + l] = sum;
         }
     }
@@ -968,11 +1005,9 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
 {
     const nd_layer *L = &m->layer[li];
     uint32_t dm = m->d_model, n = m->c.h.hada_n, i, j;
+    float *const *fp = m->fp16_slot[li];
     const uint16_t *d1 = (const uint16_t *)nd_cact_data(&m->c, &L->d1);
-    const uint16_t *d2 = (const uint16_t *)nd_cact_data(&m->c, &L->d2);
-    const uint16_t *b2 = (const uint16_t *)nd_cact_data(&m->c, &L->b2);
-    const uint16_t *d3 = (const uint16_t *)nd_cact_data(&m->c, &L->d3);
-    const uint16_t *d4 = (const uint16_t *)nd_cact_data(&m->c, &L->d4);
+    const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17], *d4 = fp[18];
     const uint16_t *cv = (const uint16_t *)nd_cact_data(&m->c, &L->cond_v);
     const uint16_t *cu = (const uint16_t *)nd_cact_data(&m->c, &L->cond_u);
     const float *p1 = (const float *)nd_cact_data(&m->c, &m->hada_p1);
@@ -995,20 +1030,23 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
 
     for (i = 0; i < dm; i++) m->hada_a[i] = nd_f16(d1[i]) * x[i];
     for (i = dm; i < n; i++) m->hada_a[i] = 0.0f;
-    kron_apply(m, m->hada_a, m->hada_b, &L->w1a, &L->w1b);
+    kron_apply(m, m->hada_a, m->hada_b, fp[19], fp[20],
+               L->w1a.shape[0], L->w1b.shape[0]);
     for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p1[i]];
 
     for (i = 0; i < n; i++) {
         float scale = 1.0f;
         for (j = 0; j < 8; j++)
             scale += cond[j] * nd_f16(cu[(size_t)j * n + i]);
-        float z = nd_f16(d2[i]) * scale * m->hada_a[i] + nd_f16(b2[i]);
+        float z = d2[i] * scale * m->hada_a[i] + b2[i];
         m->hada_a[i] = z * sigmoidf_(z);
     }
-    kron_apply(m, m->hada_a, m->hada_b, &L->w2a, &L->w2b);
-    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * nd_f16(d3[i]);
-    kron_apply(m, m->hada_a, m->hada_b, &L->w3a, &L->w3b);
-    for (i = 0; i < dm; i++) out[i] = m->hada_b[i] * nd_f16(d4[i]);
+    kron_apply(m, m->hada_a, m->hada_b, fp[21], fp[22],
+               L->w2a.shape[0], L->w2b.shape[0]);
+    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * d3[i];
+    kron_apply(m, m->hada_a, m->hada_b, fp[23], fp[24],
+               L->w3a.shape[0], L->w3b.shape[0]);
+    for (i = 0; i < dm; i++) out[i] = m->hada_b[i] * d4[i];
 }
 
 /* ------------------------------------------------------------------ block */

@@ -64,6 +64,11 @@ extern "C" {
 
 #define ND_MAX_LANES 8
 #define ND_MAX_SITES 16
+#define ND_MAX_MLP_LAYERS 32
+/* Which per-layer fp16 tensors earn a float copy. Slot numbers are canonical
+ * positions inside a layer; only tensors read more than once per token are
+ * listed, the rest stay in the blob. */
+#define ND_FP16_COPY_COUNT 28
 
 typedef struct {
     nd_tensor norm_in, q_proj, k_proj, v_proj, q_taps, k_taps, v_taps;
@@ -90,6 +95,15 @@ typedef struct {
     nd_tensor     mhc_b_pre, mhc_b_post, mhc_b_res;
     nd_tensor     mhc_phi_pre, mhc_phi_post, mhc_phi_res;
     nd_tensor     hada_p1, hada_p2;
+    /* fp16->fp32 copies of the Monarch Kronecker factors and the fp16 MLP
+     * vectors the block reads more than once, all indexed by tensor id so no
+     * offset arithmetic inside a packed run is possible. kron_apply re-read a
+     * factor na times per application (1.57M nd_f16 calls per token across the
+     * model, against 49K distinct elements), and tap_projection re-read a tap
+     * vector dim times. */
+    float        *fp16_pool;
+    /* fp16_f[slot][layer] above, viewed per layer for the forward pass. */
+    float        *fp16_slot[ND_MAX_MLP_LAYERS][ND_FP16_COPY_COUNT];
     nd_engram     engram[ND_MAX_SITES];
     uint32_t      n_sites;
     nd_tensor     embedding, final_norm;

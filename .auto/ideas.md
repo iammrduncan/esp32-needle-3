@@ -160,3 +160,21 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   for a second handshake per layer. rms scale-pass split: +0.04%.
 - Everything measured since the lane-mix split is inside +-0.15%: the two-core
   lever is closed. Reverted the rope split to keep the tree minimal.
+
+## External cross-checks
+- **Cross-check vs the independent MimiModel engine (memovai/mimimodel, Needle 2
+  on ESP32-S3).** Its published optimization log agrees with everything measured
+  here and adds two levers this repo had not tried:
+  (a) a *request-sized PSRAM weight tier, ordered by profiled projection cost*
+      (+2.3% warm latency there; this repo has 14.6 MB free PSRAM and streams
+      ~9 MB/token from mmap'd flash at ~30 MB/s);
+  (b) *cross-operator scheduling*: running mHC/Sinkhorn/gate work on the second
+      core while core 0 does independent work (-5.6% latency there - the same
+      family as this repo's kron/silu/lane splits, and the same conclusion that
+      only whole stages are big enough).
+  Its "what did not work" list independently confirms three of this repo's dead
+  ends: int16 PIE assembly (slower - unpack dominates over 2-bit decode),
+  linear-space Sinkhorn (underflows), and a two-token blocked CQ2 kernel
+  (only 1.11x for a lot of state). Its TIE728 note is about aligned float loads
+  + 2-row/8-accumulator CQ2 - this repo measured 2-row blocking (-0.7%) and
+  packed-word row reads (+6.7%, kept), so that lever is already banked here.

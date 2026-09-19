@@ -1147,48 +1147,53 @@ static ND_HOT void kron2_rows(void *vc, uint32_t k0, uint32_t k1)
     }
 }
 
+typedef struct { nd_model *m; const float *src, *a;
+                 uint32_t na, nb; } kron1_ctx;
+
+/* First Kronecker half over a range of 4-row blocks. A block writes only its
+ * own 4 rows of hada_c and reads the whole src, so blocks are independent and
+ * each output element still accumulates its na products in i order. */
+static ND_HOT void kron1_blocks(void *vc, uint32_t b0, uint32_t b1)
+{
+    const kron1_ctx *c = (const kron1_ctx *)vc;
+    uint32_t b, i, j;
+
+    for (b = b0; b < b1; b++) {
+        uint32_t k0 = b * 4;
+        for (j = 0; j + 1 < c->nb; j += 2) {
+            float s[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float u[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (i = 0; i < c->na; i++) {
+                float        v0 = c->src[(size_t)i * c->nb + j];
+                float        v1 = c->src[(size_t)i * c->nb + j + 1];
+                const float *ar = c->a + (size_t)i * c->na + k0;
+                s[0] += v0 * ar[0]; u[0] += v1 * ar[0];
+                s[1] += v0 * ar[1]; u[1] += v1 * ar[1];
+                s[2] += v0 * ar[2]; u[2] += v1 * ar[2];
+                s[3] += v0 * ar[3]; u[3] += v1 * ar[3];
+            }
+            { uint32_t t; for (t = 0; t < 4; t++) {
+                    c->m->hada_c[(size_t)(k0 + t) * c->nb + j]     = s[t];
+                    c->m->hada_c[(size_t)(k0 + t) * c->nb + j + 1] = u[t]; } }
+        }
+    }
+}
+
 static void kron_apply(nd_model *m, const float *src, float *dst,
                        const float *a, const float *b,
                        uint32_t na, uint32_t nb)
 {
-    uint32_t i, j;
-    /* Same column blocking on the first half. Here the reuse runs the other
-     * way: one src row is read once and multiplied against na entries of a, so
-     * the loop is restructured to accumulate over i and emit nb outputs at a
-     * time. Products summed per output are unchanged. */
+    /* Both halves split over cores. The first half's reuse is the column-major
+     * a-row, so it runs 4 rows x 2 j columns per pass (its measured optimum) and
+     * hands the 8 independent row-blocks to the splitter. The second half's
+     * reuse is the loaded hada_c value, so it blocks 8 columns with paired b
+     * rows, and its na output rows are independent units of work. In both, the
+     * products summed per output element, and their order, are unchanged. */
     {
-        uint32_t k0;
-        for (k0 = 0; k0 < na; k0 += 4) {
-            uint32_t kn = (k0 + 3 < na) ? 4 : na - k0;
-            /* Two j columns per pass. The reuse in this half is the a-row,
-             * which is the strided (column-major) side: issuing it once for two
-             * src values halves the strided loads per FMA. Accumulators stay
-             * 4-wide - 8 rows measured -5.6%, so the winning shape is 4 k x 2 j,
-             * 8 accumulators total, which is what the second half also settled
-             * on. Products and per-output order are unchanged. */
-            for (j = 0; j + 1 < nb; j += 2) {
-                float s[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-                float u[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-                for (i = 0; i < na; i++) {
-                    float        v0 = src[(size_t)i * nb + j];
-                    float        v1 = src[(size_t)i * nb + j + 1];
-                    const float *ar = a + (size_t)i * na + k0;
-                    s[0] += v0 * ar[0]; u[0] += v1 * ar[0];
-                    s[1] += v0 * ar[1]; u[1] += v1 * ar[1];
-                    s[2] += v0 * ar[2]; u[2] += v1 * ar[2];
-                    s[3] += v0 * ar[3]; u[3] += v1 * ar[3];
-                }
-                { uint32_t t; for (t = 0; t < kn; t++) {
-                        m->hada_c[(size_t)(k0 + t) * nb + j]     = s[t];
-                        m->hada_c[(size_t)(k0 + t) * nb + j + 1] = u[t]; } }
-            }
-        }
+        kron1_ctx kc;
+        kc.m = m; kc.src = src; kc.a = a; kc.na = na; kc.nb = nb;
+        nd_parallel_rows(kron1_blocks, &kc, na / 4);
     }
-    /* Column-blocked: nb columns share the same hada_c row, so a block of four
-     * keeps four accumulators and one loaded c[j] live across them instead of
-     * reloading c[j] for every column. Column-major access into b is unchanged,
-     * and the products summed are the same numbers in the same order.
-     * The na output rows are independent, so the pass splits over cores. */
     {
         kron2_ctx kc;
         kc.m = m; kc.dst = dst; kc.b = b; kc.na = na; kc.nb = nb;

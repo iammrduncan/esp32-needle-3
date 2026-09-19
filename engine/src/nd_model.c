@@ -404,10 +404,11 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                     if (beg < lo_p) lo_p = beg;
                 }
             }
-            /* Stop after the last per-layer tensor. Widening the span to reach
-             * the engram key/value GEMVs (~10 MB) makes the PSRAM allocation
-             * fail at open and the board runs SLOWER than this build - measured,
-             * see the note below. */
+            /* Stop at phi. Widening the span across the engram tables to reach
+             * their key/value GEMVs lands at ~10.1 MB, which PSRAM cannot hold
+             * next to the fp32 pool: the allocation fails at open (psram_free in
+             * EVT ready stays at its 14.6 MB boot value) and decode drops back
+             * to 4.11. Measured, not guessed. */
             if (m->mhc_phi_res.nbytes) {
                 size_t phi_end = (size_t)m->mhc_phi_res.offset +
                                  m->mhc_phi_res.nbytes;

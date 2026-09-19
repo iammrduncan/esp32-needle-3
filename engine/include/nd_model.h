@@ -168,8 +168,6 @@ typedef struct {
     float        *eg_k, *eg_v;  /* [site][d_model] for the current token */
     uint8_t      *eg_vpsram;      /* PSRAM tier for the engram weight region */
     uint32_t      eg_vpsram_len, eg_region_lo, eg_region_hi;
-    uint8_t      *tier2;            /* second PSRAM span (engram kv + logits) */
-    uint32_t      tier2_lo, tier2_hi;
     float        *logits;       /* [vocab] */
     float        *row;          /* dequant scratch for engram table rows */
 } nd_model;

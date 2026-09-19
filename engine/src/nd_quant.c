@@ -436,18 +436,10 @@ static ND_HOT void gather_rows(void *vc, uint32_t i0, uint32_t i1)
         float           acc = 0.0f;
         uint32_t        gi;
 
-        /* EXPERIMENT: hoist the fp16 norms of a gathered row into a register
-         * array (at most 8 groups here), so the row's norm stream is read and
-         * converted up front and the group loop works on registers. Values and
-         * per-group order are unchanged, so the result is bit-exact. */
-        {
-            float nf[8];
-            uint32_t gi;
-            for (gi = 0; gi < c->ngroup && gi < 8u; gi++)
-                nf[gi] = nd_f16(nrm[gi]);
-            for (gi = 0; gi < c->ngroup; gi++)
-                acc += nf[gi] * dot_group(row, gi * c->g * c->bits, c->bits,
-                                          c->g, c->cb, c->xh + (size_t)gi * c->g);
+        for (gi = 0; gi < c->ngroup; gi++) {
+            float nf = nd_f16(nrm[gi]);   /* same value, converted once */
+            acc += nf * dot_group(row, gi * c->g * c->bits, c->bits, c->g,
+                                  c->cb, c->xh + (size_t)gi * c->g);
         }
         c->y[i] = acc;
     }

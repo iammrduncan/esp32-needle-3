@@ -855,6 +855,18 @@ static void engram_step(nd_model *m, uint32_t token)
     m->eg_pos++;
 }
 
+typedef struct { float *attn; const float *gate; } agate_ctx;
+
+/* The attention output gate over a column range: one independent sigmoid per
+ * element, so the values are unchanged and only the core changes. */
+static ND_HOT void agate_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const agate_ctx *c = (const agate_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++)
+        c->attn[i] *= sigmoidf_(c->gate[i]);
+}
+
 /* ------------------------------------------------------------- attention */
 
 /* Online softmax over one range of heads.
@@ -1130,9 +1142,13 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
     }
     ND_T1(ta, ND_P_ATTN); }
 
-    /* Gate, then project back to d_model. */
-    for (i = 0; i < m->attn_dim; i++)
-        m->attn[i] *= sigmoidf_(m->gate[i]);
+    /* Gate, then project back to d_model. Split by column range: the 768
+     * sigmoids per layer are the phase's only SFU work and every element is
+     * independent. */
+    {
+        agate_ctx ag = { m->attn, m->gate };
+        nd_parallel_rows(agate_rows, &ag, m->attn_dim / 128);
+    }
 
     { ND_T0(tp2);
       nd_cq_prepare(&L->out_proj, m->attn, m->xh);

@@ -132,21 +132,35 @@ static void zcrms(const nd_model *m, const float *restrict s,
 }
 
 /* In-place per-head ZCRMSNorm over head_dim, shared scale across heads. */
-static void zcrms_heads(const nd_model *m, const float *s, float *x,
-                        uint32_t nheads, uint32_t dim)
-{
-    uint32_t        h, i;
+typedef struct { const float *s; float *x; uint32_t dim; } zcrms_head_ctx;
 
-    for (h = 0; h < nheads; h++) {
-        float *v  = x + (size_t)h * dim;
+static ND_HOT void zcrms_head_rows(void *vc, uint32_t h0, uint32_t h1)
+{
+    const zcrms_head_ctx *c = (const zcrms_head_ctx *)vc;
+    uint32_t              h, i, dim = c->dim;
+
+    for (h = h0; h < h1; h++) {
+        float *v  = c->x + (size_t)h * dim;
         float  ss = 0.0f;
         for (i = 0; i < dim; i++)
             ss += v[i] * v[i];
         {
             float inv = 1.0f / sqrtf(ss / (float)dim + ND_EPS);
             for (i = 0; i < dim; i++)
-                v[i] = (1.0f + s[i]) * v[i] * inv;
+                v[i] = (1.0f + c->s[i]) * v[i] * inv;
         }
+    }
+}
+
+static void zcrms_heads(const nd_model *m, const float *s, float *x,
+                        uint32_t nheads, uint32_t dim)
+{
+    /* Split over heads: a head is one row (its own sum-of-squares over dim and
+     * its own emit), so this is exact by construction and both the 12 q heads
+     * and the 2 kv heads go through the same code. */
+    {
+        zcrms_head_ctx zc = { s, x, dim };
+        nd_parallel_rows(zcrms_head_rows, &zc, nheads);
     }
 }
 
@@ -373,7 +387,6 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
      * differ; only the memory the bytes come from changes. */
     {
         uint32_t ss3, k3;
-        uint32_t off3 = 0;
         m->eg_vpsram = NULL;
         m->eg_vpsram_len = 0;
         m->eg_region_lo = 0; m->eg_region_hi = 0;
@@ -1033,6 +1046,21 @@ typedef struct {
     float     scale;
 } attn_ctx;
 
+/* Symmetric int8 quantisation into the KV cache. Same divide, same clamp, same
+ * lrintf rounding as the inline loop it replaces - one helper so both cores
+ * write rows through identical code. */
+static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
+                                 float scale)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        float q = src[i] / scale;
+        if (q > 127.0f)  q = 127.0f;
+        if (q < -127.0f) q = -127.0f;
+        dst[i] = (int8_t)lrintf(q);
+    }
+}
+
 static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
 {
     const attn_ctx *c   = (const attn_ctx *)vc;
@@ -1245,18 +1273,10 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
             float vs = (mv > 0.0f) ? mv / 127.0f : 1.0f;
             m->k_scale[scbase + kh] = ks;
             m->v_scale[scbase + kh] = vs;
-            for (i = 0; i < qk_hd; i++) {
-                float kq = m->kbuf[kh * qk_hd + i] / ks;
-                if (kq > 127.0f)  kq = 127.0f;
-                if (kq < -127.0f) kq = -127.0f;
-                m->k_cache[kbase + kh * qk_hd + i] = (int8_t)lrintf(kq);
-            }
-            for (i = 0; i < v_hd; i++) {
-                float vq = m->vbuf[kh * v_hd + i] / vs;
-                if (vq > 127.0f)  vq = 127.0f;
-                if (vq < -127.0f) vq = -127.0f;
-                m->v_cache[vbase + kh * v_hd + i] = (int8_t)lrintf(vq);
-            }
+            kv_store_int8(m->k_cache + kbase + kh * qk_hd,
+                          m->kbuf + kh * qk_hd, qk_hd, ks);
+            kv_store_int8(m->v_cache + vbase + kh * v_hd,
+                          m->vbuf + kh * v_hd, v_hd, vs);
         }
     }
 

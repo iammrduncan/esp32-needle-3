@@ -310,13 +310,23 @@ static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
             const uint8_t *qq = row + (size_t)gi * c->gbytes;
             const float   *T  = c->lut + (size_t)gi * c->gpairs * 16;
             uint32_t       j;
-            for (j = 0; j < c->g; j += 8) {
-                uint8_t b0 = qq[0], b1 = qq[1];
-                qq += 2;
-                s0 += T[b0 & 15u];
-                s1 += T[16 + (b0 >> 4)];
-                s2 += T[32 + (b1 & 15u)];
-                s3 += T[48 + (b1 >> 4)];
+            /* Two packed bytes (four pairs, 8 weights) per 32-bit load. Rows
+             * are group-aligned and g is a multiple of 8, so qq stays
+             * 4-aligned. Each pair k indexes the table slot block its own 4
+             * bits belong to, so the four accumulators see exactly the same
+             * entries in the same order as the byte-wise loop. */
+            for (j = 0; j < c->g; j += 16) {
+                uint32_t w = ((const uint32_t *)(const void *)qq)[0];
+                qq += 4;
+                s0 += T[         w         & 15u];
+                s1 += T[16 + ((w >>  4)  & 15u)];
+                s2 += T[32 + ((w >>  8)  & 15u)];
+                s3 += T[48 + ((w >> 12)  & 15u)];
+                T += 64;
+                s0 += T[         (w >> 16) & 15u];
+                s1 += T[16 + ((w >> 20)  & 15u)];
+                s2 += T[32 + ((w >> 24)  & 15u)];
+                s3 += T[48 +  (w >> 28)];
                 T += 64;
             }
             acc += nf * ((s0 + s1) + (s2 + s3));

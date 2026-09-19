@@ -393,6 +393,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         m->hada_a    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->hada_b    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->hada_c    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
+        m->scale_row = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->eg_k      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
         m->eg_v      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
         m->eg_hist   = (float *)ND_ALLOC(sizeof(float) * m->n_sites * ND_EG_HIST * dm);
@@ -420,7 +421,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             !m->kbuf || !m->vbuf || !m->gate || !m->attn || !m->aout ||
             !m->rope_inv || !m->rope_cos || !m->rope_sin ||
             !m->q_hist || !m->k_hist || !m->v_hist ||
-            !m->hada_a || !m->hada_b || !m->hada_c ||
+            !m->hada_a || !m->hada_b || !m->hada_c || !m->scale_row ||
             !m->eg_k || !m->eg_v || !m->eg_hist || !m->logits ||
             !m->row || !m->scale_f || !m->k_cache || !m->v_cache || !m->k_scale || !m->v_scale) {
             nd_model_close(m);
@@ -463,6 +464,7 @@ void nd_model_close(nd_model *m)
     ND_FREE(m->attn); ND_FREE(m->aout);
     ND_FREE(m->q_hist); ND_FREE(m->k_hist); ND_FREE(m->v_hist);
     ND_FREE(m->hada_a); ND_FREE(m->hada_b); ND_FREE(m->hada_c);
+    ND_FREE(m->scale_row);
     ND_FREE(m->rope_inv); ND_FREE(m->rope_cos); ND_FREE(m->rope_sin);
     ND_FREE(m->eg_k); ND_FREE(m->eg_v); ND_FREE(m->eg_hist);
     ND_FREE(m->logits); ND_FREE(m->row);
@@ -1155,12 +1157,26 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
                L->w1a.shape[0], L->w1b.shape[0]);
     for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p1[i]];
 
-    for (i = 0; i < n; i++) {
-        float scale = 1.0f;
-        for (j = 0; j < 8; j++)
-            scale += cond[j] * cu[(size_t)j * n + i];
-        float z = d2[i] * scale * m->hada_a[i] + b2[i];
-        m->hada_a[i] = z * sigmoidf_(z);
+    /* cu is row-major over the 8 conditioning channels, so the blend gathered
+     * one column out of eight rows per element. Pre-folding the conditioned
+     * rows into one scale row costs the same 8*n FMAs, walks memory
+     * sequentially, and leaves one read per element in the hot loop. Fold order
+     * j = 0..7 into a running sum is the order the per-element loop already
+     * used, so every value is bit-identical. */
+    {
+        float *sc = m->scale_row;
+        for (i = 0; i < n; i++)
+            sc[i] = 1.0f + cond[0] * cu[i];
+        for (j = 1; j < 8; j++) {
+            const float *row = cu + (size_t)j * n;
+            float        cj  = cond[j];
+            for (i = 0; i < n; i++)
+                sc[i] += cj * row[i];
+        }
+        for (i = 0; i < n; i++) {
+            float z = d2[i] * sc[i] * m->hada_a[i] + b2[i];
+            m->hada_a[i] = z * sigmoidf_(z);
+        }
     }
     kron_apply(m, m->hada_a, m->hada_b, fp[21], fp[22],
                L->w2a.shape[0], L->w2b.shape[0]);

@@ -152,7 +152,7 @@ typedef struct {
     float        *nx;           /* [lanes*d_model] */
     float        *xh;           /* gemv activation scratch, max in_pad */
     float        *lut;
-    float        *lut_perm;     /* same table, ordered by cache index pair */          /* 2-bit pair table over xh */
+          /* 2-bit pair table over xh */
     float        *lut4;         /* 2-bit quad table, one group live */
     float        *gacc;         /* per-row accumulator for lut4 */
     float        *u, *ublk;     /* lane mix, and its pre-block copy */

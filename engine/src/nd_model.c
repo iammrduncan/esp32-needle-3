@@ -495,16 +495,6 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         m->nx        = (float *)ND_ALLOC_FAST(sizeof(float) * nl);
         m->xh        = (float *)ND_ALLOC_FAST(sizeof(float) * (nl > dm ? nl : dm));
         m->lut       = (float *)ND_ALLOC_FAST(sizeof(float) * nd_cq_lut_floats(dm));
-        /* Second table for the attention KV path: the int8 cache stores each
-         * head's codebook index for weight j, and the packed 2-bit layout pairs
-         * j with j+g/2, so the byte-wise walk reads m->lut with a 512-float
-         * stride between consecutive lookups (16 bytes apart in a table that is
-         * 24 KB long - it does not stay resident). Storing the SAME table in the
-         * order the cache emits indices makes the read sequential; a lookup hits
-         * the identical float value in the identical order, so scores, softmax
-         * and the V accumulation are unchanged bit for bit. */
-        m->lut_perm  = (float *)ND_ALLOC_FAST(sizeof(float) *
-                                              nd_cq_lut_floats(dm));
 
         m->u         = (float *)ND_ALLOC_FAST(sizeof(float) * dm);
         m->ublk      = (float *)ND_ALLOC_FAST(sizeof(float) * dm);
@@ -555,8 +545,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             }
         }
 
-        if (!m->lane || !m->lane_next || !m->nx || !m->xh || !m->lut ||
-            !m->lut_perm || !m->u || !m->ublk ||
+        if (!m->lane || !m->lane_next || !m->nx || !m->xh || !m->lut || !m->u || !m->ublk ||
             !m->n1 || !m->n2 || !m->y || !m->tmp || !m->tmp2 || !m->q ||
             !m->kbuf || !m->vbuf || !m->gate || !m->attn || !m->aout ||
             !m->rope_inv || !m->rope_cos || !m->rope_sin ||
@@ -879,29 +868,6 @@ static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
 
 /* k/v for the current token at every engram site. */
 
-/* Fill the attention-side view of the pair table.
- *
- * m->lut is indexed by the packed nibble (low 2 bits = weight j, high 2 = the
- * codebook index the int8 KV cache stores for j + g/2). The attention kernel
- * looks entries up in cache order, which strides 512 floats through a 24 KB
- * table. lut_perm is the SAME table laid out in cache order, so the walk is
- * sequential. Values and per-accumulator order are untouched. */
-static void lut_perm_build(const nd_model *m, uint32_t in_pad)
-{
-    uint32_t g = m->layer[0].q_proj.group, p, ngrp = in_pad / g;
-
-    for (p = 0; p < ngrp * (g / 2); p++) {
-        uint32_t gi  = p / (g / 2);
-        uint32_t q   = p % (g / 2);
-        const float *src = m->lut + (size_t)gi * (g / 2) * 16;
-        float     *dst   = m->lut_perm + (size_t)p * 16;
-        uint32_t   i;
-        /* Cache pair q (two 2-bit codes -> one table index) maps onto the
-         * packed pair that holds weight 2q,2q+1 in the group's byte stream. */
-        for (i = 0; i < 16; i++)
-            dst[i] = src[(i & 3u) * 4 + (i >> 2)];
-    }
-}
 
 static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
 {

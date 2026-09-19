@@ -244,3 +244,14 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
   layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
   window; the PSRAM read path measured ~3x the mmap rate on the S3.
+- **Splitting the leftover per-layer stage now buys ~0.05%, not 1%.** The MLP
+  (both kron halves, SiLU, lane mix) and the GEMVs were the splitable mass.
+  Measured against a 3.9517 control in one batch: rms scale-pass split +0.04%,
+  engram tap-matmul split +0.04%, p1/p2 permutation split +0.13%, combined
+  fold+SiLU gate worker (one handshake instead of two) -0.4%. The lever is
+  spent; do not split anything smaller than a kron half.
+- At 3.95 tok/s the profile has no phase above ~15% that is not already
+  two-core or flash-bandwidth bound. Remaining ideas would change *what is
+  computed* (quality risk) or how bytes are streamed from flash (cache-blocking
+  the LUT GEMV - tried once and the naive 4-row block was wrong; a correct
+  cache-blocked version remains the only big-ticket idea left).

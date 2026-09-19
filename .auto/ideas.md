@@ -235,3 +235,12 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   computed* (quality risk) or how bytes are streamed from flash (cache-blocking
   the LUT GEMV - tried once and the naive 4-row block was wrong; a correct
   cache-blocked version remains the only big-ticket idea left).
+- **Splitter lever is closed at 4.08 tok/s.** Everything per-layer is two-core
+  now (FWHT, LUT build, GEMV rows, attention heads, gate, taps, MLP kron halves,
+  SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, engram taps). The last
+  six candidates measured +0.0..+0.25% - the same size as board-to-board spread.
+- **Next big-ticket (started): a PSRAM weight tier.** proj2bit is 46% of the pass
+  and flash-bandwidth bound (~5 MB/token of rows out of mmap'd flash). 14.6 MB of
+  PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
+  layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
+  window; the PSRAM read path measured ~3x the mmap rate on the S3.

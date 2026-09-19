@@ -771,6 +771,29 @@ void nd_model_reset(nd_model *m)
 
 /* ----------------------------------------------------------------- engram */
 
+typedef struct { float *out; const float *tp, *hist;
+                 uint32_t dm, dil, taps, pos, eg_pos, site; } egtap_ctx;
+
+static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const egtap_ctx *c = (const egtap_ctx *)vc;
+    uint32_t        dm = c->dm;
+    uint32_t        lo = b0 * 256, hi = (b1 * 256 < dm) ? b1 * 256 : dm;
+    uint32_t        j, d;
+    for (d = lo; d < hi; d++)
+        c->out[d] = 0.0f;
+    for (j = 0; j < c->taps; j++) {
+        uint32_t      back = j * c->dil;
+        const float   *src;
+        if (back > c->pos)
+            continue;                          /* tap_ok */
+        src = c->hist + ((size_t)c->site * ND_EG_HIST +
+                         ((c->eg_pos - back) % ND_EG_HIST)) * dm;
+        for (d = lo; d < hi; d++)
+            c->out[d] += c->tp[j * dm + d] * src[d];
+    }
+}
+
 /* k/v for the current token at every engram site. */
 static void engram_step(nd_model *m, uint32_t token)
 {
@@ -837,18 +860,13 @@ static void engram_step(nd_model *m, uint32_t token)
         {
             const float *tp = m->eg_taps_f[s];
             float *out = m->eg_v + (size_t)s * dm;
-            uint32_t d;
 
-            memset(out, 0, sizeof(float) * dm);
-            for (j = 0; j < taps; j++) {
-                uint32_t back = j * dil;
-                const float *src;
-                if (back > m->pos)
-                    continue;  /* tap_ok */
-                src = m->eg_hist + ((size_t)s * ND_EG_HIST +
-                                    ((m->eg_pos - back) % ND_EG_HIST)) * dm;
-                for (d = 0; d < dm; d++)
-                    out[d] += tp[j * dm + d] * src[d];
+            {
+                /* Column-range split: out[d] depends only on column d across
+                 * all taps, and each column keeps its ascending tap order. */
+                egtap_ctx et = { out, tp, m->eg_hist, dm, dil, taps,
+                                 m->pos, m->eg_pos, s };
+                nd_parallel_rows(egtap_rows, &et, (dm + 255) / 256);
             }
         }
     }

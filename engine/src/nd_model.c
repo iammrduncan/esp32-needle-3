@@ -1211,9 +1211,11 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
     memcpy(layer_history + (size_t)slot * dim, projection, dim * sizeof(float));
     {
         /* Column-range split: 768-element projections x 3 taps, and each output
-         * column depends only on its own history slots. */
+         * column depends only on its own history slots. Chunk = 128 columns, so
+         * a 768-wide projection gives 6 chunks (3 per core) instead of the 3
+         * coarse chunks that left one core idle at the tail of each call. */
         tap_ctx tc = { projection, layer_history, weights, taps, m->pos, dim };
-        nd_parallel_rows(tap_rows, &tc, (dim + 255) / 256);
+        nd_parallel_rows(tap_rows, &tc, (dim + 127) / 128);
     }
 }
 

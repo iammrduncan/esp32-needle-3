@@ -1167,6 +1167,7 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
     }
 }
 
+
 static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
 {
     const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);

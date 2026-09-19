@@ -387,6 +387,10 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             uint32_t lj;
             size_t   lo_p = (size_t)m->layer[0].q_proj.offset;
             size_t   hi_p = lo_p;
+            /* One contiguous span is what makes this cheap to look up: take the
+             * low end at the first projection and the high end at the last
+             * tensor that a decode step reads in full (the logits-side 768x768
+             * pair), so the engram key/value GEMVs fall inside it too. */
             for (lj = 0; lj < m->n_layers; lj++) {
                 const nd_layer *LL = &m->layer[lj];
                 const nd_tensor *vv[5] = { &LL->q_proj, &LL->k_proj,
@@ -402,6 +406,11 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
+            /* The span must fit the PSRAM that is left after the fp32 weight
+             * pool (~2.5 MB) and the caches. Measured ceiling: a 12.8 MB span
+             * covers the engram tables too but leaves too little for the model's
+             * other PSRAM users and the board does not boot. Stop at the last
+             * per-layer tensor and let the tier hold the projections + phi. */
         }
         (void)ss3; (void)k3;
         {

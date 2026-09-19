@@ -130,13 +130,20 @@ static ND_HOT float dot_group(const uint8_t *p, uint32_t bit_off, uint32_t bits,
     if (bits == 4 && (bit_off & 7u) == 0) {
         const uint8_t *q = p + (bit_off >> 3);
         float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
-        for (j = 0; j < g; j += 4) {
-            uint8_t b0 = q[0], b1 = q[1];
-            q += 2;
-            s0 += cb[b0 & 15u] * xh[j];
-            s1 += cb[b0 >> 4]  * xh[j + 1];
-            s2 += cb[b1 & 15u] * xh[j + 2];
-            s3 += cb[b1 >> 4]  * xh[j + 3];
+        /* Eight weights per 32-bit load. Group starts are byte-aligned and g
+         * is a multiple of 8, so q is 4-aligned. Each accumulator sees the same
+         * indices in the same order as the byte-wise loop. */
+        for (j = 0; j < g; j += 8) {
+            uint32_t w = ((const uint32_t *)(const void *)q)[0];
+            q += 4;
+            s0 += cb[ w        & 15u] * xh[j];
+            s1 += cb[(w >>  4) & 15u] * xh[j + 1];
+            s2 += cb[(w >>  8) & 15u] * xh[j + 2];
+            s3 += cb[(w >> 12) & 15u] * xh[j + 3];
+            s0 += cb[(w >> 16) & 15u] * xh[j + 4];
+            s1 += cb[(w >> 20) & 15u] * xh[j + 5];
+            s2 += cb[(w >> 24) & 15u] * xh[j + 6];
+            s3 += cb[ w >> 28]        * xh[j + 7];
         }
         return (s0 + s1) + (s2 + s3);
     }

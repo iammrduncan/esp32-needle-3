@@ -1320,6 +1320,24 @@ static ND_HOT void silu_rows(void *vc, uint32_t b0, uint32_t b1)
     }
 }
 
+typedef struct { float *dst; const float *x; const float *cv; uint32_t dm; } cond_ctx;
+
+/* x @ cond_v split over the EIGHT conditioning channels: each channel's
+ * reduction over the d_model rows of cond_v is a self-contained sum, so giving
+ * the two cores four channels each keeps every partial and every addition
+ * exactly as the single-core loop produced them. */
+static ND_HOT void cond_rows(void *vc, uint32_t c0, uint32_t c1)
+{
+    const cond_ctx *c = (const cond_ctx *)vc;
+    uint32_t        ch, i;
+    for (ch = c0; ch < c1; ch++) {
+        float acc = 0.0f;
+        for (i = 0; i < c->dm; i++)
+            acc += c->x[i] * c->cv[(size_t)i * 8 + ch];
+        c->dst[ch] = acc;
+    }
+}
+
 static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
 {
     const nd_layer *L = &m->layer[li];
@@ -1333,10 +1351,13 @@ static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
     float cond[8] = {0};
     float max_cond, sum_cond;
 
-    /* Softmax(x @ cond_v), with the eight conditioning channels in this blob. */
-    for (i = 0; i < dm; i++)
-        for (j = 0; j < 8; j++)
-            cond[j] += x[i] * cv[(size_t)i * 8 + j];
+    /* Softmax(x @ cond_v), with the eight conditioning channels in this blob.
+     * Split by channel: four 768-term reductions per core, each in its original
+     * row order, so the eight sums are bit-identical. */
+    {
+        cond_ctx cc = { cond, x, cv, dm };
+        nd_parallel_rows(cond_rows, &cc, 8);
+    }
     max_cond = cond[0];
     for (j = 1; j < 8; j++) if (cond[j] > max_cond) max_cond = cond[j];
     sum_cond = 0.0f;

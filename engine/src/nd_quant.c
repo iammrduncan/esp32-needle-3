@@ -59,24 +59,37 @@ uint32_t nd_cq_scratch(const nd_tensor *t)
     return nd_cq_in_pad(t);
 }
 
+typedef struct { float *xh; uint32_t g; float scale; } fwht_ctx;
+
+static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
+{
+    const fwht_ctx *c = (const fwht_ctx *)vc;
+    uint32_t        gi, j;
+    for (gi = g0; gi < g1; gi++) {
+        float   *blk = c->xh + (size_t)gi * c->g;
+        nd_fwht(blk, c->g);
+        for (j = 0; j < c->g; j++)
+            blk[j] *= c->scale;
+    }
+}
+
 void nd_cq_prepare(const nd_tensor *t, const float *x, float *xh)
 {
     uint32_t in_pad = nd_cq_in_pad(t);
     uint32_t g      = t->group;
     uint32_t ngroup = in_pad / g;
     float    scale  = 1.0f / sqrtf((float)g);
-    uint32_t gi;
 
     memcpy(xh, x, t->shape[1] * sizeof(float));
     if (in_pad > t->shape[1])
         memset(xh + t->shape[1], 0, (in_pad - t->shape[1]) * sizeof(float));
 
-    for (gi = 0; gi < ngroup; gi++) {
-        float   *blk = xh + (size_t)gi * g;
-        uint32_t j;
-        nd_fwht(blk, g);
-        for (j = 0; j < g; j++)
-            blk[j] *= scale;
+    {
+        /* Groups are independent: the transform + rescale splits by group.
+         * The copy/pad above stays on the calling core - it is one sequential
+         * read of the activation. */
+        fwht_ctx fc = { xh, g, scale };
+        nd_parallel_rows(fwht_rows, &fc, ngroup);
     }
 }
 

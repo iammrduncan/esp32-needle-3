@@ -136,6 +136,26 @@ static void apply_rope(const nd_model *m, float *x, uint32_t nheads, uint32_t di
     }
 }
 
+typedef struct { nd_model *m; const float *hres, *hpost;
+                 uint32_t n, dm; } lanemix_ctx;
+
+static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
+{
+    const lanemix_ctx *c = (const lanemix_ctx *)vc;
+    uint32_t k, j, i;
+    for (k = k0; k < k1; k++) {
+        float    *dst = c->m->lane_next + (size_t)k * c->dm;
+        for (i = 0; i < c->dm; i++)
+            dst[i] = c->hpost[k] * c->m->u[i];
+        for (j = 0; j < c->n; j++) {
+            const float *src = c->m->lane + (size_t)j * c->dm;
+            float        w   = c->hres[k * c->n + j];
+            for (i = 0; i < c->dm; i++)
+                dst[i] += w * src[i];
+        }
+    }
+}
+
 /* Doubly-stochastic normalisation of a lanes x lanes matrix, in log space. */
 static void sinkhorn(float *a, uint32_t n)
 {
@@ -1440,17 +1460,11 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
          * folds into the initialiser, which re-associates one add - the change
          * shows up on the fidelity probe (7.2e-05 -> 5.3e-05, i.e. smaller) and
          * the goldens stay byte-identical. */
-        for (k = 0; k < n; k++) {
-            float    *dst = m->lane_next + (size_t)k * dm;
-            uint32_t  i;
-            for (i = 0; i < dm; i++)
-                dst[i] = hpost[k] * m->u[i];
-            for (j = 0; j < n; j++) {
-                const float *src = m->lane + (size_t)j * dm;
-                float        w   = hres[k * n + j];
-                for (i = 0; i < dm; i++)
-                    dst[i] += w * src[i];
-            }
+        {
+            lanemix_ctx lm = { m, hres, hpost, n, dm };
+            /* Output lanes are independent (each reads all lanes but writes
+             * only its own row), so the 4 lanes are 4 units of work. */
+            nd_parallel_rows(lanemix_rows, &lm, n);
         }
         {
             float *swap = m->lane;

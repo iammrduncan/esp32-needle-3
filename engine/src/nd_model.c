@@ -406,11 +406,11 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
-            /* The span must fit the PSRAM that is left after the fp32 weight
-             * pool (~2.5 MB) and the caches. Measured ceiling: a 12.8 MB span
-             * covers the engram tables too but leaves too little for the model's
-             * other PSRAM users and the board does not boot. Stop at the last
-             * per-layer tensor and let the tier hold the projections + phi. */
+            /* Span ceiling is MEASURED: the projections+phi span (~4.5 MB) fits
+             * and pays +1.5%. Widening it to include the engram key/value GEMVs
+             * and the logits pair (10.08 MB) makes the allocation fail at open
+             * and the board runs slower than this build; a 12.8 MB span does not
+             * boot at all. So the tier deliberately stops at the per-layer block. */
         }
         (void)ss3; (void)k3;
         {
@@ -857,16 +857,6 @@ static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
 
 
 /* k/v for the current token at every engram site. */
-static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
-{
-    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
-    if (!m->eg_vpsram)
-        return f;
-    if (t->offset >= m->eg_region_lo &&
-        t->offset + t->nbytes <= m->eg_region_hi)
-        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
-    return f;
-}
 
 static void engram_step(nd_model *m, uint32_t token)
 {
@@ -1175,6 +1165,17 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
         tap_ctx tc = { projection, layer_history, weights, taps, m->pos, dim };
         nd_parallel_rows(tap_rows, &tc, (dim + 255) / 256);
     }
+}
+
+static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
+{
+    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
+    if (!m->eg_vpsram)
+        return f;
+    if (t->offset >= m->eg_region_lo &&
+        t->offset + t->nbytes <= m->eg_region_hi)
+        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
+    return f;
 }
 
 static void attention(nd_model *m, uint32_t li, const float *xin, float *out)

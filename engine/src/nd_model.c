@@ -1100,20 +1100,25 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
      * and the products summed are the same numbers in the same order. */
     for (k = 0; k < na; k++) {
         const float *crow = m->hada_c + (size_t)k * nb;
-        for (l = 0; l + 3 < nb; l += 4) {
+        for (l = 0; l + 7 < nb; l += 8) {
             float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            float s4 = 0.0f, s5 = 0.0f, s6 = 0.0f, s7 = 0.0f;
             for (j = 0; j < nb; j++) {
                 float cj = crow[j];
                 const float *br = b + (size_t)j * nb + l;
-                s0 += cj * br[0];
-                s1 += cj * br[1];
-                s2 += cj * br[2];
-                s3 += cj * br[3];
+                s0 += cj * br[0]; s1 += cj * br[1];
+                s2 += cj * br[2]; s3 += cj * br[3];
+                s4 += cj * br[4]; s5 += cj * br[5];
+                s6 += cj * br[6]; s7 += cj * br[7];
             }
             dst[(size_t)k * nb + l + 0] = s0;
             dst[(size_t)k * nb + l + 1] = s1;
             dst[(size_t)k * nb + l + 2] = s2;
             dst[(size_t)k * nb + l + 3] = s3;
+            dst[(size_t)k * nb + l + 4] = s4;
+            dst[(size_t)k * nb + l + 5] = s5;
+            dst[(size_t)k * nb + l + 6] = s6;
+            dst[(size_t)k * nb + l + 7] = s7;
         }
         for (; l < nb; l++) {
             float sum = 0.0f;

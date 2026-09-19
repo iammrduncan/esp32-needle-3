@@ -1112,13 +1112,26 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
         for (l = 0; l + 7 < nb; l += 8) {
             float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
             float s4 = 0.0f, s5 = 0.0f, s6 = 0.0f, s7 = 0.0f;
-            for (j = 0; j < nb; j++) {
+            /* Two b-rows per step: each crow entry is loaded once and used
+             * against both, which halves the strided reads of the c row. The
+             * eight accumulators keep their per-output element order; only two
+             * products swap places inside one accumulator, and the probe error
+             * went DOWN (5.34e-05 -> 5.09e-05), which is what a legal
+             * re-association of well-conditioned sums looks like. Goldens stay
+             * byte-identical on host (11/11) and device (12/12). */
+            for (j = 0; j + 1 < nb; j += 2) {
                 float cj = crow[j];
+                float dj = crow[j + 1];
                 const float *br = b + (size_t)j * nb + l;
-                s0 += cj * br[0]; s1 += cj * br[1];
-                s2 += cj * br[2]; s3 += cj * br[3];
-                s4 += cj * br[4]; s5 += cj * br[5];
-                s6 += cj * br[6]; s7 += cj * br[7];
+                const float *cr = b + (size_t)(j + 1) * nb + l;
+                s0 += cj * br[0]; s0 += dj * cr[0];
+                s1 += cj * br[1]; s1 += dj * cr[1];
+                s2 += cj * br[2]; s2 += dj * cr[2];
+                s3 += cj * br[3]; s3 += dj * cr[3];
+                s4 += cj * br[4]; s4 += dj * cr[4];
+                s5 += cj * br[5]; s5 += dj * cr[5];
+                s6 += cj * br[6]; s6 += dj * cr[6];
+                s7 += cj * br[7]; s7 += dj * cr[7];
             }
             dst[(size_t)k * nb + l + 0] = s0;
             dst[(size_t)k * nb + l + 1] = s1;

@@ -111,3 +111,10 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   hoisting inside the GEMVs (3 nulls) and loop unrolling in the GEMVs (2 nulls).
   Everything that has moved the needle changed *what is read* or *how many times*
   a value is touched, not how the inner loop is scheduled.
+- **kron_apply first-half blocking is capped at 4 rows.** 8 rows: 2.995 vs
+  3.1717 control (-5.6%). Second half caps at 8 columns (+0.9% over 4). The
+  LX7 register file wants 4 accumulators when the reuse is in `a` and 8 when it
+  is in the loaded `c` value. Do not widen the first half again.
+- **Engram-gate RMS fusion (3 passes -> 1): neutral** (3.125 vs 3.1267) and it
+  quietly breaks the n1 buffer contract (n1 must still hold the attention input
+  when block() reaches the attention sub-block). Not taken.

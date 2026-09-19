@@ -866,9 +866,6 @@ static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
 }
 
 
-/* k/v for the current token at every engram site. */
-
-
 static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
 {
     const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
@@ -879,6 +876,9 @@ static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
         return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
     return f;
 }
+/* k/v for the current token at every engram site. */
+
+
 
 static void engram_step(nd_model *m, uint32_t token)
 {

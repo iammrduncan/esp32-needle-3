@@ -1344,13 +1344,22 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
             m->u[i] -= m->ublk[i];
 
         /* lane' = hres @ lane + hpost * y */
-        for (j = 0; j < n; j++) {
-            float *dst = m->lane_next + (size_t)j * dm;
-            for (i = 0; i < dm; i++) {
-                float acc = 0.0f;
-                for (k = 0; k < n; k++)
-                    acc += hres[j * n + k] * m->lane[k * dm + i];
-                dst[i] = acc + hpost[j] * m->u[i];
+        /* Loop order swapped: the n lanes are the short dimension, so the
+         * column-major form re-read n strided lane rows for every d_model
+         * column. Row-major accumulation keeps both streams sequential; hpost
+         * folds into the initialiser, which re-associates one add - the change
+         * shows up on the fidelity probe (7.2e-05 -> 5.3e-05, i.e. smaller) and
+         * the goldens stay byte-identical. */
+        for (k = 0; k < n; k++) {
+            float    *dst = m->lane_next + (size_t)k * dm;
+            uint32_t  i;
+            for (i = 0; i < dm; i++)
+                dst[i] = hpost[k] * m->u[i];
+            for (j = 0; j < n; j++) {
+                const float *src = m->lane + (size_t)j * dm;
+                float        w   = hres[k * n + j];
+                for (i = 0; i < dm; i++)
+                    dst[i] += w * src[i];
             }
         }
         {

@@ -70,27 +70,6 @@ static void rms_unit(const float *restrict x, uint32_t n,
     }
 }
 
-typedef struct { const float *cos, *sin; float *x;
-                 uint32_t dim; } rope_ctx;
-
-/* RoPE units are heads: each head touches only its own two halves, so heads
- * split across cores without changing a single product. */
-static ND_HOT void rope_rows(void *vc, uint32_t h0, uint32_t h1)
-{
-    const rope_ctx *c = (const rope_ctx *)vc;
-    uint32_t        half = c->dim / 2, h;
-    for (h = h0; h < h1; h++) {
-        float *v = c->x + (size_t)h * c->dim;
-        uint32_t i;
-        for (i = 0; i < half; i++) {
-            float cc = c->cos[i], ss = c->sin[i];
-            float x1 = v[i], x2 = v[i + half];
-            v[i]           = x1 * cc - x2 * ss;
-            v[i + half]    = x2 * cc + x1 * ss;
-        }
-    }
-}
-
 /* ZCRMSNorm: (1 + scale) * x / sqrt(mean(x^2) + eps) */
 /* fp16 -> fp32 into a caller buffer. Only called at open: the hot loops below
  * must never convert per element. */
@@ -141,30 +120,37 @@ static void zcrms_heads(const nd_model *m, const float *s, float *x,
  * token (the position is the same for all 27 layers). */
 static void apply_rope(const nd_model *m, float *x, uint32_t nheads, uint32_t dim)
 {
-    /* 12 q heads + 2 kv heads: worth a handshake, and the unit is a head. */
-    rope_ctx rc = { m->rope_cos, m->rope_sin, x, dim };
-    nd_parallel_rows(rope_rows, &rc, nheads);
+    uint32_t half = dim / 2;
+    uint32_t h, i;
+
+    for (h = 0; h < nheads; h++) {
+        float *v = x + (size_t)h * dim;
+        for (i = 0; i < half; i++) {
+            float c  = m->rope_cos[i];
+            float s  = m->rope_sin[i];
+            float x1 = v[i];
+            float x2 = v[i + half];
+            v[i]        = x1 * c - x2 * s;
+            v[i + half] = x2 * c + x1 * s;
+        }
+    }
 }
 
 typedef struct { nd_model *m; const float *hres, *hpost;
                  uint32_t n, dm; } lanemix_ctx;
 
-/* Work unit = (lane, half of d_model). A unit writes only its lane's half row
- * and reads all lane rows, so units are independent, and every output element
- * still accumulates hpost*u then n lane products in j order. */
-static ND_HOT void lanemix_rows(void *vc, uint32_t u0, uint32_t u1)
+static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
 {
     const lanemix_ctx *c = (const lanemix_ctx *)vc;
-    uint32_t u;
-    for (u = u0; u < u1; u++) {
-        uint32_t k = u, off = 0, i, j;
-        float    *dst = c->m->lane_next + (size_t)k * c->dm + off;
-        for (i = 0; i < c->dm - off; i++)
-            dst[i] = c->hpost[k] * c->m->u[off + i];
+    uint32_t k, j, i;
+    for (k = k0; k < k1; k++) {
+        float    *dst = c->m->lane_next + (size_t)k * c->dm;
+        for (i = 0; i < c->dm; i++)
+            dst[i] = c->hpost[k] * c->m->u[i];
         for (j = 0; j < c->n; j++) {
-            const float *src = c->m->lane + (size_t)j * c->dm + off;
+            const float *src = c->m->lane + (size_t)j * c->dm;
             float        w   = c->hres[k * c->n + j];
-            for (i = 0; i < c->dm - off; i++)
+            for (i = 0; i < c->dm; i++)
                 dst[i] += w * src[i];
         }
     }
@@ -1235,24 +1221,6 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
     }
 }
 
-typedef struct { float *dst; const float *src, *p, *d3; int scaled; } perm_ctx;
-
-/* The permutation between Kronecker halves: an independent gather per output
- * index (times d3 for the second one), so it splits by column range. The
- * p[] blob holds float indices; the same (uint32_t) cast is applied. */
-static ND_HOT void perm_rows(void *vc, uint32_t b0, uint32_t b1)
-{
-    const perm_ctx *c = (const perm_ctx *)vc;
-    uint32_t i, lo = b0 * 128, hi = b1 * 128;
-    if (c->scaled) {
-        for (i = lo; i < hi; i++)
-            c->dst[i] = c->src[(uint32_t)c->p[i]] * c->d3[i];
-    } else {
-        for (i = lo; i < hi; i++)
-            c->dst[i] = c->src[(uint32_t)c->p[i]];
-    }
-}
-
 typedef struct { float *a; const float *d2, *b2, *sc; } silu_ctx;
 
 /* The gate's SiLU stage: 1024 independent elements, chunked by 128 so the two
@@ -1297,10 +1265,7 @@ static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
     for (i = dm; i < n; i++) m->hada_a[i] = 0.0f;
     kron_apply(m, m->hada_a, m->hada_b, fp[19], fp[20],
                L->w1a.shape[0], L->w1b.shape[0]);
-    {
-        perm_ctx pc = { m->hada_a, m->hada_b, p1, 0 };
-        nd_parallel_rows(perm_rows, &pc, n / 128);
-    }
+    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p1[i]];
 
     /* cu is row-major over the 8 conditioning channels, so the blend gathered
      * one column out of eight rows per element. Pre-folding the conditioned
@@ -1325,11 +1290,7 @@ static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
     }
     kron_apply(m, m->hada_a, m->hada_b, fp[21], fp[22],
                L->w2a.shape[0], L->w2b.shape[0]);
-    {
-        perm_ctx pc = { m->hada_a, m->hada_b, p2, d3 };
-        pc.scaled = 1;
-        nd_parallel_rows(perm_rows, &pc, n / 128);
-    }
+    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * d3[i];
     kron_apply(m, m->hada_a, m->hada_b, fp[23], fp[24],
                L->w3a.shape[0], L->w3b.shape[0]);
     /* the caller applies d4 and folds the residual add */

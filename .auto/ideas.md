@@ -283,3 +283,12 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   tier silently fell back to flash) and the board is slower than the tiered
   build, not faster. Full-blob (12.8 MB) does not boot at all. The affordable
   tier is the ~4.5 MB projections+phi span.
+- **Cross-core LUT table contention is NOT the limiter.** Reversing the worker's
+  row walk so the two cores do not chase each other through the table's cache
+  lines measured 4.13 / 4.1367 on two boards vs a 4.185 plateau (-1.1%), byte-
+  exact. Forward row order wins (page locality on the weight stream dominates).
+  Row-order experiments in the LUT GEMV are closed.
+- **Post-tier device profile (ms/token, 236 total):** proj2bit 110.7 (47%),
+  attention 38.6 (16%), hadamard 24.4 (10%), engram 20.6 (9%), mhc_phi4 13.5
+  (6%), prep+lut 3.5, confpool ~0. The tier did not move proj2bit's share much:
+  it is now PSRAM-bandwidth/latency bound rather than flash bound.

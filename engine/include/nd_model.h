@@ -165,6 +165,8 @@ typedef struct {
     float        *rope_cos;     /* [head_dim/2] for the current position */
     float        *rope_sin;
     float        *eg_k, *eg_v;  /* [site][d_model] for the current token */
+    uint8_t      *eg_vpsram;      /* PSRAM tier for the engram weight region */
+    uint32_t      eg_vpsram_len, eg_region_lo, eg_region_hi;
     float        *logits;       /* [vocab] */
     float        *row;          /* dequant scratch for engram table rows */
 } nd_model;

@@ -367,6 +367,46 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         }
     }
 
+    /* PSRAM weight tier for the single largest per-token stream: the engram
+     * value_proj rows (750 KB each site, walked in full every token that the
+     * engram fires on). Byte-identical payload, so the kernel output cannot
+     * differ; only the memory the bytes come from changes. */
+    {
+        uint32_t ss3, k3;
+        uint32_t off3 = 0;
+        m->eg_vpsram = NULL;
+        m->eg_vpsram_len = 0;
+        m->eg_region_lo = 0; m->eg_region_hi = 0;
+        /* Copy the whole engram weight region (both sites' key/value rows) into
+         * PSRAM once. 7.5 MB of the ~11.6 MB a decode token reads is engram
+         * GEMV traffic, so this is the only bandwidth lever with room in the
+         * 14.6 MB budget. The payload is byte-copied: the kernel's row walker
+         * sees exactly the same packed stream, only from PSRAM. */
+        for (ss3 = 0; ss3 < m->n_sites; ss3++) {
+            for (k3 = 1; k3 <= 2; k3++) {
+                nd_tensor  t3;
+                nd_cact_tensor(&m->c, base - m->n_sites * 4 + ss3 * 4 + k3, &t3);
+                if (t3.offset + t3.nbytes > m->eg_region_hi)
+                    m->eg_region_hi = (uint32_t)(t3.offset + t3.nbytes);
+                if (m->eg_region_lo == 0 || t3.offset < m->eg_region_lo)
+                    m->eg_region_lo = (uint32_t)t3.offset;
+            }
+        }
+        {
+            size_t span = m->eg_region_hi - m->eg_region_lo;
+            if (span < 12u << 20) {
+                m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
+                if (m->eg_vpsram) {
+                    memcpy(m->eg_vpsram,
+                           (const uint8_t *)m->c.base + m->eg_region_lo, span);
+                    m->eg_vpsram_len = (uint32_t)span;
+                } else {
+                    m->eg_region_lo = m->eg_region_hi = 0;
+                }
+            }
+        }
+    }
+
     /* Probe heads, if this blob carries them. Layout after final_norm:
      * a manifest of H head codes (1 contrastive, 2 confidence), then H fixed
      * triples [probes, proj, bias]; the tokenizer is the final tensor. */
@@ -850,10 +890,37 @@ static void engram_step(nd_model *m, uint32_t token)
             /* e currently lives in xh; prepare needs its own output, so use
              * tmp2 as the transformed activation buffer. */
             nd_cq_prepare(kp, e, m->tmp2);
+            /* The value_proj rows are the largest single weight stream in a
+             * decode step; reading them from PSRAM instead of the mmap'd flash
+             * window is the only bandwidth lever left with room to fit. The
+             * payload is byte-copied once at open, so the row walker sees the
+             * identical packed stream. */
+            {
+                /* Point the walker at the PSRAM copy when this tensor's payload
+                 * lies inside the staged region. */
+                const uint8_t *vf = (const uint8_t *)nd_cact_data(&m->c, vp);
+                const void    *vb = (m->eg_vpsram &&
+                                     vf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
+                                     vf + vp->nbytes <=
+                                         (const uint8_t *)m->c.base + m->eg_region_hi)
+                                     ? m->eg_vpsram + (vf - ((const uint8_t *)m->c.base +
+                                                             m->eg_region_lo))
+                                     : vf;
             nd_cq_lut_build(&m->c, m->tmp2, nd_cq_in_pad(kp), m->lut);
-            nd_cq_gemv_lut2(kp, nd_cact_data(&m->c, kp), m->lut,
+            {
+                const uint8_t *kf = (const uint8_t *)nd_cact_data(&m->c, kp);
+                const void    *kb = (m->eg_vpsram &&
+                                     kf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
+                                     kf + kp->nbytes <=
+                                         (const uint8_t *)m->c.base + m->eg_region_hi)
+                                     ? m->eg_vpsram + (kf - ((const uint8_t *)m->c.base +
+                                                             m->eg_region_lo))
+                                     : kf;
+            nd_cq_gemv_lut2(kp, kb, m->lut,
                             m->eg_k + (size_t)s * dm);
-            nd_cq_gemv_lut2(vp, nd_cact_data(&m->c, vp), m->lut, vraw);
+            }
+            nd_cq_gemv_lut2(vp, vb, m->lut, vraw);
+            }
         }
 
         /* Dilated causal tap convolution over the raw v history. */

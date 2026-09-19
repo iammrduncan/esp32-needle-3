@@ -52,6 +52,35 @@ static float fp16_get(const nd_model *m, const nd_tensor *t, size_t i)
     return nd_f16(p[i]);
 }
 
+typedef struct { const float *s, *x; float *out; float inv; } zcsplit_ctx;
+
+/* zcrms emit pass over a column range. Elementwise once inv is known; the
+ * sum-of-squares reduction stays on one core (splitting it re-associates). */
+static ND_HOT void zcsplit_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const zcsplit_ctx *c = (const zcsplit_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++)
+        c->out[i] = (1.0f + c->s[i]) * c->x[i] * c->inv;
+}
+
+typedef struct { float *dst; const float *lane, *hpre;
+                 uint32_t n, dm; } lanepre_ctx;
+
+/* u = sum_j hpre[j] * lane[j] over a column range: columns are independent and
+ * each keeps its ascending j order, so values are unchanged. */
+static ND_HOT void lanepre_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const lanepre_ctx *c = (const lanepre_ctx *)vc;
+    uint32_t i, j, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++) {
+        float acc = 0.0f;
+        for (j = 0; j < c->n; j++)
+            acc += c->hpre[j] * c->lane[j * c->dm + i];
+        c->dst[i] = acc;
+    }
+}
+
 /* x * rsqrt(mean(x^2) + eps) */
 /* restrict on all three: the hot callers pass disjoint scratch (n1/n2/nx are
  * separate allocations), and without it the compiler must assume out may alias
@@ -92,8 +121,13 @@ static void zcrms(const nd_model *m, const float *restrict s,
         ss += x[i] * x[i];
     {
         float inv = 1.0f / sqrtf(ss / (float)n + ND_EPS);
-        for (i = 0; i < n; i++)
-            out[i] = (1.0f + s[i]) * x[i] * inv;
+        if (n >= 512) {
+            zcsplit_ctx zc = { s, x, out, inv };
+            nd_parallel_rows(zcsplit_rows, &zc, n / 128);
+        } else {
+            for (i = 0; i < n; i++)
+                out[i] = (1.0f + s[i]) * x[i] * inv;
+        }
     }
 }
 
@@ -1440,11 +1474,9 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         sinkhorn(hres, n);
 
         /* u = sum_j hpre[j] * lane[j] */
-        for (i = 0; i < dm; i++) {
-            float acc = 0.0f;
-            for (j = 0; j < n; j++)
-                acc += hpre[j] * m->lane[j * dm + i];
-            m->u[i] = acc;
+        {
+            lanepre_ctx lp = { m->u, m->lane, hpre, n, dm };
+            nd_parallel_rows(lanepre_rows, &lp, dm / 128);
         }
 
         /* y = block(u) - u */

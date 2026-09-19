@@ -867,6 +867,27 @@ static ND_HOT void agate_rows(void *vc, uint32_t b0, uint32_t b1)
         c->attn[i] *= sigmoidf_(c->gate[i]);
 }
 
+typedef struct { float *proj, *hist; const float *w;
+                 uint32_t taps, pos, dim; } tap_ctx;
+
+/* qkv tap convolution over a column range: column i reads only its own history
+ * slots, and the tap sum keeps its ascending j order. */
+static ND_HOT void tap_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const tap_ctx *c = (const tap_ctx *)vc;
+    uint32_t        i, j, dim = c->dim;
+    uint32_t        lo = b0 * 256, hi = (b1 * 256 < dim) ? b1 * 256 : dim;
+    for (i = lo; i < hi; i++) {
+        float value = 0.0f;
+        for (j = 0; j < c->taps && j <= c->pos; j++) {
+            uint32_t prior = (c->pos - j) % c->taps;
+            value += c->w[(size_t)j * dim + i] *
+                     c->hist[(size_t)prior * dim + i];
+        }
+        c->proj[i] = value;
+    }
+}
+
 /* ------------------------------------------------------------- attention */
 
 /* Online softmax over one range of heads.
@@ -1024,21 +1045,17 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
 {
     uint32_t taps = m->c.h.qkv_conv_taps;
     uint32_t slot = m->pos % taps;
-    uint32_t i, j;
     /* Staged float32 (see the slot table in nd_model_open): the tap weights are
      * read once per element per tap, so converting inside the loop cost
      * taps*dim conversions per projection. */
     const float *weights = m->fp16_slot[li][tap_slot];
     float *layer_history = history + (size_t)li * taps * dim;
     memcpy(layer_history + (size_t)slot * dim, projection, dim * sizeof(float));
-    for (i = 0; i < dim; i++) {
-        float value = 0.0f;
-        for (j = 0; j < taps && j <= m->pos; j++) {
-            uint32_t prior = (m->pos - j) % taps;
-            value += weights[(size_t)j * dim + i] *
-                     layer_history[(size_t)prior * dim + i];
-        }
-        projection[i] = value;
+    {
+        /* Column-range split: 768-element projections x 3 taps, and each output
+         * column depends only on its own history slots. */
+        tap_ctx tc = { projection, layer_history, weights, taps, m->pos, dim };
+        nd_parallel_rows(tap_rows, &tc, (dim + 255) / 256);
     }
 }
 

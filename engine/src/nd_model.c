@@ -53,9 +53,9 @@ static float fp16_get(const nd_model *m, const nd_tensor *t, size_t i)
 }
 
 /* x * rsqrt(mean(x^2) + eps) */
-/* restrict: every hot caller passes disjoint scratch, and without it the
- * compiler must assume out may alias x, which stops it keeping the
- * sum-of-squares load stream independent of the store loop. */
+/* restrict on all three: the hot callers pass disjoint scratch (n1/n2/nx are
+ * separate allocations), and without it the compiler must assume out may alias
+ * x and cannot keep the sum-of-squares load stream independent of the store. */
 static void rms_unit(const float *restrict x, uint32_t n,
                      float *restrict out)
 {
@@ -1099,11 +1099,59 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
  * previous one on the LX7. Unrolling the row loop by two gives two independent
  * chains per output and, in the first pass, lets a[i] and a[i+1] stay in
  * registers across the nb columns they both touch. */
+typedef struct { nd_model *m; float *dst; const float *b;
+                 uint32_t na, nb; } kron2_ctx;
+
+/* Second Kronecker half over a range of output rows. Each k reads only its own
+ * hada_c row and writes only its own dst row, so the split is exact: the per
+ * output element still sums nb products in j order. */
+static ND_HOT void kron2_rows(void *vc, uint32_t k0, uint32_t k1)
+{
+    const kron2_ctx *c = (const kron2_ctx *)vc;
+    uint32_t k, j, l;
+
+    for (k = k0; k < k1; k++) {
+        const float *crow = c->m->hada_c + (size_t)k * c->nb;
+        for (l = 0; l + 7 < c->nb; l += 8) {
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            float s4 = 0.0f, s5 = 0.0f, s6 = 0.0f, s7 = 0.0f;
+            for (j = 0; j + 1 < c->nb; j += 2) {
+                float cj = crow[j];
+                float dj = crow[j + 1];
+                const float *br = c->b + (size_t)j * c->nb + l;
+                const float *cr = c->b + (size_t)(j + 1) * c->nb + l;
+                s0 += cj * br[0]; s0 += dj * cr[0];
+                s1 += cj * br[1]; s1 += dj * cr[1];
+                s2 += cj * br[2]; s2 += dj * cr[2];
+                s3 += cj * br[3]; s3 += dj * cr[3];
+                s4 += cj * br[4]; s4 += dj * cr[4];
+                s5 += cj * br[5]; s5 += dj * cr[5];
+                s6 += cj * br[6]; s6 += dj * cr[6];
+                s7 += cj * br[7]; s7 += dj * cr[7];
+            }
+            c->dst[(size_t)k * c->nb + l + 0] = s0;
+            c->dst[(size_t)k * c->nb + l + 1] = s1;
+            c->dst[(size_t)k * c->nb + l + 2] = s2;
+            c->dst[(size_t)k * c->nb + l + 3] = s3;
+            c->dst[(size_t)k * c->nb + l + 4] = s4;
+            c->dst[(size_t)k * c->nb + l + 5] = s5;
+            c->dst[(size_t)k * c->nb + l + 6] = s6;
+            c->dst[(size_t)k * c->nb + l + 7] = s7;
+        }
+        for (; l < c->nb; l++) {
+            float sum = 0.0f;
+            for (j = 0; j < c->nb; j++)
+                sum += crow[j] * c->b[(size_t)j * c->nb + l];
+            c->dst[(size_t)k * c->nb + l] = sum;
+        }
+    }
+}
+
 static void kron_apply(nd_model *m, const float *src, float *dst,
                        const float *a, const float *b,
                        uint32_t na, uint32_t nb)
 {
-    uint32_t i, j, k, l;
+    uint32_t i, j;
     /* Same column blocking on the first half. Here the reuse runs the other
      * way: one src row is read once and multiplied against na entries of a, so
      * the loop is restructured to accumulate over i and emit nb outputs at a
@@ -1139,48 +1187,12 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
     /* Column-blocked: nb columns share the same hada_c row, so a block of four
      * keeps four accumulators and one loaded c[j] live across them instead of
      * reloading c[j] for every column. Column-major access into b is unchanged,
-     * and the products summed are the same numbers in the same order. */
-    for (k = 0; k < na; k++) {
-        const float *crow = m->hada_c + (size_t)k * nb;
-        for (l = 0; l + 7 < nb; l += 8) {
-            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
-            float s4 = 0.0f, s5 = 0.0f, s6 = 0.0f, s7 = 0.0f;
-            /* Two b-rows per step: each crow entry is loaded once and used
-             * against both, which halves the strided reads of the c row. The
-             * eight accumulators keep their per-output element order; only two
-             * products swap places inside one accumulator, and the probe error
-             * went DOWN (5.34e-05 -> 5.09e-05), which is what a legal
-             * re-association of well-conditioned sums looks like. Goldens stay
-             * byte-identical on host (11/11) and device (12/12). */
-            for (j = 0; j + 1 < nb; j += 2) {
-                float cj = crow[j];
-                float dj = crow[j + 1];
-                const float *br = b + (size_t)j * nb + l;
-                const float *cr = b + (size_t)(j + 1) * nb + l;
-                s0 += cj * br[0]; s0 += dj * cr[0];
-                s1 += cj * br[1]; s1 += dj * cr[1];
-                s2 += cj * br[2]; s2 += dj * cr[2];
-                s3 += cj * br[3]; s3 += dj * cr[3];
-                s4 += cj * br[4]; s4 += dj * cr[4];
-                s5 += cj * br[5]; s5 += dj * cr[5];
-                s6 += cj * br[6]; s6 += dj * cr[6];
-                s7 += cj * br[7]; s7 += dj * cr[7];
-            }
-            dst[(size_t)k * nb + l + 0] = s0;
-            dst[(size_t)k * nb + l + 1] = s1;
-            dst[(size_t)k * nb + l + 2] = s2;
-            dst[(size_t)k * nb + l + 3] = s3;
-            dst[(size_t)k * nb + l + 4] = s4;
-            dst[(size_t)k * nb + l + 5] = s5;
-            dst[(size_t)k * nb + l + 6] = s6;
-            dst[(size_t)k * nb + l + 7] = s7;
-        }
-        for (; l < nb; l++) {
-            float sum = 0.0f;
-            for (j = 0; j < nb; j++)
-                sum += crow[j] * b[(size_t)j * nb + l];
-            dst[(size_t)k * nb + l] = sum;
-        }
+     * and the products summed are the same numbers in the same order.
+     * The na output rows are independent, so the pass splits over cores. */
+    {
+        kron2_ctx kc;
+        kc.m = m; kc.dst = dst; kc.b = b; kc.na = na; kc.nb = nb;
+        nd_parallel_rows(kron2_rows, &kc, na);
     }
 }
 
@@ -1190,8 +1202,7 @@ static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
     uint32_t dm = m->d_model, n = m->c.h.hada_n, i, j;
     float *const *fp = m->fp16_slot[li];
     const float *d1 = fp[14];
-    const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17], *d4 = fp[18];
-    const float *cv = fp[25];
+        const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17]; const float *cv = fp[25];
     const float    *cu = fp[26];
     const float *p1 = (const float *)nd_cact_data(&m->c, &m->hada_p1);
     const float *p2 = (const float *)nd_cact_data(&m->c, &m->hada_p2);

@@ -349,16 +349,6 @@ typedef struct {
     uint32_t         ngroup, gbytes, gpairs, g, rowbytes;
 } lut2_ctx;
 
-/* EXPERIMENT: one 64-bit load per 32 weights instead of two 32-bit loads.
- *
- * The row byte stream is the only traffic this kernel cannot avoid, so
- * halving its load count is the direct lever. The group is 128 weights =
- * 32 bytes, and the group start inside a row is 4-aligned; a 4 mod 8 offset
- * makes the LX7 split the 64-bit access into two word fetches, so this is a
- * measurement of whether the wider access still helps when unaligned.
- * Accumulator assignment is untouched (s0 keeps weights 0,4,8,... of the
- * pair-major stream), so the four sums see the same entries in the same
- * order. */
 static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
 {
     const lut2_ctx *c = (const lut2_ctx *)vc;
@@ -370,35 +360,32 @@ static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
         float           acc = 0.0f;
         uint32_t        gi;
 
+        /* Same value as nd_f16(nrm[gi]), hoisted: nrm is read once per row and
+         * the conversion does not depend on the group's data. */
         for (gi = 0; gi < c->ngroup; gi++) {
             float   nf = nd_f16(nrm[gi]);
             float   s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
             const uint8_t *qq = row + (size_t)gi * c->gbytes;
             const float   *T  = c->lut + (size_t)gi * c->gpairs * 16;
             uint32_t       j;
-
-            for (j = 0; j < c->g; j += 32) {
-                uint64_t w64 = ((const uint64_t *)(const void *)qq)[0];
-                uint32_t w = (uint32_t)w64;
-                uint32_t v = (uint32_t)(w64 >> 32);
-                qq += 8;
-                s0 += T[          w          & 15u];
-                s1 += T[16  + ((w >>  4)     & 15u)];
-                s2 += T[32  + ((w >>  8)     & 15u)];
-                s3 += T[48  + ((w >> 12)     & 15u)];
-                s0 += T[64  + ((w >> 16)     & 15u)];
-                s1 += T[80  + ((w >> 20)     & 15u)];
-                s2 += T[96  + ((w >> 24)     & 15u)];
-                s3 += T[112 +  (w >> 28)];
-                s0 += T[128 + (       v         & 15u)];
-                s1 += T[144 + ((v >>  4)     & 15u)];
-                s2 += T[160 + ((v >>  8)     & 15u)];
-                s3 += T[176 + ((v >> 12)     & 15u)];
-                s0 += T[192 + ((v >> 16)     & 15u)];
-                s1 += T[208 + ((v >> 20)     & 15u)];
-                s2 += T[224 + ((v >> 24)     & 15u)];
-                s3 += T[240 +  (v >> 28)];
-                T += 256;
+            /* Two packed bytes (four pairs, 8 weights) per 32-bit load. Rows
+             * are group-aligned and g is a multiple of 8, so qq stays
+             * 4-aligned. Each pair k indexes the table slot block its own 4
+             * bits belong to, so the four accumulators see exactly the same
+             * entries in the same order as the byte-wise loop. */
+            for (j = 0; j < c->g; j += 16) {
+                uint32_t w = ((const uint32_t *)(const void *)qq)[0];
+                qq += 4;
+                s0 += T[         w         & 15u];
+                s1 += T[16 + ((w >>  4)  & 15u)];
+                s2 += T[32 + ((w >>  8)  & 15u)];
+                s3 += T[48 + ((w >> 12)  & 15u)];
+                T += 64;
+                s0 += T[         (w >> 16) & 15u];
+                s1 += T[16 + ((w >> 20)  & 15u)];
+                s2 += T[32 + ((w >> 24)  & 15u)];
+                s3 += T[48 +  (w >> 28)];
+                T += 64;
             }
             acc += nf * ((s0 + s1) + (s2 + s3));
         }

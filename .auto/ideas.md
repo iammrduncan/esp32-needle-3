@@ -214,3 +214,13 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   instead of git). From now: `git fetch && git reset --hard FETCH_HEAD` before
   every batch, and verify the control's decode_tps equals the last logged value
   before trusting any candidate delta.
+- **Dynamic self-scheduling (both cores pull 4-unit grants from one atomic
+  counter) is 6% WORSE** than the fixed half-split: 3.70 vs 3.9517 control,
+  byte-exact. The fetch_add per 4 units is not free on the LX7 and the two
+  halves are already balanced. Do not replace the splitter with a work queue.
+- **RoPE split over heads: neutral** (3.955 / 3.9517 vs 3.9517 control, and
+  identical on a second board). 12+2 heads x 24 pairs is below the handshake.
+- **zcrms emit-pass split: +0.13%** (3.9567 vs 3.9517) - under the 0.2% keep bar
+  for a second handshake per layer. rms scale-pass split: +0.04%.
+- Everything measured since the lane-mix split is inside +-0.15%: the two-core
+  lever is closed. Reverted the rope split to keep the tree minimal.

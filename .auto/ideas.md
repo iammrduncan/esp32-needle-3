@@ -178,132 +178,35 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   (only 1.11x for a lot of state). Its TIE728 note is about aligned float loads
   + 2-row/8-accumulator CQ2 - this repo measured 2-row blocking (-0.7%) and
   packed-word row reads (+6.7%, kept), so that lever is already banked here.
-- **Splitter lever is closed at 4.08 tok/s.** Everything per-layer is two-core
-  now (FWHT, LUT build, GEMV rows, attention heads, gate, taps, MLP kron halves,
-  SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, engram taps). The last
-  six candidates measured +0.0..+0.25% - the same size as board-to-board spread.
-- **Next big-ticket (started): a PSRAM weight tier.** proj2bit is 46% of the pass
-  and flash-bandwidth bound (~5 MB/token of rows out of mmap'd flash). 14.6 MB of
-  PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
-  layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
-  window; the PSRAM read path measured ~3x the mmap rate on the S3.
-- **Why the 2-bit GEMV cannot be cache-blocked bit-exactly.** The row's group
-  term is nf * ((s0+s1)+(s2+s3)); reusing a table slice across rows requires
-  holding each row's per-group partial and folding nf later, which replaces
-  nf*(a+b) with nf*a + nf*b. Measured variants: 2-row walk without deferral
-  (bit-exact) = -2.7%; with deferral = bit-incompatible by construction. Dead.
-- **Splitter lever is closed at 4.08 tok/s.** Everything per-layer is two-core
-  now (FWHT, LUT build, GEMV rows, attention heads, gate, taps, MLP kron halves,
-  SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, engram taps). The last
-  six candidates measured +0.0..+0.25% - the same size as board-to-board spread.
-- **Next big-ticket (started): a PSRAM weight tier.** proj2bit is 46% of the pass
-  and flash-bandwidth bound (~5 MB/token of rows out of mmap'd flash). 14.6 MB of
-  PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
-  layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
-  window; the PSRAM read path measured ~3x the mmap rate on the S3.
-- **Six more nulls on the main board or in verified parallel batches:**
-  FWHT 8-butterfly unroll, straight-line n=4 sinkhorn, kv_slot hoist out of the
-  attention inner loop, attention-gate sigmoid blocked by 4, LUT builder 2-wide,
-  restrict on rms_unit/zcrms. All byte-exact, all within +-0.05%. Instruction
-  scheduling and loop-overhead removal are DONE as levers on this firmware: at
-  3.76 tok/s every phase is now either bandwidth-bound or latency-bound in a way
-  the scheduler cannot fix. Only structural changes remain (core-1 coverage of
-  the serial stage, or fewer bytes per token).
-- **Process rule learned the hard way:** a parallel batch whose board1 control
-  did not match HEAD's last measured value was silently stale (cp-based resets
-  instead of git). From now: `git fetch && git reset --hard FETCH_HEAD` before
-  every batch, and verify the control's decode_tps equals the last logged value
-  before trusting any candidate delta.
-- **Dynamic self-scheduling (both cores pull 4-unit grants from one atomic
-  counter) is 6% WORSE** than the fixed half-split: 3.70 vs 3.9517 control,
-  byte-exact. The fetch_add per 4 units is not free on the LX7 and the two
-  halves are already balanced. Do not replace the splitter with a work queue.
-- **RoPE split over heads: neutral** (3.955 / 3.9517 vs 3.9517 control, and
-  identical on a second board). 12+2 heads x 24 pairs is below the handshake.
-- **zcrms emit-pass split: +0.13%** (3.9567 vs 3.9517) - under the 0.2% keep bar
-  for a second handshake per layer. rms scale-pass split: +0.04%.
-- Everything measured since the lane-mix split is inside +-0.15%: the two-core
-  lever is closed. Reverted the rope split to keep the tree minimal.
-- **Splitting the leftover per-layer stage now buys ~0.05%, not 1%.** The MLP
-  (both kron halves, SiLU, lane mix) and the GEMVs were the splitable mass.
-  Measured against a 3.9517 control in one batch: rms scale-pass split +0.04%,
-  engram tap-matmul split +0.04%, p1/p2 permutation split +0.13%, combined
-  fold+SiLU gate worker (one handshake instead of two) -0.4%. The lever is
-  spent; do not split anything smaller than a kron half.
-- At 3.95 tok/s the profile has no phase above ~15% that is not already
-  two-core or flash-bandwidth bound. Remaining ideas would change *what is
-  computed* (quality risk) or how bytes are streamed from flash (cache-blocking
-  the LUT GEMV - tried once and the naive 4-row block was wrong; a correct
-  cache-blocked version remains the only big-ticket idea left).
-- **Splitter lever is closed at 4.08 tok/s.** Everything per-layer is two-core
-  now (FWHT, LUT build, GEMV rows, attention heads, gate, taps, MLP kron halves,
-  SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, engram taps). The last
-  six candidates measured +0.0..+0.25% - the same size as board-to-board spread.
-- **Next big-ticket (started): a PSRAM weight tier.** proj2bit is 46% of the pass
-  and flash-bandwidth bound (~5 MB/token of rows out of mmap'd flash). 14.6 MB of
-  PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
-  layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
-  window; the PSRAM read path measured ~3x the mmap rate on the S3.
-- **Splitting the leftover per-layer stage now buys ~0.05%, not 1%.** The MLP
-  (both kron halves, SiLU, lane mix) and the GEMVs were the splitable mass.
-  Measured against a 3.9517 control in one batch: rms scale-pass split +0.04%,
-  engram tap-matmul split +0.04%, p1/p2 permutation split +0.13%, combined
-  fold+SiLU gate worker (one handshake instead of two) -0.4%. The lever is
-  spent; do not split anything smaller than a kron half.
-- At 3.95 tok/s the profile has no phase above ~15% that is not already
-  two-core or flash-bandwidth bound. Remaining ideas would change *what is
-  computed* (quality risk) or how bytes are streamed from flash (cache-blocking
-  the LUT GEMV - tried once and the naive 4-row block was wrong; a correct
-  cache-blocked version remains the only big-ticket idea left).
-- **Splitter lever is closed at 4.08 tok/s.** Everything per-layer is two-core
-  now (FWHT, LUT build, GEMV rows, attention heads, gate, taps, MLP kron halves,
-  SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, engram taps). The last
-  six candidates measured +0.0..+0.25% - the same size as board-to-board spread.
-- **Next big-ticket (started): a PSRAM weight tier.** proj2bit is 46% of the pass
-  and flash-bandwidth bound (~5 MB/token of rows out of mmap'd flash). 14.6 MB of
-  PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
-  layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
-  window; the PSRAM read path measured ~3x the mmap rate on the S3.
-- **The engram slot gather CANNOT be split on the existing scratch contract.**
-  nd_cq_dequant_row takes a caller scratch (`m->row`) that is also the FWHT
-  workspace, and `e` (the site embedding) aliases `m->xh`, which the splitter's
-  own prepare path reuses. Splitting it produced 3.08 tok/s and 0/12 exact
-  device outputs on two boards - a real race, caught by the goldens, not a
-  slowdown. To split it you would need a second row scratch per core AND a
-  non-aliasing `e` (both cost internal RAM that is not there: 24 KB free).
-- **Why the 2-bit GEMV cannot be cache-blocked bit-exactly.** The row's group
-  term is nf * ((s0+s1)+(s2+s3)); reusing a table slice across rows requires
-  holding each row's per-group partial and folding nf later, which replaces
-  nf*(a+b) with nf*a + nf*b. Measured variants: 2-row walk without deferral
-  (bit-exact) = -2.7%; with deferral = bit-incompatible by construction. Dead.
-- **Tier span ceiling is measured, not guessed.** The projection+phi span
-  (5acd423) is worth +1.5%. Extending it to 10.08 MB (engram k/v GEMVs + the
-  logits-side 768x768 pair) makes the PSRAM allocation FAIL at open
-  (psram_free stayed at its 14.6 MB boot value on the candidate board, so the
-  tier silently fell back to flash) and the board is slower than the tiered
-  build, not faster. Full-blob (12.8 MB) does not boot at all. The affordable
-  tier is the ~4.5 MB projections+phi span.
-- **Cross-core LUT table contention is NOT the limiter.** Reversing the worker's
-  row walk so the two cores do not chase each other through the table's cache
-  lines measured 4.13 / 4.1367 on two boards vs a 4.185 plateau (-1.1%), byte-
-  exact. Forward row order wins (page locality on the weight stream dominates).
-  Row-order experiments in the LUT GEMV are closed.
-- **Post-tier device profile (ms/token, 236 total):** proj2bit 110.7 (47%),
-  attention 38.6 (16%), hadamard 24.4 (10%), engram 20.6 (9%), mhc_phi4 13.5
-  (6%), prep+lut 3.5, confpool ~0. The tier did not move proj2bit's share much:
-  it is now PSRAM-bandwidth/latency bound rather than flash bound.
-- **A second PSRAM tier is worse than no second tier.** Staging the engram kv +
-  logits 768x768 tensors in a separate 2 MB buffer (main span untouched, psram_free
-  confirming it was live) measured 4.1367 vs the 4.185 plateau (-1.15%) on a board
-  that had just reproduced 4.185. Those tensors are read once per pass, not once
-  per token, so the extra PSRAM pages cost more (TLB/page pressure next to the
-  fp32 pool) than the occasional flash read they saved. Tier = the 4.49 MB
-  per-layer span, full stop.
-- **Cache-blocking the LUT GEMV by rows IS bit-exact and still loses.** Two rows
-  per pass over the pair table (row pitch 192 B, both aligned loads, per-row
-  four accumulators, per-group nf fold) is byte-identical on host and device but
-  measured 3.9717 tok/s vs the 4.185 plateau (-5.1%). So the pair table is NOT
-  the traffic the kernel is short of: at in_pad=768 the table is 24 KB and lives
-  in the S3's 32 KB data cache, and the blocked form just doubles the live
-  accumulator set. The row bytes are the stream, and reading them less often is
-  impossible. Table-residency work in this kernel is closed for good.
+
+## Ledger of closed lever families (as of run #70, plateau 4.185 tok/s)
+
+Every family below is measured on device with byte-exact goldens. Nothing in
+this list should be retried unless its stated blocking assumption changes.
+
+- fp32 staging of every per-token fp16 weight (+100%). DONE - all staged
+  (MLP factors, d/b vectors, cond_u/cond_v, d1, qkv taps, engram taps, norm
+  scales, conf probes).
+- Two-core coverage of every per-layer stage (+12% cumulative): FWHT, pair
+  table build, GEMV rows, attention heads, gate, qkv/engram taps, both kron
+  halves, SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, logits
+  gather, per-head norms. Nothing smaller than a kron half pays for a
+  handshake; dynamic self-scheduling was -6%.
+- Packed-word reads (+7.5%): 32-bit is the measured optimum. 64-bit (-4.6%,
+  group start is 4 mod 8), 128-bit (illegal, slices not 16-aligned).
+- PSRAM weight tier (+1.5%): the 4.49 MB projections+phi span is the ceiling.
+  Widening it (10 MB) fails the allocation; a second span costs -1.15%.
+- GEMV row blocking: 2-row LUT block -5.1%, 4-row -5%, generic-path 2-row
+  neutral. The 24 KB pair table is already cache resident.
+- Row order: forward wins; reverse -1.1%, interleaved -0.8%.
+- Sinkhorn budget retune: vetoed by the fidelity probe (max_delta 7.8).
+- Engram slot gather split: races on m->row / xh aliasing; 0/12 byte-exact.
+- Attention: paired softmax won (+2.8%), quads lost (-8.4%); int8 K/V word
+  reads banked (+6%).
+- Instruction scheduling / loop-overhead removal: ~20 nulls, all within
+  +-0.05%. Closed.
+- Remaining levers change WHAT is computed (quantisation, vocab, grammar,
+  layers, clocks) and are forbidden by the rules.
+
+Treat 4.185 tok/s (+71.4% over the 2.44 baseline) as converged. Use further
+cycles for verification only.

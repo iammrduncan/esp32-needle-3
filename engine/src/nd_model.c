@@ -404,6 +404,21 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                     if (beg < lo_p) lo_p = beg;
                 }
             }
+            /* EXPERIMENT: extend only to the engram key/value GEMVs, which a
+             * decode step reads IN FULL (unlike the tables, which are gathered).
+             * Stop before the logits pair, whose span pushed the allocation
+             * past what PSRAM can hold. */
+            {
+                uint32_t es;
+                for (es = 0; es < m->n_sites; es++) {
+                    size_t kend = (size_t)m->engram[es].key_proj.offset +
+                                  m->engram[es].key_proj.nbytes;
+                    size_t vend = (size_t)m->engram[es].value_proj.offset +
+                                  m->engram[es].value_proj.nbytes;
+                    if (kend > hi_p) hi_p = kend;
+                    if (vend > hi_p) hi_p = vend;
+                }
+            }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
             /* Span ceiling is MEASURED: the projections+phi span (~4.5 MB) fits

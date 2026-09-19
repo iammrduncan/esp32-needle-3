@@ -299,3 +299,11 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   per token, so the extra PSRAM pages cost more (TLB/page pressure next to the
   fp32 pool) than the occasional flash read they saved. Tier = the 4.49 MB
   per-layer span, full stop.
+- **Cache-blocking the LUT GEMV by rows IS bit-exact and still loses.** Two rows
+  per pass over the pair table (row pitch 192 B, both aligned loads, per-row
+  four accumulators, per-group nf fold) is byte-identical on host and device but
+  measured 3.9717 tok/s vs the 4.185 plateau (-5.1%). So the pair table is NOT
+  the traffic the kernel is short of: at in_pad=768 the table is 24 KB and lives
+  in the S3's 32 KB data cache, and the blocked form just doubles the live
+  accumulator set. The row bytes are the stream, and reading them less often is
+  impossible. Table-residency work in this kernel is closed for good.

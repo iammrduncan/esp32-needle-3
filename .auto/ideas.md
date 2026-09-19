@@ -264,3 +264,10 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
   layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
   window; the PSRAM read path measured ~3x the mmap rate on the S3.
+- **The engram slot gather CANNOT be split on the existing scratch contract.**
+  nd_cq_dequant_row takes a caller scratch (`m->row`) that is also the FWHT
+  workspace, and `e` (the site embedding) aliases `m->xh`, which the splitter's
+  own prepare path reuses. Splitting it produced 3.08 tok/s and 0/12 exact
+  device outputs on two boards - a real race, caught by the goldens, not a
+  slowdown. To split it you would need a second row scratch per core AND a
+  non-aliasing `e` (both cost internal RAM that is not there: 24 KB free).

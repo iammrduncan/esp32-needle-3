@@ -403,33 +403,56 @@ ND_HOT void nd_cq_gemv_lut2(const nd_tensor *t, const void *blob,
     nd_parallel_rows(lut2_rows, &ctx, out);
 }
 
+typedef struct { const uint8_t *packed; const uint16_t *norms;
+                 const float *xh, *cb; const uint32_t *ids; float *y;
+                 uint32_t ngroup, g, bits, rowbytes; } gather_ctx;
+
+/* Gathered rows over an id range: each id writes its own y slot and its group
+ * walk keeps the ascending gi order, so both cores produce exactly the values
+ * the single-core loop did. Used by the constrained-logits path, where `n` is
+ * the grammar's candidate set (dozens of 4-bit embedding rows). */
+static ND_HOT void gather_rows(void *vc, uint32_t i0, uint32_t i1)
+{
+    const gather_ctx *c = (const gather_ctx *)vc;
+    uint32_t          i;
+
+    for (i = i0; i < i1; i++) {
+        const uint8_t  *row = c->packed + (size_t)c->ids[i] * c->rowbytes;
+        const uint16_t *nrm = c->norms + (size_t)c->ids[i] * c->ngroup;
+        float           acc = 0.0f;
+        uint32_t        gi;
+
+        for (gi = 0; gi < c->ngroup; gi++) {
+            float nf = nd_f16(nrm[gi]);   /* same value, converted once */
+            acc += nf * dot_group(row, gi * c->g * c->bits, c->bits, c->g,
+                                  c->cb, c->xh + (size_t)gi * c->g);
+        }
+        c->y[i] = acc;
+    }
+}
+
 ND_HOT void nd_cq_gemv_gather(const nd_cact *c, const nd_tensor *t, const void *blob,
                               const float *xh, const uint32_t *ids, uint32_t n,
                               float *y)
 {
     const uint8_t  *packed   = (const uint8_t *)blob;
     uint32_t        out      = t->shape[0];
-    uint32_t        g        = t->group;
-    uint32_t        ngroup   = nd_cq_groups(t);
     uint32_t        rowbytes = nd_cq_row_bytes(t);
-    const uint16_t *norms    = (const uint16_t *)(const void *)(packed +
-                                (size_t)out * rowbytes);
-    const float    *cb       = nd_cact_codebook(c, t->bits);
-    uint32_t        i;
+    gather_ctx      gc;
 
-    for (i = 0; i < n; i++) {
-        const uint8_t  *row = packed + (size_t)ids[i] * rowbytes;
-        const uint16_t *nrm = norms + (size_t)ids[i] * ngroup;
-        float           acc = 0.0f;
-        uint32_t        gi;
+    gc.packed   = packed;
+    gc.norms    = (const uint16_t *)(const void *)(packed +
+                       (size_t)out * rowbytes);
+    gc.xh       = xh;
+    gc.cb       = nd_cact_codebook(c, t->bits);
+    gc.ids      = ids;
+    gc.y        = y;
+    gc.ngroup   = nd_cq_groups(t);
+    gc.g        = t->group;
+    gc.bits     = t->bits;
+    gc.rowbytes = rowbytes;
 
-        for (gi = 0; gi < ngroup; gi++) {
-            float nf = nd_f16(nrm[gi]);   /* same value, converted once */
-            acc += nf * dot_group(row, gi * g * t->bits, t->bits, g, cb,
-                                  xh + (size_t)gi * g);
-        }
-        y[i] = acc;
-    }
+    nd_parallel_rows(gather_rows, &gc, n);
 }
 
 void nd_cq_gemv(const nd_cact *c, const nd_tensor *t, const void *blob,

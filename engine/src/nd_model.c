@@ -855,9 +855,21 @@ static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
                 float         sc1 = m->k_scale[o1 * nkv + kvh] * c->scale;
                 float         s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
 
-                for (i = 0; i < qk_hd; i += 2) {
-                    s0 += qh[i] * (float)kp0[i] + qh[i + 1] * (float)kp0[i + 1];
-                    s1 += qh[i] * (float)kp1[i] + qh[i + 1] * (float)kp1[i + 1];
+                /* One 32-bit load per four K bytes. qk_head_dim (48) and the
+                 * k_cache row pitch are multiples of 4, so the word loads are
+                 * aligned. Products are added to each score in the same pairs,
+                 * in the same index order, as the byte-wise loop did. */
+                for (i = 0; i < qk_hd; i += 4) {
+                    uint32_t a = ((const uint32_t *)(const void *)kp0)[i >> 2];
+                    uint32_t b = ((const uint32_t *)(const void *)kp1)[i >> 2];
+                    s0 += qh[i + 0] * (float)(int8_t)(a & 0xff)
+                        + qh[i + 1] * (float)(int8_t)((a >> 8) & 0xff);
+                    s0 += qh[i + 2] * (float)(int8_t)((a >> 16) & 0xff)
+                        + qh[i + 3] * (float)(int8_t)(a >> 24);
+                    s1 += qh[i + 0] * (float)(int8_t)(b & 0xff)
+                        + qh[i + 1] * (float)(int8_t)((b >> 8) & 0xff);
+                    s1 += qh[i + 2] * (float)(int8_t)((b >> 16) & 0xff)
+                        + qh[i + 3] * (float)(int8_t)(b >> 24);
                 }
                 s0 *= sc0;
                 s1 *= sc1;

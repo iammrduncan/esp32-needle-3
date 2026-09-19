@@ -160,6 +160,7 @@ typedef struct {
     float        *q, *kbuf, *vbuf, *gate, *attn, *aout;
     float        *q_hist, *k_hist, *v_hist; /* [layer][tap][projection dim] */
     float        *hada_a, *hada_b, *hada_c; /* [hada_n] */
+    float        *scale_row;                /* [hada_n] cond-folded cu scale */
     float        *rope_inv;     /* [head_dim/2] inverse frequencies */
     float        *rope_cos;     /* [head_dim/2] for the current position */
     float        *rope_sin;

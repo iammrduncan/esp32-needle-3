@@ -53,7 +53,11 @@ static float fp16_get(const nd_model *m, const nd_tensor *t, size_t i)
 }
 
 /* x * rsqrt(mean(x^2) + eps) */
-static void rms_unit(const float *x, uint32_t n, float *out)
+/* restrict: every hot caller passes disjoint scratch, and without it the
+ * compiler must assume out may alias x, which stops it keeping the
+ * sum-of-squares load stream independent of the store loop. */
+static void rms_unit(const float *restrict x, uint32_t n,
+                     float *restrict out)
 {
     float    ss = 0.0f;
     uint32_t i;
@@ -76,8 +80,8 @@ static void fp16_row(const uint16_t *h, float *dst, uint32_t n)
         dst[i] = nd_f16(h[i]);
 }
 
-static void zcrms(const nd_model *m, const float *s, const float *x,
-                  uint32_t n, float *out)
+static void zcrms(const nd_model *m, const float *restrict s,
+                  const float *restrict x, uint32_t n, float *restrict out)
 {
     float           ss = 0.0f;
     uint32_t        i;

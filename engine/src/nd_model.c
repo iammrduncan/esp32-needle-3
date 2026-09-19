@@ -376,6 +376,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         uint32_t off3 = 0;
         m->eg_vpsram = NULL;
         m->eg_vpsram_len = 0;
+        m->tier2 = NULL; m->tier2_lo = m->tier2_hi = 0;
         m->eg_region_lo = 0; m->eg_region_hi = 0;
         /* Stage the PER-LAYER CQ PROJECTIONS and the mHC phi tensors: that is
          * what a decode token reads IN FULL. Blob-directory accounting matters
@@ -416,6 +417,34 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
+            /* EXPERIMENT: a second, separate span over the logits-side pair and
+             * the four engram key/value GEMVs (all 768x768 CQ, all read IN FULL
+             * by a decode step). Kept separate so the main span's size - and the
+             * allocation that succeeded with it - is untouched. */
+            {
+                uint32_t ti;
+                size_t   lo2 = (size_t)-1, hi2 = 0;
+                for (ti = 0; ti < m->c.n; ti++) {
+                    nd_tensor tt;
+                    if (nd_cact_tensor(&m->c, ti, &tt) != 0) continue;
+                    if (tt.bits != 2 || tt.shape[0] != 768u ||
+                        tt.shape[1] != 768u)
+                        continue;
+                    if ((size_t)tt.offset > hi_p + (1u << 20)) continue;
+                    if ((size_t)tt.offset < lo2) lo2 = (size_t)tt.offset;
+                    if ((size_t)tt.offset + tt.nbytes > hi2)
+                        hi2 = (size_t)tt.offset + tt.nbytes;
+                }
+                if (hi2 > lo2 && hi2 - lo2 < (2u << 20)) {
+                    m->tier2 = (uint8_t *)ND_ALLOC(hi2 - lo2);
+                    if (m->tier2) {
+                        memcpy(m->tier2, (const uint8_t *)m->c.base + lo2,
+                               hi2 - lo2);
+                        m->tier2_lo = (uint32_t)lo2;
+                        m->tier2_hi = (uint32_t)hi2;
+                    }
+                }
+            }
             /* Span ceiling is MEASURED: the projections+phi span (~4.5 MB) fits
              * and pays +1.5%. Widening it to include the engram key/value GEMVs
              * and the logits pair (10.08 MB) makes the allocation fail at open
@@ -877,6 +906,9 @@ static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
     if (t->offset >= m->eg_region_lo &&
         t->offset + t->nbytes <= m->eg_region_hi)
         return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
+    if (m->tier2 && t->offset >= m->tier2_lo &&
+        t->offset + t->nbytes <= m->tier2_hi)
+        return m->tier2 + (size_t)(t->offset - m->tier2_lo);
     return f;
 }
 

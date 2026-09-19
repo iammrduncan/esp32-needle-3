@@ -1201,6 +1201,20 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
     }
 }
 
+typedef struct { float *a; const float *d2, *b2, *sc; } silu_ctx;
+
+/* The gate's SiLU stage: 1024 independent elements, chunked by 128 so the two
+ * cores each run four chunks. Elementwise, so every value is identical. */
+static ND_HOT void silu_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const silu_ctx *c = (const silu_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++) {
+        float z = c->d2[i] * c->sc[i] * c->a[i] + c->b2[i];
+        c->a[i] = z * sigmoidf_(z);
+    }
+}
+
 static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
 {
     const nd_layer *L = &m->layer[li];
@@ -1249,9 +1263,9 @@ static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
             for (i = 0; i < n; i++)
                 sc[i] += cj * row[i];
         }
-        for (i = 0; i < n; i++) {
-            float z = d2[i] * sc[i] * m->hada_a[i] + b2[i];
-            m->hada_a[i] = z * sigmoidf_(z);
+        {
+            silu_ctx sg = { m->hada_a, d2, b2, sc };
+            nd_parallel_rows(silu_rows, &sg, n / 128);
         }
     }
     kron_apply(m, m->hada_a, m->hada_b, fp[21], fp[22],

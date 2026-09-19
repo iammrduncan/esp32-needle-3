@@ -187,3 +187,8 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
   layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
   window; the PSRAM read path measured ~3x the mmap rate on the S3.
+- **Why the 2-bit GEMV cannot be cache-blocked bit-exactly.** The row's group
+  term is nf * ((s0+s1)+(s2+s3)); reusing a table slice across rows requires
+  holding each row's per-group partial and folding nf later, which replaces
+  nf*(a+b) with nf*a + nf*b. Measured variants: 2-row walk without deferral
+  (bit-exact) = -2.7%; with deferral = bit-incompatible by construction. Dead.

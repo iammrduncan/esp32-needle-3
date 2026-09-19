@@ -271,3 +271,8 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   device outputs on two boards - a real race, caught by the goldens, not a
   slowdown. To split it you would need a second row scratch per core AND a
   non-aliasing `e` (both cost internal RAM that is not there: 24 KB free).
+- **Why the 2-bit GEMV cannot be cache-blocked bit-exactly.** The row's group
+  term is nf * ((s0+s1)+(s2+s3)); reusing a table slice across rows requires
+  holding each row's per-group partial and folding nf later, which replaces
+  nf*(a+b) with nf*a + nf*b. Measured variants: 2-row walk without deferral
+  (bit-exact) = -2.7%; with deferral = bit-incompatible by construction. Dead.

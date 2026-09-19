@@ -202,23 +202,47 @@ static ND_HOT float dot_group(const uint8_t *p, uint32_t bit_off, uint32_t bits,
 /* Row-range variant. `base` shifts the tensor row that output i maps to, so
  * the mHC phi tensors (all 27 layers stacked into one tensor) can hand out a
  * per-layer slice and still be split across cores. */
+/* EXPERIMENT: four rows per pass over the group's prepared activation.
+ *
+ * The 4-bit generic path (phi GEMVs) reads xh once per ROW: for a 768-wide
+ * input that is 3 KB of activation traffic per row, dwarfing the row's own
+ * 384 packed bytes. Four rows per pass share one xh sweep and keep four
+ * independent accumulators, which the LX7 pipeline likes.
+ *
+ * Accumulation order per row is untouched (same dot_group calls, same group
+ * order, same per-group fold), so the result is bit-identical by construction. */
+#define GEMV_NB 2u   /* two rows per pass over the prepared activation */
+
 static ND_HOT void gemv_rows_offset(void *vc, uint32_t i0, uint32_t i1)
 {
     const gemv_ctx *c = (const gemv_ctx *)vc;
     uint32_t        i;
 
-    for (i = i0; i < i1; i++) {
-        uint32_t        r   = c->base + i;
-        const uint8_t  *row = c->packed + (size_t)r * c->rowbytes;
-        const uint16_t *nrm = c->norms + (size_t)r * c->ngroup;
-        float           acc = 0.0f;
-        uint32_t        gi;
+    for (i = i0; i < i1; i += GEMV_NB) {
+        uint32_t        nb = (i + GEMV_NB < i1) ? GEMV_NB : i1 - i;
+        const uint8_t  *row[GEMV_NB];
+        const uint16_t *nrm[GEMV_NB];
+        float           acc[GEMV_NB];
+        uint32_t        b, gi;
 
-        for (gi = 0; gi < c->ngroup; gi++)
-            acc += nd_f16(nrm[gi]) *
-                   dot_group(row, gi * c->g * c->bits, c->bits, c->g, c->cb,
-                             c->xh + (size_t)gi * c->g);
-        c->y[i] = acc;
+        for (b = 0; b < nb; b++) {
+            uint32_t r = c->base + i + b;
+            row[b] = c->packed + (size_t)r * c->rowbytes;
+            nrm[b] = c->norms  + (size_t)r * c->ngroup;
+            acc[b] = 0.0f;
+        }
+
+        for (gi = 0; gi < c->ngroup; gi++) {
+            uint32_t       byte_off = ((size_t)gi * c->g * c->bits) >> 3;
+            const uint8_t *p[GEMV_NB];
+            for (b = 0; b < nb; b++) p[b] = row[b] + byte_off;
+            for (b = 0; b < nb; b++)
+                acc[b] += nd_f16(nrm[b][gi]) *
+                          dot_group(p[b], 0, c->bits, c->g, c->cb,
+                                    c->xh + (size_t)gi * c->g);
+        }
+        for (b = 0; b < nb; b++)
+            c->y[i + b] = acc[b];
     }
 }
 

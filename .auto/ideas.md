@@ -118,3 +118,11 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
 - **Engram-gate RMS fusion (3 passes -> 1): neutral** (3.125 vs 3.1267) and it
   quietly breaks the n1 buffer contract (n1 must still hold the attention input
   when block() reaches the attention sub-block). Not taken.
+- **kron_apply is saturated.** Measured optimum: first half 4 rows x 2 j-columns
+  (8 accumulators), second half 8 columns with paired b rows. Wider on either
+  side regresses: 8 rows -5.6%, 4k x 4j -1.2%. The lever was always *operand
+  load reuse*, not accumulator count alone - 8 rows added accumulators without
+  reuse and lost. Stop tuning this kernel.
+- **Blocked attention-gate sigmoid: exactly zero** (3.1817 vs 3.1817). 768
+  elements once per layer is below the noise floor. Small elementwise loops are
+  not worth ILP work on this board.

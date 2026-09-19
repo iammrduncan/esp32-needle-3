@@ -878,8 +878,25 @@ static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
                 {
                     float wv0 = w0 * m->v_scale[o0 * nkv + kvh];
                     float wv1 = w1 * m->v_scale[o1 * nkv + kvh];
-                    for (i = 0; i < v_hd; i++)
-                        oh[i] += wv0 * (float)vp0[i] + wv1 * (float)vp1[i];
+                    /* One 32-bit load per four V bytes. v_head_dim (64) and the
+                     * v_cache row pitch are multiples of 4, so vp0/vp1 are
+                     * 4-aligned and the loop covers v_hd exactly. The scalar
+                     * loop's per-element order is preserved: each oh[] entry
+                     * still receives its wv0 term and then its wv1 term, and no
+                     * accumulator is re-associated. Byte-identical goldens, same
+                     * probe value. */
+                    for (i = 0; i < v_hd; i += 4) {
+                        uint32_t a = ((const uint32_t *)(const void *)vp0)[i >> 2];
+                        uint32_t b = ((const uint32_t *)(const void *)vp1)[i >> 2];
+                        oh[i + 0] += wv0 * (float)(int8_t)(a & 0xff);
+                        oh[i + 0] += wv1 * (float)(int8_t)(b & 0xff);
+                        oh[i + 1] += wv0 * (float)(int8_t)((a >> 8) & 0xff);
+                        oh[i + 1] += wv1 * (float)(int8_t)((b >> 8) & 0xff);
+                        oh[i + 2] += wv0 * (float)(int8_t)((a >> 16) & 0xff);
+                        oh[i + 2] += wv1 * (float)(int8_t)((b >> 16) & 0xff);
+                        oh[i + 3] += wv0 * (float)(int8_t)(a >> 24);
+                        oh[i + 3] += wv1 * (float)(int8_t)(b >> 24);
+                    }
                 }
             }
             if (p < count) {                    /* odd tail, unchanged path */

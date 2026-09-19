@@ -276,3 +276,10 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   holding each row's per-group partial and folding nf later, which replaces
   nf*(a+b) with nf*a + nf*b. Measured variants: 2-row walk without deferral
   (bit-exact) = -2.7%; with deferral = bit-incompatible by construction. Dead.
+- **Tier span ceiling is measured, not guessed.** The projection+phi span
+  (5acd423) is worth +1.5%. Extending it to 10.08 MB (engram k/v GEMVs + the
+  logits-side 768x768 pair) makes the PSRAM allocation FAIL at open
+  (psram_free stayed at its 14.6 MB boot value on the candidate board, so the
+  tier silently fell back to flash) and the board is slower than the tiered
+  build, not faster. Full-blob (12.8 MB) does not boot at all. The affordable
+  tier is the ~4.5 MB projections+phi span.

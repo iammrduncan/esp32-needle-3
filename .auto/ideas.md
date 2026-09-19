@@ -201,3 +201,16 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   PSRAM is free. Plan: at open, memcpy the hot projections (q/out/gate/k/v per
   layer) into PSRAM and hand those pointers to the GEMV instead of the mmap
   window; the PSRAM read path measured ~3x the mmap rate on the S3.
+- **Six more nulls on the main board or in verified parallel batches:**
+  FWHT 8-butterfly unroll, straight-line n=4 sinkhorn, kv_slot hoist out of the
+  attention inner loop, attention-gate sigmoid blocked by 4, LUT builder 2-wide,
+  restrict on rms_unit/zcrms. All byte-exact, all within +-0.05%. Instruction
+  scheduling and loop-overhead removal are DONE as levers on this firmware: at
+  3.76 tok/s every phase is now either bandwidth-bound or latency-bound in a way
+  the scheduler cannot fix. Only structural changes remain (core-1 coverage of
+  the serial stage, or fewer bytes per token).
+- **Process rule learned the hard way:** a parallel batch whose board1 control
+  did not match HEAD's last measured value was silently stale (cp-based resets
+  instead of git). From now: `git fetch && git reset --hard FETCH_HEAD` before
+  every batch, and verify the control's decode_tps equals the last logged value
+  before trusting any candidate delta.

@@ -349,47 +349,75 @@ typedef struct {
     uint32_t         ngroup, gbytes, gpairs, g, rowbytes;
 } lut2_ctx;
 
+/* Two rows per pass over the pair table's group slice.
+ *
+ * At g=128 a row is 16 packed bytes per group while the group's table slice is
+ * 512 floats, so a one-row-at-a-time walk moves the table ~32x more than the
+ * rows. Pairing rows halves that; the row pitch (192 B) is 4-aligned so both
+ * rows keep the aligned 32-bit load that made the single-row loop fast.
+ *
+ * Bit-exactness: the table pointer advances INSIDE the loop for both rows, each
+ * row keeps its own four accumulators across the group, and the fold is the
+ * same nf * ((s0+s1)+(s2+s3)) with nothing deferred past a group boundary. */
 static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
 {
     const lut2_ctx *c = (const lut2_ctx *)vc;
     uint32_t        r;
 
-    for (r = r0; r < r1; r++) {
-        const uint8_t  *row = c->packed + (size_t)r * c->rowbytes;
-        const uint16_t *nrm = c->norms + (size_t)r * c->ngroup;
-        float           acc = 0.0f;
+    for (r = r0; r < r1; r += 2) {
+        uint32_t        two  = (r + 1 < r1);
+        const uint8_t  *q0   = c->packed + (size_t)r * c->rowbytes;
+        const uint8_t  *q1   = q0 + c->rowbytes;
+        const uint16_t *nrm0 = c->norms + (size_t)r * c->ngroup;
+        const uint16_t *nrm1 = nrm0 + c->ngroup;
+        float           acc0 = 0.0f, acc1 = 0.0f;
         uint32_t        gi;
 
-        /* Same value as nd_f16(nrm[gi]), hoisted: nrm is read once per row and
-         * the conversion does not depend on the group's data. */
         for (gi = 0; gi < c->ngroup; gi++) {
-            float   nf = nd_f16(nrm[gi]);
-            float   s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
-            const uint8_t *qq = row + (size_t)gi * c->gbytes;
+            const uint8_t *p0 = q0 + (size_t)gi * c->gbytes;
+            const uint8_t *p1 = q1 + (size_t)gi * c->gbytes;
             const float   *T  = c->lut + (size_t)gi * c->gpairs * 16;
+            float  s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            float  t0 = 0.0f, t1 = 0.0f, t2 = 0.0f, t3 = 0.0f;
             uint32_t       j;
-            /* Two packed bytes (four pairs, 8 weights) per 32-bit load. Rows
-             * are group-aligned and g is a multiple of 8, so qq stays
-             * 4-aligned. Each pair k indexes the table slot block its own 4
-             * bits belong to, so the four accumulators see exactly the same
-             * entries in the same order as the byte-wise loop. */
+
             for (j = 0; j < c->g; j += 16) {
-                uint32_t w = ((const uint32_t *)(const void *)qq)[0];
-                qq += 4;
-                s0 += T[         w         & 15u];
-                s1 += T[16 + ((w >>  4)  & 15u)];
-                s2 += T[32 + ((w >>  8)  & 15u)];
-                s3 += T[48 + ((w >> 12)  & 15u)];
+                uint32_t w0 = ((const uint32_t *)(const void *)p0)[0];
+                p0 += 4;
+                s0 += T[         w0         & 15u];
+                s1 += T[16 + ((w0 >>  4)  & 15u)];
+                s2 += T[32 + ((w0 >>  8)  & 15u)];
+                s3 += T[48 + ((w0 >> 12)  & 15u)];
+                if (two) {
+                    uint32_t w1 = ((const uint32_t *)(const void *)p1)[0];
+                    p1 += 4;
+                    t0 += T[         w1         & 15u];
+                    t1 += T[16 + ((w1 >>  4)  & 15u)];
+                    t2 += T[32 + ((w1 >>  8)  & 15u)];
+                    t3 += T[48 + ((w1 >> 12)  & 15u)];
+                }
                 T += 64;
-                s0 += T[         (w >> 16) & 15u];
-                s1 += T[16 + ((w >> 20)  & 15u)];
-                s2 += T[32 + ((w >> 24)  & 15u)];
-                s3 += T[48 +  (w >> 28)];
+                s0 += T[         (w0 >> 16) & 15u];
+                s1 += T[16 + ((w0 >> 20)  & 15u)];
+                s2 += T[32 + ((w0 >> 24)  & 15u)];
+                s3 += T[48 +  (w0 >> 28)];
+                if (two) {
+                    /* Same word, re-read: p1 already advanced, so step back. */
+                    uint32_t w1 = ((const uint32_t *)(const void *)(p1 - 4))[0];
+                    t0 += T[         (w1 >> 16) & 15u];
+                    t1 += T[16 + ((w1 >> 20)  & 15u)];
+                    t2 += T[32 + ((w1 >> 24)  & 15u)];
+                    t3 += T[48 +  (w1 >> 28)];
+                }
                 T += 64;
             }
-            acc += nf * ((s0 + s1) + (s2 + s3));
+            acc0 += nd_f16(nrm0[gi]) * ((s0 + s1) + (s2 + s3));
+            if (two)
+                acc1 += nd_f16(nrm1[gi]) * ((t0 + t1) + (t2 + t3));
         }
-        c->y[r] = acc;
+        c->y[r] = acc0;
+        if (two)
+            c->y[r + 1] = acc1;
     }
 }
 

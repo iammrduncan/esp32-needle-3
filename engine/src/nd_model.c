@@ -965,19 +965,9 @@ static void engram_step(nd_model *m, uint32_t token)
                                                              m->eg_region_lo))
                                      : vf;
             nd_cq_lut_build(&m->c, m->tmp2, nd_cq_in_pad(kp), m->lut);
-            {
-                const uint8_t *kf = (const uint8_t *)nd_tier_ptr(m, kp);
-                const void    *kb = (m->eg_vpsram &&
-                                     kf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
-                                     kf + kp->nbytes <=
-                                         (const uint8_t *)m->c.base + m->eg_region_hi)
-                                     ? m->eg_vpsram + (kf - ((const uint8_t *)m->c.base +
-                                                             m->eg_region_lo))
-                                     : kf;
-            nd_cq_gemv_lut2(kp, kb, m->lut,
+            nd_cq_gemv_lut2(kp, nd_tier_ptr(m, kp), m->lut,
                             m->eg_k + (size_t)s * dm);
-            }
-            nd_cq_gemv_lut2(vp, vb, m->lut, vraw);
+            nd_cq_gemv_lut2(vp, nd_tier_ptr(m, vp), m->lut, vraw);
             }
         }
 

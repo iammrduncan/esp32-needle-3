@@ -404,20 +404,14 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                     if (beg < lo_p) lo_p = beg;
                 }
             }
-            /* EXPERIMENT: extend only to the engram key/value GEMVs, which a
-             * decode step reads IN FULL (unlike the tables, which are gathered).
-             * Stop before the logits pair, whose span pushed the allocation
-             * past what PSRAM can hold. */
-            {
-                uint32_t es;
-                for (es = 0; es < m->n_sites; es++) {
-                    size_t kend = (size_t)m->engram[es].key_proj.offset +
-                                  m->engram[es].key_proj.nbytes;
-                    size_t vend = (size_t)m->engram[es].value_proj.offset +
-                                  m->engram[es].value_proj.nbytes;
-                    if (kend > hi_p) hi_p = kend;
-                    if (vend > hi_p) hi_p = vend;
-                }
+            /* Stop after the last per-layer tensor. Widening the span to reach
+             * the engram key/value GEMVs (~10 MB) makes the PSRAM allocation
+             * fail at open and the board runs SLOWER than this build - measured,
+             * see the note below. */
+            if (m->mhc_phi_res.nbytes) {
+                size_t phi_end = (size_t)m->mhc_phi_res.offset +
+                                 m->mhc_phi_res.nbytes;
+                if (phi_end > hi_p) hi_p = phi_end;
             }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
@@ -873,6 +867,17 @@ static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
 
 /* k/v for the current token at every engram site. */
 
+static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
+{
+    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
+    if (!m->eg_vpsram)
+        return f;
+    if (t->offset >= m->eg_region_lo &&
+        t->offset + t->nbytes <= m->eg_region_hi)
+        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
+    return f;
+}
+
 static void engram_step(nd_model *m, uint32_t token)
 {
     uint32_t orders = m->c.h.num_orders;
@@ -936,7 +941,7 @@ static void engram_step(nd_model *m, uint32_t token)
             {
                 /* Point the walker at the PSRAM copy when this tensor's payload
                  * lies inside the staged region. */
-                const uint8_t *vf = (const uint8_t *)nd_cact_data(&m->c, vp);
+                const uint8_t *vf = (const uint8_t *)nd_tier_ptr(m, vp);
                 const void    *vb = (m->eg_vpsram &&
                                      vf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
                                      vf + vp->nbytes <=
@@ -946,7 +951,7 @@ static void engram_step(nd_model *m, uint32_t token)
                                      : vf;
             nd_cq_lut_build(&m->c, m->tmp2, nd_cq_in_pad(kp), m->lut);
             {
-                const uint8_t *kf = (const uint8_t *)nd_cact_data(&m->c, kp);
+                const uint8_t *kf = (const uint8_t *)nd_tier_ptr(m, kp);
                 const void    *kb = (m->eg_vpsram &&
                                      kf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
                                      kf + kp->nbytes <=
@@ -1182,17 +1187,6 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
     }
 }
 
-
-static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
-{
-    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
-    if (!m->eg_vpsram)
-        return f;
-    if (t->offset >= m->eg_region_lo &&
-        t->offset + t->nbytes <= m->eg_region_hi)
-        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
-    return f;
-}
 
 static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 {

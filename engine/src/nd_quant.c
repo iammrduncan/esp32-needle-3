@@ -300,20 +300,34 @@ ND_HOT void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,
     nd_parallel_rows(lutb_rows, &bc, in_pad / 2);
 }
 
-/* One group's contribution: 8 weights per iteration, four table lookups. */
+/* One group's contribution, eight pairs (16 weights) per 32-bit load.
+ *
+ * The packed 2-bit stream pairs weight i with weight i + g/2, so pair p lives
+ * at byte p/4 nibble (p%4) and the four nibbles of a word are pairs
+ * 4t, 4t+1, 4t+2, 4t+3. Each nibble indexes its own 16-entry block of the
+ * table, so reading a whole word and shifting it is the same four lookups the
+ * byte walk did, in the same order - and it quarters the loads on the row,
+ * which is the only stream this kernel cannot keep in a register.
+ * g is a multiple of 16 and the row is group-aligned, so the word read is
+ * in-bounds and 4-aligned. */
 static ND_HOT float dot_group_lut2(const uint8_t *q, const float *T, uint32_t g)
 {
     float    s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
     uint32_t j;
 
-    for (j = 0; j < g; j += 8) {
-        uint8_t b0 = q[0], b1 = q[1];
-        q += 2;
-        s0 += T[b0 & 15u];
-        s1 += T[16 + (b0 >> 4)];
-        s2 += T[32 + (b1 & 15u)];
-        s3 += T[48 + (b1 >> 4)];
+    for (j = 0; j < g; j += 16) {
+        uint32_t w = ((const uint32_t *)(const void *)q)[0];
+        q += 4;
+        s0 += T[          w  & 15u];
+        s1 += T[16 + ((w >>  4) & 15u)];
+        s2 += T[32 + ((w >>  8) & 15u)];
+        s3 += T[48 + ((w >> 12) & 15u)];
         T += 64;                      /* 4 pairs consumed */
+        s0 += T[          (w >> 16) & 15u];
+        s1 += T[16 + ((w >> 20) & 15u)];
+        s2 += T[32 + ((w >> 24) & 15u)];
+        s3 += T[48 +  (w >> 28)];
+        T += 64;                      /* next 4 pairs */
     }
     return (s0 + s1) + (s2 + s3);
 }

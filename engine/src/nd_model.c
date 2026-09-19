@@ -1381,7 +1381,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
     uint32_t n     = m->lanes;
     uint32_t nl    = n * dm;
     float    escale = sqrtf((float)dm);
-    uint32_t i, j, k, li;
+    uint32_t i, j, li;
 
     /* Rotary tables for this position, shared by every layer. */
     for (i = 0; i < m->qk_head_dim / 2; i++) {

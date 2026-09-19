@@ -292,3 +292,10 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   attention 38.6 (16%), hadamard 24.4 (10%), engram 20.6 (9%), mhc_phi4 13.5
   (6%), prep+lut 3.5, confpool ~0. The tier did not move proj2bit's share much:
   it is now PSRAM-bandwidth/latency bound rather than flash bound.
+- **A second PSRAM tier is worse than no second tier.** Staging the engram kv +
+  logits 768x768 tensors in a separate 2 MB buffer (main span untouched, psram_free
+  confirming it was live) measured 4.1367 vs the 4.185 plateau (-1.15%) on a board
+  that had just reproduced 4.185. Those tensors are read once per pass, not once
+  per token, so the extra PSRAM pages cost more (TLB/page pressure next to the
+  fp32 pool) than the occasional flash read they saved. Tier = the 4.49 MB
+  per-layer span, full stop.

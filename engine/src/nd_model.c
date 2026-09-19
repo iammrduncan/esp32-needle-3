@@ -1180,7 +1180,7 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
     }
 }
 
-static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
+static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
 {
     const nd_layer *L = &m->layer[li];
     uint32_t dm = m->d_model, n = m->c.h.hada_n, i, j;
@@ -1239,7 +1239,7 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * d3[i];
     kron_apply(m, m->hada_a, m->hada_b, fp[23], fp[24],
                L->w3a.shape[0], L->w3b.shape[0]);
-    for (i = 0; i < dm; i++) out[i] = m->hada_b[i] * d4[i];
+    /* the caller applies d4 and folds the residual add */
 }
 
 /* ------------------------------------------------------------------ block */
@@ -1281,12 +1281,17 @@ static void block(nd_model *m, uint32_t li, float *u)
 
     /* Hadamard MLP sub-block. The MLP writes into a padded buffer, so n2 must
      * hold next_pow2(d_model) floats; for d_model=512 that is exact. */
+    /* Hadamard MLP sub-block. Its d4 output scale and the residual add are
+     * fused into one pass: the kernel leaves the unscaled result in hada_b, so
+     * folding d4 into the add avoids writing dm scaled floats and reading them
+     * straight back. Same arithmetic per element. */
     { ND_T0(tm);
     zcrms(m, m->fp16_slot[li][13], u, dm, m->n1);
-    hadamard_mlp(m, li, m->n1, m->n2);
+    hadamard_mlp_unscaled(m, li, m->n1);
+    { const float *d4 = m->fp16_slot[li][18];
+      for (i = 0; i < dm; i++)
+          u[i] += m->hada_b[i] * d4[i]; }
     ND_T1(tm, ND_P_MLP); }
-    for (i = 0; i < dm; i++)
-        u[i] += m->n2[i];
 }
 
 /* ------------------------------------------------------------------- step */

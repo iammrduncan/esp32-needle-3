@@ -377,24 +377,36 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         m->eg_vpsram = NULL;
         m->eg_vpsram_len = 0;
         m->eg_region_lo = 0; m->eg_region_hi = 0;
-        /* Copy the whole engram weight region (both sites' key/value rows) into
-         * PSRAM once. 7.5 MB of the ~11.6 MB a decode token reads is engram
-         * GEMV traffic, so this is the only bandwidth lever with room in the
-         * 14.6 MB budget. The payload is byte-copied: the kernel's row walker
-         * sees exactly the same packed stream, only from PSRAM. */
-        for (ss3 = 0; ss3 < m->n_sites; ss3++) {
-            for (k3 = 1; k3 <= 2; k3++) {
-                nd_tensor  t3;
-                nd_cact_tensor(&m->c, base - m->n_sites * 4 + ss3 * 4 + k3, &t3);
-                if (t3.offset + t3.nbytes > m->eg_region_hi)
-                    m->eg_region_hi = (uint32_t)(t3.offset + t3.nbytes);
-                if (m->eg_region_lo == 0 || t3.offset < m->eg_region_lo)
-                    m->eg_region_lo = (uint32_t)t3.offset;
+        /* Stage the PER-LAYER CQ PROJECTIONS and the mHC phi tensors: that is
+         * what a decode token reads IN FULL. Blob-directory accounting matters
+         * here - the engram tables are 3.76 MB tensors but a token GATHERS only
+         * ~6 rows of each, so they are not the stream. The projection+phi span
+         * is ~4.5 MB, which fits PSRAM next to the fp32 weight pool. The payload
+         * is byte-copied, so no kernel sees a different value. */
+        {
+            uint32_t lj;
+            size_t   lo_p = (size_t)m->layer[0].q_proj.offset;
+            size_t   hi_p = lo_p;
+            for (lj = 0; lj < m->n_layers; lj++) {
+                const nd_layer *LL = &m->layer[lj];
+                const nd_tensor *vv[5] = { &LL->q_proj, &LL->k_proj,
+                                           &LL->v_proj, &LL->gate_proj,
+                                           &LL->out_proj };
+                uint32_t  k;
+                for (k = 0; k < 5; k++) {
+                    size_t end = (size_t)vv[k]->offset + vv[k]->nbytes;
+                    size_t beg = (size_t)vv[k]->offset;
+                    if (end > hi_p) hi_p = end;
+                    if (beg < lo_p) lo_p = beg;
+                }
             }
+            m->eg_region_lo = (uint32_t)lo_p;
+            m->eg_region_hi = (uint32_t)hi_p;
         }
+        (void)ss3; (void)k3;
         {
             size_t span = m->eg_region_hi - m->eg_region_lo;
-            if (span < 12u << 20) {
+            if (span < 9u << 20) {
                 m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
                 if (m->eg_vpsram) {
                     memcpy(m->eg_vpsram,
@@ -834,7 +846,19 @@ static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
     }
 }
 
+
 /* k/v for the current token at every engram site. */
+static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
+{
+    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
+    if (!m->eg_vpsram)
+        return f;
+    if (t->offset >= m->eg_region_lo &&
+        t->offset + t->nbytes <= m->eg_region_hi)
+        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
+    return f;
+}
+
 static void engram_step(nd_model *m, uint32_t token)
 {
     uint32_t orders = m->c.h.num_orders;
@@ -1167,10 +1191,10 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
       nd_cq_lut_build(&m->c, m->xh, nd_cq_in_pad(&L->q_proj), m->lut);
       ND_T1(tp, ND_P_PREP); }
     { ND_T0(tg);
-      nd_cq_gemv_lut2(&L->q_proj,    nd_cact_data(&m->c, &L->q_proj),    m->lut, m->q);
-      nd_cq_gemv_lut2(&L->k_proj,    nd_cact_data(&m->c, &L->k_proj),    m->lut, m->kbuf);
-      nd_cq_gemv_lut2(&L->v_proj,    nd_cact_data(&m->c, &L->v_proj),    m->lut, m->vbuf);
-      nd_cq_gemv_lut2(&L->gate_proj, nd_cact_data(&m->c, &L->gate_proj), m->lut, m->gate);
+      nd_cq_gemv_lut2(&L->q_proj,    nd_tier_ptr(m, &L->q_proj),    m->lut, m->q);
+      nd_cq_gemv_lut2(&L->k_proj,    nd_tier_ptr(m, &L->k_proj),    m->lut, m->kbuf);
+      nd_cq_gemv_lut2(&L->v_proj,    nd_tier_ptr(m, &L->v_proj),    m->lut, m->vbuf);
+      nd_cq_gemv_lut2(&L->gate_proj, nd_tier_ptr(m, &L->gate_proj), m->lut, m->gate);
       ND_T1(tg, ND_P_PROJ); }
 
     tap_projection(m, 4, m->q, m->q_hist, li, nh * qk_hd);
@@ -1257,7 +1281,7 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
       nd_cq_lut_build(&m->c, m->xh, nd_cq_in_pad(&L->out_proj), m->lut);
       ND_T1(tp2, ND_P_PREP); }
     { ND_T0(tg2);
-      nd_cq_gemv_lut2(&L->out_proj, nd_cact_data(&m->c, &L->out_proj), m->lut, out);
+      nd_cq_gemv_lut2(&L->out_proj, nd_tier_ptr(m, &L->out_proj), m->lut, out);
       ND_T1(tg2, ND_P_PROJ); }
 }
 
@@ -1590,13 +1614,13 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         ND_T0(tphi);
         nd_cq_prepare(&m->mhc_phi_pre, m->nx, m->xh);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_pre,
-                        nd_cact_data(&m->c, &m->mhc_phi_pre), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_pre), m->xh,
                         li * n, n, hpre);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_post,
-                        nd_cact_data(&m->c, &m->mhc_phi_post), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_post), m->xh,
                         li * n, n, hpost);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_res,
-                        nd_cact_data(&m->c, &m->mhc_phi_res), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_res), m->xh,
                         li * n * n, n * n, hres);
         ND_T1(tphi, ND_P_PHI);
 

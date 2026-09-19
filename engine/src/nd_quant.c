@@ -59,6 +59,29 @@ uint32_t nd_cq_scratch(const nd_tensor *t)
     return nd_cq_in_pad(t);
 }
 
+typedef struct { const float *cb, *xh; float *lut; } lutb_ctx;
+
+static ND_HOT void lutb_rows(void *vc, uint32_t p0, uint32_t p1)
+{
+    const lutb_ctx *c = (const lutb_ctx *)vc;
+    uint32_t        p;
+    /* Each pair's 16 entries depend only on that pair's two activation values,
+     * so pairs split across cores and every entry is the same expression,
+     * computed the same way, as in the sequential build. */
+    for (p = p0; p < p1; p++) {
+        float  x0 = c->xh[2 * p], x1 = c->xh[2 * p + 1];
+        float  a0 = c->cb[0] * x0, a1 = c->cb[1] * x0;
+        float  a2 = c->cb[2] * x0, a3 = c->cb[3] * x0;
+        float  b0 = c->cb[0] * x1, b1 = c->cb[1] * x1;
+        float  b2 = c->cb[2] * x1, b3 = c->cb[3] * x1;
+        float *T  = c->lut + (size_t)p * 16;
+        T[0]  = a0 + b0; T[1]  = a1 + b0; T[2]  = a2 + b0; T[3]  = a3 + b0;
+        T[4]  = a0 + b1; T[5]  = a1 + b1; T[6]  = a2 + b1; T[7]  = a3 + b1;
+        T[8]  = a0 + b2; T[9]  = a1 + b2; T[10] = a2 + b2; T[11] = a3 + b2;
+        T[12] = a0 + b3; T[13] = a1 + b3; T[14] = a2 + b3; T[15] = a3 + b3;
+    }
+}
+
 typedef struct { float *xh; uint32_t g; float scale; } fwht_ctx;
 
 static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
@@ -268,23 +291,13 @@ ND_HOT void nd_cq_gemv_prepared(const nd_cact *c, const nd_tensor *t, const void
 ND_HOT void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,
                             float *lut)
 {
-    const float *cb = nd_cact_codebook(c, 2);
-    uint32_t     p;
+    lutb_ctx bc = { nd_cact_codebook(c, 2), xh, lut };
 
     /* T[i0 | (i1 << 2)] = cb[i0]*xh[2p] + cb[i1]*xh[2p+1], matching the
-     * LSB-first packing (the low 2 bits of a nibble are the earlier weight). */
-    for (p = 0; p < in_pad / 2; p++) {
-        float  x0 = xh[2 * p];
-        float  x1 = xh[2 * p + 1];
-        float  a0 = cb[0] * x0, a1 = cb[1] * x0, a2 = cb[2] * x0, a3 = cb[3] * x0;
-        float  b0 = cb[0] * x1, b1 = cb[1] * x1, b2 = cb[2] * x1, b3 = cb[3] * x1;
-        float *T  = lut + (size_t)p * 16;
-
-        T[0]  = a0 + b0; T[1]  = a1 + b0; T[2]  = a2 + b0; T[3]  = a3 + b0;
-        T[4]  = a0 + b1; T[5]  = a1 + b1; T[6]  = a2 + b1; T[7]  = a3 + b1;
-        T[8]  = a0 + b2; T[9]  = a1 + b2; T[10] = a2 + b2; T[11] = a3 + b2;
-        T[12] = a0 + b3; T[13] = a1 + b3; T[14] = a2 + b3; T[15] = a3 + b3;
-    }
+     * LSB-first packing (the low 2 bits of a nibble are the earlier weight).
+     * Split by pair range: 512 independent 16-float entries at in_pad=1024, so
+     * the table the GEMV is about to read in full is built by both cores. */
+    nd_parallel_rows(lutb_rows, &bc, in_pad / 2);
 }
 
 /* One group's contribution: 8 weights per iteration, four table lookups. */

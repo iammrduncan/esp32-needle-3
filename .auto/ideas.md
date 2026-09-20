@@ -196,7 +196,12 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   + 2-row/8-accumulator CQ2 - this repo measured 2-row blocking (-0.7%) and
   packed-word row reads (+6.7%, kept), so that lever is already banked here.
 
-## Ledger of closed lever families (as of run #70, plateau 4.185 tok/s)
+## Historical ledger of closed lever families (as of run #70, plateau 4.185 tok/s)
+
+This ledger's old "converged/verification only" conclusion predates the active
+MimiModel follow-up queue. It closes only the families named below; it does not
+close Experiments 2-4 or 7-11. The authoritative next action is at the top of
+`.auto/prompt.md`.
 
 Every family below is measured on device with byte-exact goldens. Nothing in
 this list should be retried unless its stated blocking assumption changes.
@@ -225,8 +230,9 @@ this list should be retried unless its stated blocking assumption changes.
 - Remaining levers change WHAT is computed (quantisation, vocab, grammar,
   layers, clocks) and are forbidden by the rules.
 
-Treat 4.185 tok/s (+71.4% over the 2.44 baseline) as converged. Use further
-cycles for verification only.
+At run #70, treat 4.185 tok/s (+71.4% over the 2.44 baseline) as converged for
+the lever families listed in this historical section. Do not use that conclusion
+to skip the later MimiModel experiments tracked in `.auto/mimimodel-experiments.md`.
 - **BUILD-INTEGRITY RULE (learned by losing ~10 device runs): `-DCMAKE_C_FLAGS=...`
   on `idf.py build` does NOT rebuild anything.** The flag is already in
   CMakeCache from an earlier configure, so ninja sees no change and relinks the

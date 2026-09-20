@@ -208,6 +208,7 @@ static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
 static void sinkhorn(float *a, uint32_t n)
 {
     uint32_t it, i, j;
+    ND_T0(ts);
 
     for (it = 0; it < ND_SINKHORN; it++) {
         for (i = 0; i < n; i++) {           /* rows */
@@ -239,6 +240,7 @@ static void sinkhorn(float *a, uint32_t n)
     }
     for (i = 0; i < n * n; i++)
         a[i] = nd_expf(a[i]);
+    ND_T1(ts, ND_P_SINK);
 }
 
 /* ------------------------------------------------------------------- open */
@@ -1341,6 +1343,8 @@ static void tap_projection(nd_model *m, uint32_t tap_slot,
 
 static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 {
+    ND_T0(tax);
+
     const nd_layer *L    = &m->layer[li];
     uint32_t        qk_hd = m->qk_head_dim;
     uint32_t        v_hd = m->v_head_dim;
@@ -1368,17 +1372,24 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
       nd_cq_gemv_lut2(&L->gate_proj, nd_tier_ptr(m, &L->gate_proj), m->lut, m->gate);
       ND_T1(tg, ND_P_PROJ); }
 
+    { ND_T0(tt);
     tap_projection(m, 4, m->q, m->q_hist, li, nh * qk_hd);
     tap_projection(m, 5, m->kbuf, m->k_hist, li, m->k_dim);
     tap_projection(m, 6, m->vbuf, m->v_hist, li, m->v_dim);
+    ND_T1(tt, ND_P_TAPS); }
 
+    { ND_T0(th);
     zcrms_heads(m, m->fp16_slot[li][7], m->q, nh, qk_hd);
     zcrms_heads(m, m->fp16_slot[li][8], m->kbuf, nkv, qk_hd);
+    ND_T1(th, ND_P_HNORM); }
 
+    { ND_T0(tr);
     apply_rope(m, m->q, nh, qk_hd);
     apply_rope(m, m->kbuf, nkv, qk_hd);
+    ND_T1(tr, ND_P_ROPE); }
 
     /* Store this position's k/v as symmetric int8, one scale per head. */
+    { ND_T0(tv);
     for (kh = 0; kh < nkv; kh++) {
         float mk = 0.0f, mv = 0.0f;
         for (i = 0; i < qk_hd; i++) {
@@ -1400,6 +1411,7 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
                           m->vbuf + kh * v_hd, v_hd, vs);
         }
     }
+    ND_T1(tv, ND_P_KVST); }
 
     /* Attend to the pinned sinks [0, n_sink) plus the most recent
      * (window - n_sink) positions. With n_sink == 0 this is a plain sliding
@@ -1434,6 +1446,7 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
         nd_parallel_rows(attn_heads, &actx, nh);
     }
     ND_T1(ta, ND_P_ATTN); }
+    ND_T1(tax, ND_P_ATTNX);
 
     /* Gate, then project back to d_model. Split by column range: the 768
      * sigmoids per layer are the phase's only SFU work and every element is
@@ -1712,6 +1725,9 @@ static void block(nd_model *m, uint32_t li, float *u)
       for (i = 0; i < dm; i++)
           u[i] += m->hada_b[i] * d4[i]; }
     ND_T1(tm, ND_P_MLP); }
+    /* Everything a transformer block does that no named phase claims: the mHC
+     * lane mix and its Sinkhorn, the per-head norms, RoPE, KV quantisation and
+     * store, the conv taps, the gate sigmoids and the residual adds. */
 }
 
 /* ------------------------------------------------------------------- step */
@@ -1777,7 +1793,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         float a_res  = fp16_get(m, &m->mhc_a_res, li);
         uint32_t lane_id = li % n;
 
-        rms_unit(m->lane, nl, m->nx);
+        { ND_T0(x1); rms_unit(m->lane, nl, m->nx); ND_T1(x1, ND_P_MHCX); }
 
         /* The phi tensors stack all layers; this layer owns a row slice. */
         ND_T0(tphi);
@@ -1793,6 +1809,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
                         li * n * n, n * n, hres);
         ND_T1(tphi, ND_P_PHI);
 
+        { ND_T0(x2);
         for (j = 0; j < n; j++) {
             float pre_off  = 8.0f * (j == lane_id ? 1.0f : 0.0f) - 4.0f;
             float post_off = -4.0f * (j == lane_id ? 0.0f : 1.0f);
@@ -1803,19 +1820,24 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         }
         for (i = 0; i < n * n; i++)
             hres[i] = a_res * hres[i] + fp16_get(m, &m->mhc_b_res, li * n * n + i);
+        ND_T1(x2, ND_P_MHCX); }
         sinkhorn(hres, n);
 
         /* u = sum_j hpre[j] * lane[j] */
         {
             lanepre_ctx lp = { m->u, m->lane, hpre, n, dm };
+            ND_T0(x3);
             nd_parallel_rows(lanepre_rows, &lp, dm / 128);
+            ND_T1(x3, ND_P_MHCX);
         }
 
         /* y = block(u) - u */
         memcpy(m->ublk, m->u, sizeof(float) * dm);
-        block(m, li, m->u);
-        for (i = 0; i < dm; i++)
-            m->u[i] -= m->ublk[i];
+        { ND_T0(x4); block(m, li, m->u); ND_T1(x4, ND_P_BLOCK); }
+        { ND_T0(x5);
+          for (i = 0; i < dm; i++)
+              m->u[i] -= m->ublk[i];
+          ND_T1(x5, ND_P_MHCX); }
 
         /* lane' = hres @ lane + hpost * y */
         /* Loop order swapped: the n lanes are the short dimension, so the
@@ -1828,7 +1850,9 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
             lanemix_ctx lm = { m, hres, hpost, n, dm };
             /* Output lanes are independent (each reads all lanes but writes
              * only its own row), so the 4 lanes are 4 units of work. */
+            ND_T0(x6);
             nd_parallel_rows(lanemix_rows, &lm, n);
+            ND_T1(x6, ND_P_MHCX);
         }
         {
             float *swap = m->lane;
@@ -1838,17 +1862,20 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
 
         if (m->has_conf) {
             /* collect_hidden yields the mean over lanes for each layer. */
+            ND_T0(x7);
             for (i = 0; i < dm; i++) {
                 float acc = 0.0f;
                 for (j = 0; j < n; j++)
                     acc += m->lane[j * dm + i];
                 m->n1[i] = acc / (float)n;
             }
+            ND_T1(x7, ND_P_MHCX);
             { ND_T0(tc); pool_cell(m, m->n1); ND_T1(tc, ND_P_CONF); }
         }
     }
 
     /* Mean over lanes, final norm, tied-embedding logits. */
+    { ND_T0(x8);
     for (i = 0; i < dm; i++) {
         float acc = 0.0f;
         for (j = 0; j < n; j++)
@@ -1860,6 +1887,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
     fp16_row((const uint16_t *)nd_cact_data(&m->c, &m->final_norm), m->scale_f,
              dm);
     zcrms(m, m->scale_f, m->tmp, dm, m->y);
+    ND_T1(x8, ND_P_STEP); }
 
     m->pos++;
     return m->y;

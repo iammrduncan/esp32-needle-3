@@ -207,6 +207,29 @@ reused across Q/K/V/gate, Xtensa SIMD integer dot). Experiment 8's premise
 changed: the C kernel is no longer the baseline, so an integer path must now beat
 `tie1n`, not C.
 
+## Full per-token phase map (accepted 4.78 tok/s tree, boot-bench token = 201 ms)
+
+Measured with `AUTO_PROFILE=1` on board 3; timers added to `ND_P_*` are
+diagnostics only (ND_PROFILE is off in every measured image).
+
+| phase | ms/token | share | state |
+|---|---|---|---|
+| 2-bit GEMV total (`proj2bit`) | 86.5 | 43 % | TIE728 kernel in use; ~3 instructions/weight is the floor for this layout |
+|  - q/k/v/gate projections (inside `attention()`) | ~59 | 29 % | derived: `attn-stage` 101.8 - heads 36.7 - stage 5.1 |
+|  - out_proj + logits | ~27 | 13 % | same kernel |
+| attention head split | 36.7 | 18.3 % | products+exp bound; KV row staging already shared 6 ways |
+| Hadamard MLP | 24.6 | 12.2 % | of which `kron_apply` 11.1 - **GCC already emits `loop`+`lsi`+`madd.s`, no asm headroom** |
+| engram | 16.4 | 8.2 % | gathers (flash latency) + its own 2-bit GEMVs, which already use the asm kernel |
+| mHC phi (**4-bit** generic path) | 13.5 | 6.7 % | **~5 instructions/weight; the one clear arithmetic target left** |
+| attn stage: qkv taps 3.3, head norms 0.5, rope 0.2, kv store 1.1 | 5.1 | 2.5 % | all small; do not split anything here |
+| mHC mix 4.7, sinkhorn 4.3, prep+LUT 3.5, step tail 0.5, sampler 0.0, conf pool 0.0 | 13.0 | 6.5 % | sampler and conf pool are *free*; sinkhorn is exp-bound |
+| unattributed | ~14 | 7 % | per-layer glue, lane init, tier pointer math, timer overhead |
+
+Two things this map kills: the missing decode time is **not** per-request
+overhead, the sampler, the tokenizer or UART emit (sample = 0.0 ms, step tail
+0.5 ms), and it is **not** an unnamed attention stage (taps+norms+rope+KV store
+is 5.1 ms total). Do not go looking for it again; spend runs on the 4-bit path.
+
 ## External cross-checks
 - **Cross-check vs the independent MimiModel engine (memovai/mimimodel, Needle 2
   on ESP32-S3).** Its published optimization log agrees with everything measured

@@ -227,3 +227,20 @@ this list should be retried unless its stated blocking assumption changes.
 
 Treat 4.185 tok/s (+71.4% over the 2.44 baseline) as converged. Use further
 cycles for verification only.
+- **BUILD-INTEGRITY RULE (learned by losing ~10 device runs): `-DCMAKE_C_FLAGS=...`
+  on `idf.py build` does NOT rebuild anything.** The flag is already in
+  CMakeCache from an earlier configure, so ninja sees no change and relinks the
+  SAME binary; several "identical md5 for every variant" results were this, and
+  they were then flashed and measured as if they were candidates. Always either
+  `idf.py -B <fresh build dir>` per variant (verified: `grep -o
+  '-DND_TIER_SPAN_BYTES=[0-9]*u' <dir>/compile_commands.json` shows the flag AND
+  the md5 differs), or add the knob as a CMake `option()`/`target_compile_definitions`
+  in the component. Cross-check: two builds with different flags that produce the
+  same md5 means one of them is not what you think it is.
+- **PSRAM tier geometry, fully measured (span from lo_p; content = 4.39 MB):**
+  4.5 MB tight copy 4.185-4.1867, **12 MB 4.190-4.195 (accepted)**, 16 MB 4.107.
+  Copy order does not matter (ascending == lowest-block-last), and stride
+  512/2k/8k/16k/32k are all within noise of the same-span baseline. The one real
+  effect: with a span bigger than the content, the LAST bytes memcpy touched are
+  the ones the S3's copy engine leaves resident, so a padded span keeps the
+  tier's head hot. Do not re-derive this by changing strides again.

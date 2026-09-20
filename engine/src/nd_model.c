@@ -393,6 +393,23 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
 #ifndef ND_TIER_SPAN_BYTES
 #define ND_TIER_SPAN_BYTES (12u << 20)
 #endif
+/* Tier copy granularity (experiment). The tier is copied in STRIDE-sized
+ * blocks, LOWEST BLOCK LAST, so the bytes a token reads first are the bytes
+ * memcpy touched most recently: the S3 keeps its own copy source in the 32 KB
+ * internal cache, so a block copied last is still resident when decode starts
+ * walking the tier from its low end. The span itself stays at the content size
+ * (a bigger span costs dead copy bytes and measures slower). STRIDE is the knob
+ * that decides how much of the tier is still resident at first read; the copy
+ * cost is the same for any stride, so the optimum is cache-sized, not zero.
+ * STRIDE=0 (or a stride >= span) is the stock single ascending memcpy, which is
+ * the WORST order for this: it leaves the far end resident and the head cold. */
+#ifndef ND_TIER_STRIDE
+#define ND_TIER_STRIDE 8192
+#endif
+/* Bytes of the tier to copy before stopping (0/unset = copy it all). */
+#ifndef ND_TIER_LIMIT
+#define ND_TIER_LIMIT 0
+#endif
     {
         uint32_t ss3, k3;
         m->eg_vpsram = NULL;
@@ -441,8 +458,24 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                 if (phi_end > hi_p) hi_p = phi_end;
             }
             {
-                size_t want = lo_p + ND_TIER_SPAN_BYTES;
-                if (want > hi_p) hi_p = want;
+                size_t cap_end = hi_p;               /* end of staged CONTENT */
+                size_t want    = lo_p + ND_TIER_SPAN_BYTES;
+                /* The content always falls inside cap_end: past it the blob is
+                 * flash-mapped and no decode kernel reads it, so a larger span
+                 * buys no coverage, only copy bytes (measured: span 12 MB =
+                 * 4.190-4.193, span 16 MB = 4.107, because the dead tail
+                 * competes with the streaming reads it was meant to replace).
+                 * ND_TIER_SPAN_BYTES is therefore a copy-size KNOB: setting it
+                 * below the content measures copy cost at constant content, and
+                 * the stock default stages the whole content and then pads to
+                 * 12 MB, which is the measured optimum. */
+                if (want > cap_end) hi_p = want;
+#if defined(ND_TIER_TRACE) && ND_TIER_TRACE
+                printf("EVT tier span=%u content=%u\n",
+                       (unsigned)(hi_p - lo_p),
+                       (unsigned)(cap_end - lo_p));
+                fflush(stdout);
+#endif
             }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
@@ -460,8 +493,30 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             if (span < (ND_TIER_SPAN_BYTES) + (3u << 20)) {
                 m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
                 if (m->eg_vpsram) {
-                    memcpy(m->eg_vpsram,
-                           (const uint8_t *)m->c.base + m->eg_region_lo, span);
+                    {
+                        const uint8_t *src =
+                            (const uint8_t *)m->c.base + m->eg_region_lo;
+                        size_t   off    = span;
+                        size_t   stride = (size_t)ND_TIER_STRIDE;
+                        size_t   touched = 0;
+                        if (stride == 0 || stride > span) stride = span;
+                        do {
+                            size_t b = (off > stride) ? stride : off;
+                            size_t o = off - b;
+                            memcpy(m->eg_vpsram + o, src + o, b);
+#if defined(ND_TIER_LIMIT) && ND_TIER_LIMIT
+                            /* Touch budget: stop after this many bytes, so the
+                             * resident tail is the LAST ND_TIER_LIMIT bytes
+                             * copied = the LOW end of the tier. Cheaper than a
+                             * full copy and it keeps the head hot; the rest is
+                             * read from flash, which is what a span bigger than
+                             * the cache costs anyway. */
+                            touched += b;
+                            if (touched >= (size_t)ND_TIER_LIMIT) break;
+#endif
+                            off = o;
+                        } while (off);
+                    }
                     m->eg_vpsram_len = (uint32_t)span;
                 } else {
                     m->eg_region_lo = m->eg_region_hi = 0;

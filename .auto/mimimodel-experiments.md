@@ -96,6 +96,36 @@ projection shapes. Validate against the C result before integrating it.
 Decision: integrate only if the microkernel is consistently faster and its
 error stays inside the existing gates. A build-only result is not evidence.
 
+### Measured disposition (run #137, 2026-09-20): FASTER, integrated.
+
+`engine/src/lut2_tie728.S` + `esp32/main/kbench.c` (`NEEDLE_KBENCH` +
+`NEEDLE_KBENCH_ASM`), three boards, Needle 3's own pair tables and real blobs,
+isolated and two-core-split timings:
+
+| kernel | structure | saving vs C, split mode |
+|---|---|---|
+| `tie1`  | one row, 4 partials, 8 pairs (16 weights) per gather batch | **+32.4 %** |
+| `tie2`  | two rows interleaved, 4-deep | +25.7 % |
+| C       | `nd_lut2_rows_c` | - |
+
+`exact=768/768 bitexact=1` on 768x768, 576x768, 128x768 and 96x96 - the assembly
+is byte-identical to C, not merely inside the fidelity tolerance, because it
+keeps C's nibble order, C's four-partial fold and C's FP16->FP32 bit arithmetic.
+Alignment: needs the 4-byte packed-row alignment every CQ row already has, and
+group 128 (32 packed bytes, 64 pairs); `nd_lut2_asm_ok()` also refuses any norm
+whose FP16 exponent is 0 or 31, because the kernel inlines `nd_f16()`'s normal
+path only. Cost: 1 KB of internal RAM for the IRAM kernel.
+
+Two real bugs were found only by *synthetic* mapping checks (pair table set to
+1.0 and norms set to 1,2,3,... so a stride or order mistake shows up as an
+arithmetic difference, not a rounding one): `tie2` advanced its row cursors by
+one rowbytes per row *pair*, and a debug probe writing through `ctx->y` was
+silently corrupting the reference rows. Build traps worth not re-deriving:
+`call8` needs a `(16 + n_out_regs) * 4`-byte frame (64 bytes here corrupted
+a12/a13 and died in `retw` as a double exception with no usable panic), and a
+`.S` file cannot reference a `static` C function (`-mlongcalls`/LTO reports it
+as an undefined `ldext.S`).
+
 ## Experiment 3: integrate the winning TIE728 kernel narrowly
 
 Hypothesis: a microkernel win survives call overhead and the full decode path.
@@ -124,6 +154,27 @@ Starting from the correct microkernel, compare these as separate candidates:
 Keep instruction counts and alignment explicit in the notes. Use the third
 board for a second candidate only when both variants are ready; otherwise keep
 it as an additional control/noise check.
+
+### Measured disposition (run #138, 2026-09-20): one row wins; hoist the load only.
+
+Same microbenchmark, same image on three boards, all candidates bit-exact
+(`exact=768/768 bitexact=1`), board-to-board spread <= 0.1 pp on the 768x768
+split-mode number. Saving vs the C kernel:
+
+| variant | what changed | split-mode saving |
+|---|---|---|
+| `tie1n` | norm halfword `l16ui` moved to the top of the group | **+33.4 %** |
+| `tie1`  | accepted baseline (one row, 4 partials, 8-deep) | +32.4 % |
+| `tie1m` | whole FP16->FP32 conversion moved to the top | +32.3 % |
+| `tie1p` | four index words in flight through a8/a9 | +30.6 % |
+| `tie2`  | two rows interleaved, 4-deep | +25.7 % |
+
+So on this board: the *index* stream is already covered by the hardware load
+queue (deeper software prefetch actively hurts), row blocking loses a row stream
+worth more than the extra reuse, and the only latency that is not hidden is the
+per-group norm halfword on the *second* stream - moving just its load (not its
+conversion, which occupies issue slots and registers) buys +1.0 pp of saving,
+about +1.5 % kernel time. `tie1n` is the shipping kernel (run #138).
 
 ## Experiment 5: real async cross-operator overlap
 

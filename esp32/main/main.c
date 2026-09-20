@@ -99,6 +99,10 @@ static void worker_start(void)
 
 static int s_show_think = 1;   /* toggled from the host with "!think" */
 
+#ifdef ND_KBENCH
+int kbench_run(void);           /* esp32/main/kbench.c */
+#endif
+
 /* Prefill the constant part of the prompt once and snapshot it. Every request
  * then resumes from here, so only the query and the assistant header are
  * prefilled per turn - ~13 tokens instead of ~171. */
@@ -300,6 +304,18 @@ void app_main(void)
     const void                *blob = NULL;
     const char                *gerr = NULL;
     size_t                     model_bytes;
+
+#ifdef ND_KBENCH
+    /* Kernel microbenchmark build (MimiModel queue Experiment 2): time the CQ2
+     * row walkers against the handwritten ones, print it, and idle. The model
+     * caches are never warmed, so the run starts in seconds instead of minutes
+     * and the request loop never competes for the cores. */
+    vTaskDelay(pdMS_TO_TICKS(500));
+    kbench_run();
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+#endif
 
     vTaskDelay(pdMS_TO_TICKS(500));
     worker_start();

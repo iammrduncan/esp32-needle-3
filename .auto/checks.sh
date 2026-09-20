@@ -6,6 +6,12 @@ cd "$(dirname "$0")/.."
 AUTO_LOG_DIR=${AUTO_LOG_DIR:-$PWD/.auto/runs/local}
 mkdir -p "$AUTO_LOG_DIR"
 
+# Same guard as measure.sh: IDF_PATH can be set with the tools off PATH, which
+# turns every cmake/esptool call into an instant exit 127.
+if ! command -v cmake >/dev/null 2>&1; then
+    . /opt/esp/idf/export.sh >/dev/null 2>&1 || true
+fi
+
 # Host build of the engine must compile, and the repo's own tests must pass.
 cmake -S host -B host/build > "$AUTO_LOG_DIR/auto_chost.log" 2>&1
 cmake --build host/build -j8 >> "$AUTO_LOG_DIR/auto_chost.log" 2>&1 || {

@@ -157,6 +157,38 @@ void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,
 void nd_cq_gemv_lut2(const nd_tensor *t, const void *blob,
                             const float *lut, float *y);
 
+/* ---- the 2-bit row walker, shared with the handwritten microkernels -------
+ *
+ * The context the row walker reads. It is also the ABI of the handwritten
+ * kernels in engine/src/lut2_tie728.S, which hard-code these offsets, so the
+ * field order is load-bearing (kbench.c carries _Static_asserts for it).
+ * Exposed so the Experiment 2 microbenchmark can drive the very function the
+ * shipping path calls, instead of a copy that could drift from it. */
+typedef struct {
+    const uint8_t  *packed;
+    const uint16_t *norms;
+    const float    *lut;
+    float          *y;
+    uint32_t        ngroup, gbytes, gpairs, g, rowbytes;
+} nd_lut2_ctx;
+
+/* Fill a context exactly the way nd_cq_gemv_lut2() does. */
+void nd_lut2_fill(nd_lut2_ctx *c, const nd_tensor *t, const void *blob,
+                  const float *lut, float *y);
+
+/* The shipping row walker plus the two handwritten prototypes. All three have
+ * the nd_row_fn signature, so any of them can go through nd_parallel_rows. */
+void nd_lut2_rows_c(void *vc, uint32_t r0, uint32_t r1);
+void nd_lut2_rows_tie1(void *vc, uint32_t r0, uint32_t r1);
+void nd_lut2_rows_tie2(void *vc, uint32_t r0, uint32_t r1);
+
+/* Can the handwritten kernels take this tensor? They are specialised to the
+ * geometry every 2-bit tensor in needle3.cact uses (group 128, so 32 packed
+ * bytes and 64 pairs per group), need the 4-byte alignment every CQ row has,
+ * and do the inline FP16->FP32 conversion only, so no norm in the range may
+ * touch nd_f16_slow's subnormal/inf path. */
+int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1);
+
 /* A quad table (one byte -> one lookup -> four weights) was tried and removed:
  * it issues fewer instructions but forces group-outer iteration, which uses
  * only 32 bytes of every 64-byte cache line and measured 38% slower on the

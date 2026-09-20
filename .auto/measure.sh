@@ -23,7 +23,11 @@ if [ -z "${NEEDLE_BOARD:-}" ] && [ -d /root/board-pool ]; then
     FLASH_PORT=/dev/needle-pi/flash
     SERIAL_PORT=/dev/needle-pi/console
 fi
-[ -n "${IDF_PATH:-}" ] || . /opt/esp/idf/export.sh >/dev/null 2>&1
+# IDF_PATH can be exported while the tools are not on PATH (the experiment
+# harness does this); sourcing is then what makes idf.py/esptool findable.
+if ! command -v idf.py >/dev/null 2>&1; then
+    . /opt/esp/idf/export.sh >/dev/null 2>&1 || true
+fi
 FLASH_PORT=${FLASH_PORT:-/dev/ttyACM0}
 SERIAL_PORT=${SERIAL_PORT:-/dev/ttyACM1}
 

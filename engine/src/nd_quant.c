@@ -340,19 +340,13 @@ static void rows_serial(nd_row_fn fn, void *ctx, uint32_t nrows)
 
 void (*nd_parallel_rows)(nd_row_fn fn, void *ctx, uint32_t nrows) = rows_serial;
 
-typedef struct {
-    const nd_tensor *t;
-    const uint8_t   *packed;
-    const uint16_t  *norms;
-    const float     *lut;
-    float           *y;
-    uint32_t         ngroup, gbytes, gpairs, g, rowbytes;
-} lut2_ctx;
-
-static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
+/* Row walker for the 2-bit pair-table path; see nd_lut2_rows_c in the header.
+ * The context is shared with engine/src/lut2_tie728.S, so the field order in
+ * nd_lut2_ctx is part of the assembly ABI. */
+ND_HOT void nd_lut2_rows_c(void *vc, uint32_t r0, uint32_t r1)
 {
-    const lut2_ctx *c = (const lut2_ctx *)vc;
-    uint32_t        r;
+    const nd_lut2_ctx *c = (const nd_lut2_ctx *)vc;
+    uint32_t           r;
 
     for (r = r0; r < r1; r++) {
         const uint8_t  *row = c->packed + (size_t)r * c->rowbytes;
@@ -393,28 +387,75 @@ static ND_HOT void lut2_rows(void *vc, uint32_t r0, uint32_t r1)
     }
 }
 
+#if ND_LUT2_ASM
+/* nd_lut2_asm_ok() walks every norm in the row range, and a projection runs once
+ * per token, so asking it on every call would cost more than the kernel saves.
+ * Its answer depends only on the geometry and on the packed/norm blob - both set
+ * in stone once the model is mapped - so it is remembered per (blob, rows). */
+static const void *s_asm_blob;
+static uint32_t    s_asm_rows;
+static int         s_asm_ok;
+
+static int lut2_asm_usable(const nd_lut2_ctx *c, const void *blob, uint32_t rows)
+{
+    if (blob != s_asm_blob || rows != s_asm_rows) {
+        s_asm_ok   = nd_lut2_asm_ok(c, 0, rows);
+        s_asm_blob = blob;
+        s_asm_rows = rows;
+    }
+    return s_asm_ok;
+}
+#endif
+
 ND_HOT void nd_cq_gemv_lut2(const nd_tensor *t, const void *blob,
                             const float *lut, float *y)
 {
+    nd_lut2_ctx ctx;
+    nd_row_fn   fn = nd_lut2_rows_c;
+
+    nd_lut2_fill(&ctx, t, blob, lut, y);
+#if ND_LUT2_ASM
+    fn = lut2_asm_usable(&ctx, blob, t->shape[0]) ? nd_lut2_rows_tie1
+                                                 : nd_lut2_rows_c;
+#endif
+    nd_parallel_rows(fn, &ctx, t->shape[0]);
+}
+
+ND_HOT void nd_lut2_fill(nd_lut2_ctx *c, const nd_tensor *t, const void *blob,
+                         const float *lut, float *y)
+{
     const uint8_t *packed   = (const uint8_t *)blob;
     uint32_t       out      = t->shape[0];
-    uint32_t       g        = t->group;
-    uint32_t       rowbytes = nd_cq_row_bytes(t);
-    lut2_ctx       ctx;
 
-    ctx.t        = t;
-    ctx.packed   = packed;
-    ctx.norms    = (const uint16_t *)(const void *)(packed +
-                       (size_t)out * rowbytes);
-    ctx.lut      = lut;
-    ctx.y        = y;
-    ctx.ngroup   = nd_cq_groups(t);
-    ctx.g        = g;
-    ctx.gbytes   = g / 4;              /* 2 bits per weight */
-    ctx.gpairs   = g / 2;
-    ctx.rowbytes = rowbytes;
+    c->packed   = packed;
+    c->norms    = (const uint16_t *)(const void *)(packed +
+                      (size_t)out * nd_cq_row_bytes(t));
+    c->lut      = lut;
+    c->y        = y;
+    c->ngroup   = nd_cq_groups(t);
+    c->g        = t->group;
+    c->gbytes   = t->group / 4;        /* 2 bits per weight */
+    c->gpairs   = t->group / 2;
+    c->rowbytes = nd_cq_row_bytes(t);
+}
 
-    nd_parallel_rows(lut2_rows, &ctx, out);
+int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1)
+{
+    uint32_t r, gi;
+    /* The specialised geometry of every 2-bit tensor in this model. */
+    if (c->g != 128u || c->gbytes != 32u || c->gpairs != 64u)
+        return 0;
+    if ((((uintptr_t)c->packed) & 3u) != 0u)
+        return 0;
+    /* nd_f16()'s inline path cannot see subnormals or inf/nan; the C kernel
+     * calls nd_f16_slow() for those, so the blob has to be free of them. */
+    for (r = r0; r < r1; r++)
+        for (gi = 0; gi < c->ngroup; gi++) {
+            uint32_t e = (c->norms[(size_t)r * c->ngroup + gi] >> 10) & 0x1Fu;
+            if (e == 0u || e == 0x1Fu)
+                return 0;
+        }
+    return 1;
 }
 
 typedef struct { const uint8_t *packed; const uint16_t *norms;

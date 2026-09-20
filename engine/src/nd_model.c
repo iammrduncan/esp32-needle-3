@@ -393,23 +393,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
 #ifndef ND_TIER_SPAN_BYTES
 #define ND_TIER_SPAN_BYTES (12u << 20)
 #endif
-/* Tier copy granularity (experiment). The tier is copied in STRIDE-sized
- * blocks, LOWEST BLOCK LAST, so the bytes a token reads first are the bytes
- * memcpy touched most recently: the S3 keeps its own copy source in the 32 KB
- * internal cache, so a block copied last is still resident when decode starts
- * walking the tier from its low end. The span itself stays at the content size
- * (a bigger span costs dead copy bytes and measures slower). STRIDE is the knob
- * that decides how much of the tier is still resident at first read; the copy
- * cost is the same for any stride, so the optimum is cache-sized, not zero.
- * STRIDE=0 (or a stride >= span) is the stock single ascending memcpy, which is
- * the WORST order for this: it leaves the far end resident and the head cold. */
-#ifndef ND_TIER_STRIDE
-#define ND_TIER_STRIDE 8192
-#endif
-/* Bytes of the tier to copy before stopping (0/unset = copy it all). */
-#ifndef ND_TIER_LIMIT
-#define ND_TIER_LIMIT 0
-#endif
+
     {
         uint32_t ss3, k3;
         m->eg_vpsram = NULL;
@@ -483,40 +467,18 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         (void)ss3; (void)k3;
         {
             size_t span = m->eg_region_hi - m->eg_region_lo;
-            /* The span ceiling is measured, and it is cache pressure rather
-             * than allocation: 9 MB does NOT allocate (the tier falls back to
-             * stock flash reads), 12 MB allocates and is the fastest tier seen,
-             * 16 MB allocates only by squeezing out the router and decodes at
-             * 4.107 - 1.9% BELOW the 4.5 MB tier, because the copy then competes
-             * with the streaming reads it was meant to replace. So the tier
-             * stops here; do not widen it without re-measuring decode_tps. */
+            /* The span ceiling is measured, not guessed: 4.61 MB (exactly the
+             * staged content) = 4.1867 tok/s, 12 MB = 4.190-4.195, 16 MB = 4.107.
+             * Copy order and granularity make no difference (ascending equals
+             * lowest-block-last; strides 512 B to 32 KB are within +-0.05%), so
+             * the padded span's advantage is that memcpy's own reads leave the
+             * tier head resident when decode starts - the last bytes it touched.
+             * Do not widen past 12 MB without re-measuring decode_tps. */
             if (span < (ND_TIER_SPAN_BYTES) + (3u << 20)) {
                 m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
                 if (m->eg_vpsram) {
-                    {
-                        const uint8_t *src =
-                            (const uint8_t *)m->c.base + m->eg_region_lo;
-                        size_t   off    = span;
-                        size_t   stride = (size_t)ND_TIER_STRIDE;
-                        size_t   touched = 0;
-                        if (stride == 0 || stride > span) stride = span;
-                        do {
-                            size_t b = (off > stride) ? stride : off;
-                            size_t o = off - b;
-                            memcpy(m->eg_vpsram + o, src + o, b);
-#if defined(ND_TIER_LIMIT) && ND_TIER_LIMIT
-                            /* Touch budget: stop after this many bytes, so the
-                             * resident tail is the LAST ND_TIER_LIMIT bytes
-                             * copied = the LOW end of the tier. Cheaper than a
-                             * full copy and it keeps the head hot; the rest is
-                             * read from flash, which is what a span bigger than
-                             * the cache costs anyway. */
-                            touched += b;
-                            if (touched >= (size_t)ND_TIER_LIMIT) break;
-#endif
-                            off = o;
-                        } while (off);
-                    }
+                    memcpy(m->eg_vpsram,
+                           (const uint8_t *)m->c.base + m->eg_region_lo, span);
                     m->eg_vpsram_len = (uint32_t)span;
                 } else {
                     m->eg_region_lo = m->eg_region_hi = 0;

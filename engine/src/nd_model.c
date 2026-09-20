@@ -393,13 +393,17 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
 #ifndef ND_TIER_SPAN_BYTES
 #define ND_TIER_SPAN_BYTES (12u << 20)
 #endif
-/* Copy granularity for the tier. Measured: the S3's copy engine leaves the
- * source bytes it touched last resident in the internal cache, so a span
- * bigger than the staged content pays off by warming the tier HEAD - which is
- * the part decode reads first. STRIDE sets how much is touched per block;
- * ND_TIER_ASC=1 copies ascending instead (order vs granularity probe). */
+/* Tier copy granularity (measured, not decorative). A span bigger than the
+ * staged content pays off because memcpy leaves the source bytes it touched
+ * last resident in the S3's internal cache, and decode reads the tier's low
+ * end first - so the span's padding is effectively a cache prime. Breaking the
+ * copy into STRIDE-sized blocks was measured across 128 B..64 kB, ascending and
+ * low-block-last: 4096 B blocks are the best of the family (4.190-4.195 against
+ * a 4.185 stock control, six head-to-head batches) because each block ends its
+ * own L1/L2 pass instead of a single 12 MB sweep evicting its own head. Stride
+ * 0 (or >= span) is one memcpy, which measures no better than the tight copy. */
 #ifndef ND_TIER_STRIDE
-#define ND_TIER_STRIDE (12u << 20)
+#define ND_TIER_STRIDE 4096
 #endif
 
     {
@@ -463,6 +467,17 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                  * 12 MB, which is the measured optimum. */
                 if (want > cap_end) hi_p = want;
 #if defined(ND_TIER_TRACE) && ND_TIER_TRACE
+                /* Is the tied embedding (logits + gather rows) inside the
+                 * staged span? It is read EVERY token, so it is the biggest
+                 * remaining tier candidate. */
+                printf("EVT dir emb=%u..%u in_span=%d q0=%u content_end=%u\n",
+                       (unsigned)m->embedding.offset,
+                       (unsigned)(m->embedding.offset + m->embedding.nbytes),
+                       (int)(m->embedding.offset >= lo_p &&
+                             (size_t)m->embedding.offset + m->embedding.nbytes
+                                 <= cap_end),
+                       (unsigned)m->layer[0].q_proj.offset,
+                       (unsigned)cap_end);
                 printf("EVT tier span=%u content=%u\n",
                        (unsigned)(hi_p - lo_p),
                        (unsigned)(cap_end - lo_p));

@@ -1112,7 +1112,7 @@ static ND_HOT void tap_rows(void *vc, uint32_t b0, uint32_t b1)
  * across cores exactly like GEMV rows. */
 typedef struct {
     nd_model *m;
-    uint32_t  li, nkv, rep, qk_hd, v_hd, sinks, rfirst, rcount;
+    uint32_t  li, nkv, rep, nh, qk_hd, v_hd, sinks, rfirst, rcount;
     float     scale;
 } attn_ctx;
 
@@ -1131,136 +1131,187 @@ static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
     }
 }
 
-static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
+static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
 {
-    const attn_ctx *c   = (const attn_ctx *)vc;
-    nd_model       *m   = c->m;
+    const attn_ctx *c     = (const attn_ctx *)vc;
+    nd_model       *m     = c->m;
     uint32_t        qk_hd = c->qk_hd;
-    uint32_t        v_hd = c->v_hd;
-    uint32_t        nkv = c->nkv;
-    uint32_t        li  = c->li;
-    uint32_t        h, i;
+    uint32_t        v_hd  = c->v_hd;
+    uint32_t        nkv   = c->nkv;
+    uint32_t        rep   = c->rep;
+    uint32_t        g, t, i, run, p;
+    /* Both rows of a pair, converted once for the whole KV group. ND_KV_HD_CAP
+     * is the largest head dimension the model uses (v_head_dim 64); the staging
+     * costs ~1 kB of the caller's stack, which is why it is not in the model
+     * struct: each core runs this function on its own group. */
+    float kf0[ND_KV_HD_CAP], kf1[ND_KV_HD_CAP];
+    float vf0[ND_KV_HD_CAP], vf1[ND_KV_HD_CAP];
+    float mx[ND_KV_REP_CAP], denom[ND_KV_REP_CAP];
+    float *ohp[ND_KV_REP_CAP];
 
-    for (h = h0; h < h1; h++) {
-        const float *qh  = m->q + (size_t)h * qk_hd;
-        float       *oh  = m->attn + (size_t)h * v_hd;
-        uint32_t     kvh = h / c->rep;
-        float        mx = -INFINITY, denom = 0.0f;
-        uint32_t     run, p;
+    /* Units are query heads, the way the splitter wants them: a KV group would
+     * be nkv=2 units, and rows_dual_core runs anything whose half is below two
+     * on one core (measured: attention on one core cost the whole staged win and
+     * 12% of decode). Head ranges land on KV-group boundaries here, so each core
+     * owns whole groups and keeps the row sharing; a range that cuts a group in
+     * half still works, with fewer heads sharing each staged row. */
+    for (g = hlo / rep; g <= (hhi - 1) / rep; g++) {
+        uint32_t hstart = (g * rep > hlo) ? g * rep : hlo;
+        uint32_t gend   = (g + 1) * rep;
+        uint32_t hend   = (gend < hhi) ? gend : hhi;
+        uint32_t nhg    = hend - hstart;
+        size_t   kbase0 = (size_t)c->li * m->window;
 
-        memset(oh, 0, sizeof(float) * v_hd);
+        if (nhg > ND_KV_REP_CAP)
+            nhg = ND_KV_REP_CAP;            /* not this model; keeps the arrays bounded */
+
+        for (t = 0; t < nhg; t++) {
+            mx[t]    = -INFINITY;
+            denom[t] = 0.0f;
+            ohp[t]   = m->attn + (size_t)(hstart + t) * v_hd;
+            memset(ohp[t], 0, sizeof(float) * v_hd);
+        }
 
         for (run = 0; run < 2; run++) {
             uint32_t base  = run ? c->rfirst : 0;
             uint32_t count = run ? c->rcount : c->sinks;
 
-            /* Two positions per iteration. The same two scores are compared
-             * against the running max in slot order, so "a is the new max" and
-             * "then b is" is the same pair of rescales in the same order;
-             * "a is, b is not" folds to exp(b-mx_new), which is what the
-             * one-at-a-time loop computed; "neither" rescales by
-             * exp(m_old-m_new) once instead of not at all, which is the
-             * normalisation this loop does at the end anyway. */
+            /* Two positions per iteration, unchanged: the same two scores are
+             * compared against each head's running max in slot order, so the
+             * rescale sequence per head is exactly what the paired loop did
+             * before this function learned to share a row. */
             for (p = 0; p + 1 < count; p += 2) {
                 uint32_t      sl0 = kv_slot(m, base + p);
                 uint32_t      sl1 = kv_slot(m, base + p + 1);
-                size_t        o0  = (size_t)li * m->window + sl0;
-                size_t        o1  = (size_t)li * m->window + sl1;
-                const int8_t *kp0 = m->k_cache + o0 * m->k_dim + (size_t)kvh * qk_hd;
-                const int8_t *kp1 = m->k_cache + o1 * m->k_dim + (size_t)kvh * qk_hd;
-                const int8_t *vp0 = m->v_cache + o0 * m->v_dim + (size_t)kvh * v_hd;
-                const int8_t *vp1 = m->v_cache + o1 * m->v_dim + (size_t)kvh * v_hd;
-                float         sc0 = m->k_scale[o0 * nkv + kvh] * c->scale;
-                float         sc1 = m->k_scale[o1 * nkv + kvh] * c->scale;
-                float         s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
+                size_t        o0  = kbase0 + sl0;
+                size_t        o1  = kbase0 + sl1;
+                const int8_t *kp0 = m->k_cache + o0 * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *kp1 = m->k_cache + o1 * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *vp0 = m->v_cache + o0 * m->v_dim + (size_t)g * v_hd;
+                const int8_t *vp1 = m->v_cache + o1 * m->v_dim + (size_t)g * v_hd;
+                float         sc0 = m->k_scale[o0 * nkv + g] * c->scale;
+                float         sc1 = m->k_scale[o1 * nkv + g] * c->scale;
+                float         vs0 = m->v_scale[o0 * nkv + g];
+                float         vs1 = m->v_scale[o1 * nkv + g];
 
-                /* One 32-bit load per four K bytes. qk_head_dim (48) and the
-                 * k_cache row pitch are multiples of 4, so the word loads are
-                 * aligned. Products are added to each score in the same pairs,
-                 * in the same index order, as the byte-wise loop did. */
+                /* The only thing this pass adds: one 32-bit load per four bytes
+                 * and one conversion per cache value, for the whole group,
+                 * instead of once per query head. (float)(int8_t) of the byte is
+                 * the same value the inline unpack produced. */
                 for (i = 0; i < qk_hd; i += 4) {
                     uint32_t a = ((const uint32_t *)(const void *)kp0)[i >> 2];
                     uint32_t b = ((const uint32_t *)(const void *)kp1)[i >> 2];
-                    s0 += qh[i + 0] * (float)(int8_t)(a & 0xff)
-                        + qh[i + 1] * (float)(int8_t)((a >> 8) & 0xff);
-                    s0 += qh[i + 2] * (float)(int8_t)((a >> 16) & 0xff)
-                        + qh[i + 3] * (float)(int8_t)(a >> 24);
-                    s1 += qh[i + 0] * (float)(int8_t)(b & 0xff)
-                        + qh[i + 1] * (float)(int8_t)((b >> 8) & 0xff);
-                    s1 += qh[i + 2] * (float)(int8_t)((b >> 16) & 0xff)
-                        + qh[i + 3] * (float)(int8_t)(b >> 24);
+                    kf0[i + 0] = (float)(int8_t)(a & 0xff);
+                    kf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+                    kf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+                    kf0[i + 3] = (float)(int8_t)(a >> 24);
+                    kf1[i + 0] = (float)(int8_t)(b & 0xff);
+                    kf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+                    kf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+                    kf1[i + 3] = (float)(int8_t)(b >> 24);
                 }
-                s0 *= sc0;
-                s1 *= sc1;
+                for (i = 0; i < v_hd; i += 4) {
+                    uint32_t a = ((const uint32_t *)(const void *)vp0)[i >> 2];
+                    uint32_t b = ((const uint32_t *)(const void *)vp1)[i >> 2];
+                    vf0[i + 0] = (float)(int8_t)(a & 0xff);
+                    vf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+                    vf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+                    vf0[i + 3] = (float)(int8_t)(a >> 24);
+                    vf1[i + 0] = (float)(int8_t)(b & 0xff);
+                    vf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+                    vf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+                    vf1[i + 3] = (float)(int8_t)(b >> 24);
+                }
 
-                mnew = (s0 > s1) ? s0 : s1;
-                if (mnew > mx) {
-                    if (denom > 0.0f) {
-                        rescale = nd_expf(mx - mnew);
-                        for (i = 0; i < v_hd; i++)
-                            oh[i] *= rescale;
-                        denom *= rescale;
+                for (t = 0; t < nhg; t++) {
+                    const float *qh = m->q + (size_t)(hstart + t) * qk_hd;
+                    float       *oh = ohp[t];
+                    float s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
+
+                    for (i = 0; i < qk_hd; i += 4) {
+                        s0 += qh[i + 0] * kf0[i + 0] + qh[i + 1] * kf0[i + 1];
+                        s0 += qh[i + 2] * kf0[i + 2] + qh[i + 3] * kf0[i + 3];
+                        s1 += qh[i + 0] * kf1[i + 0] + qh[i + 1] * kf1[i + 1];
+                        s1 += qh[i + 2] * kf1[i + 2] + qh[i + 3] * kf1[i + 3];
                     }
-                    mx = mnew;
-                }
-                w0 = nd_expf(s0 - mx);
-                w1 = nd_expf(s1 - mx);
-                denom += w0 + w1;
-                {
-                    float wv0 = w0 * m->v_scale[o0 * nkv + kvh];
-                    float wv1 = w1 * m->v_scale[o1 * nkv + kvh];
-                    /* One 32-bit load per four V bytes. v_head_dim (64) and the
-                     * v_cache row pitch are multiples of 4, so vp0/vp1 are
-                     * 4-aligned and the loop covers v_hd exactly. The scalar
-                     * loop's per-element order is preserved: each oh[] entry
-                     * still receives its wv0 term and then its wv1 term, and no
-                     * accumulator is re-associated. Byte-identical goldens, same
-                     * probe value. */
-                    for (i = 0; i < v_hd; i += 4) {
-                        uint32_t a = ((const uint32_t *)(const void *)vp0)[i >> 2];
-                        uint32_t b = ((const uint32_t *)(const void *)vp1)[i >> 2];
-                        oh[i + 0] += wv0 * (float)(int8_t)(a & 0xff);
-                        oh[i + 0] += wv1 * (float)(int8_t)(b & 0xff);
-                        oh[i + 1] += wv0 * (float)(int8_t)((a >> 8) & 0xff);
-                        oh[i + 1] += wv1 * (float)(int8_t)((b >> 8) & 0xff);
-                        oh[i + 2] += wv0 * (float)(int8_t)((a >> 16) & 0xff);
-                        oh[i + 2] += wv1 * (float)(int8_t)((b >> 16) & 0xff);
-                        oh[i + 3] += wv0 * (float)(int8_t)(a >> 24);
-                        oh[i + 3] += wv1 * (float)(int8_t)(b >> 24);
+                    s0 *= sc0;
+                    s1 *= sc1;
+
+                    mnew = (s0 > s1) ? s0 : s1;
+                    if (mnew > mx[t]) {
+                        if (denom[t] > 0.0f) {
+                            rescale = nd_expf(mx[t] - mnew);
+                            for (i = 0; i < v_hd; i++)
+                                oh[i] *= rescale;
+                            denom[t] *= rescale;
+                        }
+                        mx[t] = mnew;
+                    }
+                    w0 = nd_expf(s0 - mx[t]);
+                    w1 = nd_expf(s1 - mx[t]);
+                    denom[t] += w0 + w1;
+                    {
+                        float wv0 = w0 * vs0;
+                        float wv1 = w1 * vs1;
+                        /* Same per-element order as before: each oh[] entry gets
+                         * its wv0 term and then its wv1 term. */
+                        for (i = 0; i < v_hd; i += 4) {
+                            oh[i + 0] += wv0 * vf0[i + 0];
+                            oh[i + 0] += wv1 * vf1[i + 0];
+                            oh[i + 1] += wv0 * vf0[i + 1];
+                            oh[i + 1] += wv1 * vf1[i + 1];
+                            oh[i + 2] += wv0 * vf0[i + 2];
+                            oh[i + 2] += wv1 * vf1[i + 2];
+                            oh[i + 3] += wv0 * vf0[i + 3];
+                            oh[i + 3] += wv1 * vf1[i + 3];
+                        }
                     }
                 }
             }
-            if (p < count) {                    /* odd tail, unchanged path */
+            if (p < count) {                    /* odd tail, one row to stage */
                 uint32_t      sl = kv_slot(m, base + p);
-                size_t        o  = (size_t)li * m->window + sl;
-                const int8_t *kp = m->k_cache + o * m->k_dim + (size_t)kvh * qk_hd;
-                const int8_t *vp = m->v_cache + o * m->v_dim + (size_t)kvh * v_hd;
-                float         dot = 0.0f, w;
+                size_t        o  = kbase0 + sl;
+                const int8_t *kp = m->k_cache + o * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *vp = m->v_cache + o * m->v_dim + (size_t)g * v_hd;
+                float         sc = m->k_scale[o * nkv + g] * c->scale;
+                float         vs = m->v_scale[o * nkv + g];
 
                 for (i = 0; i < qk_hd; i++)
-                    dot += qh[i] * (float)kp[i];
-                dot *= m->k_scale[o * nkv + kvh] * c->scale;
+                    kf0[i] = (float)kp[i];
+                for (i = 0; i < v_hd; i++)
+                    vf0[i] = (float)vp[i];
 
-                if (dot > mx) {
-                    if (denom > 0.0f) {
-                        float r = nd_expf(mx - dot);
-                        for (i = 0; i < v_hd; i++)
-                            oh[i] *= r;
-                        denom *= r;
+                for (t = 0; t < nhg; t++) {
+                    const float *qh = m->q + (size_t)(hstart + t) * qk_hd;
+                    float       *oh = ohp[t];
+                    float         dot = 0.0f, w;
+
+                    for (i = 0; i < qk_hd; i++)
+                        dot += qh[i] * kf0[i];
+                    dot *= sc;
+
+                    if (dot > mx[t]) {
+                        if (denom[t] > 0.0f) {
+                            float r = nd_expf(mx[t] - dot);
+                            for (i = 0; i < v_hd; i++)
+                                oh[i] *= r;
+                            denom[t] *= r;
+                        }
+                        mx[t] = dot;
                     }
-                    mx = dot;
-                }
-                w = nd_expf(dot - mx);
-                denom += w;
-                {
-                    float wv = w * m->v_scale[o * nkv + kvh];
-                    for (i = 0; i < v_hd; i++)
-                        oh[i] += wv * (float)vp[i];
+                    w = nd_expf(dot - mx[t]);
+                    denom[t] += w;
+                    {
+                        float wv = w * vs;
+                        for (i = 0; i < v_hd; i++)
+                            oh[i] += wv * vf0[i];
+                    }
                 }
             }
         }
-        {
-            float inv = 1.0f / denom;
+        for (t = 0; t < nhg; t++) {
+            float inv = 1.0f / denom[t];
+            float *oh = ohp[t];
             for (i = 0; i < v_hd; i++)
                 oh[i] *= inv;
         }
@@ -1362,6 +1413,7 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
         actx.li     = li;
         actx.nkv    = nkv;
         actx.rep    = nh / nkv;
+        actx.nh     = nh;
         actx.qk_hd  = qk_hd;
         actx.v_hd   = v_hd;
         actx.scale  = 1.0f / sqrtf((float)qk_hd);
@@ -1376,6 +1428,9 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
                 actx.rcount = rcap;
             actx.rfirst = m->pos + 1 - actx.rcount;
         }
+        /* Units are KV groups now: the six query heads of a group share their K
+         * and V rows, so a group is the smallest unit that keeps that sharing.
+         * With 12 heads over 2 KV groups the two cores still get six heads each. */
         nd_parallel_rows(attn_heads, &actx, nh);
     }
     ND_T1(ta, ND_P_ATTN); }
@@ -1491,6 +1546,7 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
                        const float *a, const float *b,
                        uint32_t na, uint32_t nb)
 {
+    ND_T0(tk);
     /* Both halves split over cores. The first half's reuse is the column-major
      * a-row, so it runs 4 rows x 2 j columns per pass (its measured optimum) and
      * hands the 8 independent row-blocks to the splitter. The second half's
@@ -1507,6 +1563,7 @@ static void kron_apply(nd_model *m, const float *src, float *dst,
         kc.m = m; kc.dst = dst; kc.b = b; kc.na = na; kc.nb = nb;
         nd_parallel_rows(kron2_rows, &kc, na);
     }
+    ND_T1(tk, ND_P_KRON);
 }
 
 typedef struct { float *a; const float *d2, *b2, *sc; } silu_ctx;

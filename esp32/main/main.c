@@ -90,7 +90,10 @@ static void worker_start(void)
 {
     s_go   = xSemaphoreCreateBinary();
     s_done = xSemaphoreCreateBinary();
-    xTaskCreatePinnedToCore(worker_task, "nd_worker", 4096, NULL,
+    /* 8 kB, not the 4 kB this ran on before attn_heads learned to stage a KV
+     * pair: the staged rows put 1.4 kB of frame on whichever core attends, and
+     * at 4 kB the profiled build overflowed it and never reached EVT ready. */
+    xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
                             configMAX_PRIORITIES - 2, NULL, 1);
     nd_parallel_rows = rows_dual_core;
 }
@@ -396,7 +399,8 @@ void app_main(void)
                  * to every layer and the output is noise during a demo. */
                 static const char *PN[ND_P_COUNT] = {
                     "proj2bit", "attention", "hadamard", "mhc_phi4",
-                    "engram", "logits4", "prep+lut", "confpool" };
+                    "engram", "logits4", "prep+lut", "confpool",
+                                         "  of-mlp:kron" };
                 int p;
                 for (p = 0; p < ND_P_COUNT; p++)
                     printf("EVT prof %-10s %8.1f ms  %5.1f%%\n", PN[p],

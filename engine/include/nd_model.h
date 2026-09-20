@@ -223,8 +223,17 @@ void nd_model_logits_subset(nd_model *m, const float *hidden,
  * Indices: 0 attn projections (2-bit LUT), 1 attention itself, 2 Hadamard MLP,
  * 3 mHC phi (4-bit), 4 engram, 5 logits (4-bit), 6 prepare+LUT build,
  * 7 confidence pool. */
+/* Bounds for attn_heads' per-KV-group staging arrays: head dimensions are
+ * model-shaped, and the caps keep the function's frame fixed regardless. */
+#define ND_KV_HD_CAP   64
+#define ND_KV_REP_CAP  8
+
 enum { ND_P_PROJ, ND_P_ATTN, ND_P_MLP, ND_P_PHI, ND_P_ENGRAM,
-       ND_P_LOGITS, ND_P_PREP, ND_P_CONF, ND_P_COUNT };
+       ND_P_LOGITS, ND_P_PREP, ND_P_CONF,
+       /* Sub-phase of ND_P_MLP: the three Kronecker halves are the only part of
+        * the Hadamard MLP that is a dense matmul, so this separates the
+        * matmul-bound mass from the gather/SiLU/softmax mass. */
+       ND_P_KRON, ND_P_COUNT };
 extern uint64_t nd_prof[ND_P_COUNT];
 
 /* Calibrated confidence over everything fed so far, in [0,1].

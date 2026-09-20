@@ -385,6 +385,14 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
      * value_proj rows (750 KB each site, walked in full every token that the
      * engram fires on). Byte-identical payload, so the kernel output cannot
      * differ; only the memory the bytes come from changes. */
+    /* How far past the projections the staged span reaches. Measured on device:
+     * 4.5 MB (phi only) = 4.185 tok/s, 12 MB = 4.195, 16 MB = 4.107. The win
+     * saturates and then reverses, so this is a tuned ceiling, not a slack one.
+     * A build with a span that cannot allocate just leaves the region unset and
+     * reads from flash, so this knob fails safe. */
+#ifndef ND_TIER_SPAN_BYTES
+#define ND_TIER_SPAN_BYTES (12u << 20)
+#endif
     {
         uint32_t ss3, k3;
         m->eg_vpsram = NULL;
@@ -417,28 +425,39 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                     if (beg < lo_p) lo_p = beg;
                 }
             }
-            /* Stop at phi. Widening the span across the engram tables to reach
-             * their key/value GEMVs lands at ~10.1 MB, which PSRAM cannot hold
-             * next to the fp32 pool: the allocation fails at open (psram_free in
-             * EVT ready stays at its 14.6 MB boot value) and decode drops back
-             * to 4.11. Measured, not guessed. */
+            /* Extend past phi into the engram block. The earlier note here said
+             * "~10.1 MB, PSRAM cannot hold it, the allocation fails at open" -
+             * that reading came from a build whose span override never actually
+             * applied (psram_free in EVT ready was unchanged, which is exactly
+             * what a fallback looks like). Measured with a probe that prints the
+             * span it was given and the pointer it got: 15.7 MB of PSRAM is free
+             * at this point, and a 12 MB span DOES allocate and DOES pay (+0.24%
+             * decode, +0.24% extended, byte-exact on 12/12 cases). So the tier
+             * reaches ND_TIER_SPAN_BYTES past the projections; the ceiling is
+             * cache/footprint, not allocation (see the copy below). */
             if (m->mhc_phi_res.nbytes) {
                 size_t phi_end = (size_t)m->mhc_phi_res.offset +
                                  m->mhc_phi_res.nbytes;
                 if (phi_end > hi_p) hi_p = phi_end;
             }
+            {
+                size_t want = lo_p + ND_TIER_SPAN_BYTES;
+                if (want > hi_p) hi_p = want;
+            }
             m->eg_region_lo = (uint32_t)lo_p;
             m->eg_region_hi = (uint32_t)hi_p;
-            /* Span ceiling is MEASURED: the projections+phi span (~4.5 MB) fits
-             * and pays +1.5%. Widening it to include the engram key/value GEMVs
-             * and the logits pair (10.08 MB) makes the allocation fail at open
-             * and the board runs slower than this build; a 12.8 MB span does not
-             * boot at all. So the tier deliberately stops at the per-layer block. */
         }
         (void)ss3; (void)k3;
         {
             size_t span = m->eg_region_hi - m->eg_region_lo;
-            if (span < 9u << 20) {
+            /* The span ceiling is measured, and it is cache pressure rather
+             * than allocation: 9 MB does NOT allocate (the tier falls back to
+             * stock flash reads), 12 MB allocates and is the fastest tier seen,
+             * 16 MB allocates only by squeezing out the router and decodes at
+             * 4.107 - 1.9% BELOW the 4.5 MB tier, because the copy then competes
+             * with the streaming reads it was meant to replace. So the tier
+             * stops here; do not widen it without re-measuring decode_tps. */
+            if (span < (ND_TIER_SPAN_BYTES) + (3u << 20)) {
                 m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
                 if (m->eg_vpsram) {
                     memcpy(m->eg_vpsram,

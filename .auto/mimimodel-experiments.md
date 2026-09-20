@@ -276,6 +276,20 @@ kernel streams packed 2-bit indices and selects float table entries. Its learned
 changes numerics. The following experiments are therefore quality-gated
 prototypes after the MimiModel profiling/assembly/overlap work above.
 
+## Experiment 3b follow-up: attention KV row staging (run #139, 2026-09-20)
+
+Kept: `attn_heads` stages each position pair's K and V rows once per KV group and
+shares them with the group's six query heads. +0.70 % decode (4.745 -> 4.7783),
+byte-exact everywhere, fidelity probe unchanged. Two facts came out of it that
+matter more than the number:
+
+- `rows_dual_core()` in `esp32/main/main.c` runs the callback on **one core**
+  whenever `nrows / 2 < 2`. Using KV groups as parallel units (nrows = 2) put the
+  whole attention phase on core 0 and cost 12 % of decode. Any split with fewer
+  than four units is silently single-core.
+- The staged frame is ~1.4 kB, so the second core's task stack went 4096 -> 8192;
+  at 4 kB the profiled build overflowed it and never printed EVT ready.
+
 ## Experiment 8: CQ2 integer-path feasibility microbenchmark
 
 Hypothesis: quantizing the prepared Hadamard activation once can replace much

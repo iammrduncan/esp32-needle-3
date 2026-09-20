@@ -227,7 +227,15 @@ static void run_inference(const char *query, int phase)
 
     t0 = esp_timer_get_time();
     for (i = 0; i < MAX_NEW; i++) {
+#ifdef ND_PROFILE
+        uint64_t s_t0 = esp_timer_get_time();
+#endif
         uint32_t id = nd_sample_hidden(&s_model, &smp, lg);
+#ifdef ND_PROFILE
+        /* The constrained sampler is per generated token, so it is part of every
+         * tok/s number, and no model phase accounted for it. */
+        nd_prof[ND_P_SAMPLE] += esp_timer_get_time() - s_t0;
+#endif
         char     piece[256];
         uint32_t k;
 
@@ -400,7 +408,9 @@ void app_main(void)
                 static const char *PN[ND_P_COUNT] = {
                     "proj2bit", "attention", "hadamard", "mhc_phi4",
                     "engram", "logits4", "prep+lut", "confpool",
-                                         "  of-mlp:kron" };
+                                         "  of-mlp:kron", "whole block", "sinkhorn",
+                                         "mhc-mix", "step-tail", "sample", "attn-stage",
+                                         "qkv taps", "head norms", "rope", "kv store" };
                 int p;
                 for (p = 0; p < ND_P_COUNT; p++)
                     printf("EVT prof %-10s %8.1f ms  %5.1f%%\n", PN[p],

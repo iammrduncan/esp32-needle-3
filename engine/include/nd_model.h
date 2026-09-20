@@ -233,7 +233,23 @@ enum { ND_P_PROJ, ND_P_ATTN, ND_P_MLP, ND_P_PHI, ND_P_ENGRAM,
        /* Sub-phase of ND_P_MLP: the three Kronecker halves are the only part of
         * the Hadamard MLP that is a dense matmul, so this separates the
         * matmul-bound mass from the gather/SiLU/softmax mass. */
-       ND_P_KRON, ND_P_COUNT };
+       ND_P_KRON,
+       /* ND_P_BLOCK wraps a whole transformer block, so BLOCK minus the named
+        * phases is the lane mix / norms / rope / KV store / residual mass.
+        * ND_P_SINK is the mHC Sinkhorn on its own. */
+       ND_P_BLOCK, ND_P_SINK,
+       /* ND_P_MHCX is the mHC bookkeeping that no earlier phase owns: the lane
+        * RMS, the gate sigmoids, the pre-combine, the block delta and the lane
+        * mix. ND_P_STEP is the per-token tail (mean over lanes, final norm,
+        * embedding), ND_P_SAMPLE the constrained sampler. */
+       ND_P_MHCX, ND_P_STEP, ND_P_SAMPLE,
+       /* ND_P_ATTNX wraps all of attention(), so ATTNX - ATTN is the stage that
+        * runs before the head split: the QKV conv taps, per-head norms, RoPE and
+        * the int8 KV store. */
+       ND_P_ATTNX,
+       /* The stage between the QKV projections and the head split, in pieces:
+        * history conv taps, per-head RMSNorms, RoPE, int8 KV store. */
+       ND_P_TAPS, ND_P_HNORM, ND_P_ROPE, ND_P_KVST, ND_P_COUNT };
 extern uint64_t nd_prof[ND_P_COUNT];
 
 /* Calibrated confidence over everything fed so far, in [0,1].

@@ -91,7 +91,7 @@ static nd_cact        s_c;
 static const uint8_t *s_base;
 static uint32_t       s_mhz_x100;
 static int            s_nkern;
-static kb_kernel      s_kern[3];
+static kb_kernel      s_kern[6];
 
 /* ---- second core, so a measurement can look like production ---------------
  * The firmware splits every row range in half and runs the upper half on core 1
@@ -314,7 +314,7 @@ static void bench_shape(const kb_shape *sh)
     float      *xh, *lut, *yref, *ytmp;
     nd_lut2_ctx cx, cxi;
     uint32_t    in_pad, lutn, words, i, k, m;
-    static uint32_t res[KB_NMODES][3][KB_ROUNDS];
+    static uint32_t res[KB_NMODES][6][KB_ROUNDS];
     int         idx, fast_ok;
 
     idx = find_tensor(sh->rows, &t);
@@ -532,8 +532,17 @@ int kbench_run(void)
     s_kern[s_nkern].tag = "tie1";
     s_kern[s_nkern].fn  = nd_lut2_rows_tie1;
     s_nkern++;
-    s_kern[s_nkern].tag = "tie2";
+    s_kern[s_nkern].tag = "tie2";   /* row blocking: measured worse, kept for the record */
     s_kern[s_nkern].fn  = nd_lut2_rows_tie2;
+    s_nkern++;
+    s_kern[s_nkern].tag = "tie1p";
+    s_kern[s_nkern].fn  = nd_lut2_rows_tie1p;
+    s_nkern++;
+    s_kern[s_nkern].tag = "tie1n";
+    s_kern[s_nkern].fn  = nd_lut2_rows_tie1n;
+    s_nkern++;
+    s_kern[s_nkern].tag = "tie1m";
+    s_kern[s_nkern].fn  = nd_lut2_rows_tie1m;
     s_nkern++;
 #endif
 

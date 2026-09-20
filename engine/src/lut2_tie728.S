@@ -73,6 +73,22 @@
 	wfr	\fpd, \t1
 	.endm
 
+/* Same conversion, from a halfword the caller loaded earlier: the norm blob is a
+ * separate stream from the index stream, and NF16 sits at the bottom of every
+ * group, so its load latency lands as a bubble between groups. */
+	.macro	NF16V v, fpd, t1, t2
+	extui	\t1, \v, 10, 5
+	extui	\t2, \v, 15, 1
+	extui	\v,  \v, 0, 10
+	slli	\v,  \v, 13
+	addi	\t1, \t1, 112
+	slli	\t1, \t1, 23
+	slli	\t2, \t2, 31
+	or	\v,  \v, \t1
+	or	\v,  \v, \t2
+	wfr	\fpd, \v
+	.endm
+
 /* Fold one row's four partials into its running total, in C's order. */
 	.macro	FOLD s0, s1, s2, s3, acc, nf
 	add.s	\s0, \s0, \s1
@@ -472,3 +488,283 @@ nd_lut2_probe_load_lat:
 	ssi	f0, a2, 0
 	retw.n
 	.size	nd_lut2_probe_load_lat, . - nd_lut2_probe_load_lat
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant A: one row, four index words in flight (a8/a9 are the two
+ registers the gather scratch does not touch). The accumulation order is exactly
+ tie1's, so the result must be bit-identical; only the load schedule moves.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1p, "ax", @progbits
+	.global	nd_lut2_rows_tie1p
+	.type	nd_lut2_rows_tie1p,@function
+nd_lut2_rows_tie1p:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltp_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltp_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Ltp_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Ltp_group:
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	l32i	a8,  a5, 8
+	l32i	a9,  a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	W8D	a8,  0,   f0, f1, f2, f3
+	W8D	a9,  512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	l32i	a8,  a5, 24
+	l32i	a9,  a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	W8D	a8,  0,   f0, f1, f2, f3
+	W8D	a9,  512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	NF16	a6, f4, a10, a11, a13
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Ltp_gend
+	j	.Ltp_group			/* j reaches; bnez cannot (>.5 kB) */
+.Ltp_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Ltp_ret
+	j	.Ltp_row
+.Ltp_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1p, . - nd_lut2_rows_tie1p
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant B: tie1 with the per-group norm halfword l16ui'd at the
+ * top of the group instead of at the bottom, so its load overlaps the gather.
+ * Same arithmetic in the same order, so the result is bit-identical.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1n, "ax", @progbits
+	.global	nd_lut2_rows_tie1n
+	.type	nd_lut2_rows_tie1n,@function
+nd_lut2_rows_tie1n:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltn_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltn_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Ltn_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Ltn_group:
+	l16ui	a8, a6, 0			/* this group's norm, loaded early */
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 8
+	l32i	a11, a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 24
+	l32i	a11, a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	NF16V	a8, f4, a10, a11
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Ltn_gend
+	j	.Ltn_group			/* j reaches; bnez cannot (>.5 kB) */
+.Ltn_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Ltn_ret
+	j	.Ltn_row
+.Ltn_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1n, . - nd_lut2_rows_tie1n
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant C: the whole FP16->FP32 norm conversion, not just its
+ * load, happens at the top of the group and lands in f4. The fold at the bottom
+ * then has no dependency left on the norm stream. Same value, same order.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1m, "ax", @progbits
+	.global	nd_lut2_rows_tie1m
+	.type	nd_lut2_rows_tie1m,@function
+nd_lut2_rows_tie1m:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltm_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltm_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Ltm_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Ltm_group:
+	l16ui	a8, a6, 0			/* this group's norm, loaded early */
+	NF16V	a8, f4, a10, a11		/* ... and converted early too: the FOLD
+		* at the bottom only needs f4. a10/a11 are scratch here, they
+		* are reloaded with the first index word right after. */
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 8
+	l32i	a11, a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 24
+	l32i	a11, a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Ltm_gend
+	j	.Ltm_group			/* j reaches; bnez cannot (>.5 kB) */
+.Ltm_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Ltm_ret
+	j	.Ltm_row
+.Ltm_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1m, . - nd_lut2_rows_tie1m

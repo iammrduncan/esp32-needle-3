@@ -178,6 +178,35 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
 - Everything measured since the lane-mix split is inside +-0.15%: the two-core
   lever is closed. Reverted the rope split to keep the tree minimal.
 
+## Experiment 2/3/4 CLOSED (run #137-#138): the TIE728 assembly kernel is in
+
+**+13.0 % decode (4.190 -> 4.735 tok/s, +93.9 % over baseline), byte-exact.**
+`engine/src/lut2_tie728.S` `nd_lut2_rows_tie1n` replaces the C row walker for
+every 2-bit projection whose geometry/alignment/norms pass `nd_lut2_asm_ok()`
+(all of them in needle3.cact), selected inside `nd_cq_gemv_lut2` before
+`nd_parallel_rows`, C path retained as fallback, guarded by CMake option
+`NEEDLE_LUT2_ASM` (ON). Microkernel saving vs C on real tables: +33.4 % cycles
+saved in split mode, `exact=out/out bitexact=1` on 768x768 / 576x768 / 128x768 /
+96x96. Cost 1 KB IRAM. Full notes in `.auto/mimimodel-experiments.md`.
+
+Kernel structure that measured best (do not re-derive): one output row per call;
+four independent partials `f0..f3`; eight `lsi` gather loads per index word
+batched at the top; nibble -> address with `extui`+`addx4` (2 instructions per
+slot, that is the floor for this table layout); `add.s` into four partials, fold
+`(s0+s1)+(s2+s3)` then one `madd.s` with the group norm; the group's norm
+halfword `l16ui`'d at the *top* of the group. Losing variants, all bit-exact,
+all reproducible on three boards: deeper index prefetch (-1.9 pp), two-row
+blocking (-6.7 pp), early norm *conversion* (-1.1 pp vs hoisting the load only),
+and `lsi` cannot reach a whole group with immediates (field caps at 1020 bytes,
+so a per-group table base advance of 0x1000 is illegal - three `addi` per group
+is the floor).
+
+Remaining open work in this family: Experiments 7-11 (compiler floating-point
+candidate, CQ2 integer path, compact quantised pair-LUT, one quantised activation
+reused across Q/K/V/gate, Xtensa SIMD integer dot). Experiment 8's premise
+changed: the C kernel is no longer the baseline, so an integer path must now beat
+`tie1n`, not C.
+
 ## External cross-checks
 - **Cross-check vs the independent MimiModel engine (memovai/mimimodel, Needle 2
   on ESP32-S3).** Its published optimization log agrees with everything measured

@@ -415,8 +415,8 @@ ND_HOT void nd_cq_gemv_lut2(const nd_tensor *t, const void *blob,
 
     nd_lut2_fill(&ctx, t, blob, lut, y);
 #if ND_LUT2_ASM
-    fn = lut2_asm_usable(&ctx, blob, t->shape[0]) ? nd_lut2_rows_tie1
-                                                 : nd_lut2_rows_c;
+    fn = lut2_asm_usable(&ctx, blob, t->shape[0]) ? nd_lut2_rows_tie1n
+                                                  : nd_lut2_rows_c;
 #endif
     nd_parallel_rows(fn, &ctx, t->shape[0]);
 }

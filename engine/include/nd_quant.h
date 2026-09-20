@@ -181,6 +181,9 @@ void nd_lut2_fill(nd_lut2_ctx *c, const nd_tensor *t, const void *blob,
 void nd_lut2_rows_c(void *vc, uint32_t r0, uint32_t r1);
 void nd_lut2_rows_tie1(void *vc, uint32_t r0, uint32_t r1);
 void nd_lut2_rows_tie2(void *vc, uint32_t r0, uint32_t r1);
+void nd_lut2_rows_tie1p(void *vc, uint32_t r0, uint32_t r1);
+void nd_lut2_rows_tie1n(void *vc, uint32_t r0, uint32_t r1);
+void nd_lut2_rows_tie1m(void *vc, uint32_t r0, uint32_t r1);
 
 /* Can the handwritten kernels take this tensor? They are specialised to the
  * geometry every 2-bit tensor in needle3.cact uses (group 128, so 32 packed

@@ -250,3 +250,9 @@ cycles for verification only.
   indistinguishable. Keep one memcpy, keep the 12 MB span. The 14 MB span does
   NOT boot: a 14 MB allocation succeeds but the tier copy then exceeds the bench
   harness's window (no EVT ready at all, twice). Family CLOSED.
+- **Tier span ceiling is the ALLOCATION, not cache: 12 MB is the maximum that
+  boots.** 13 MB and 14 MB never reach EVT ready (clean rebuilt images, two
+  boards, two spans); 12 MB boots everywhere and reads 2,052,252 B free. The
+  earlier "16 MB boots at 4.107" reading came from a stale pre-reset tree.
+  Conclusion: the span is at its ceiling and stride/order/limit variants cannot
+  add value. The 12 MB span + single memcpy is final.

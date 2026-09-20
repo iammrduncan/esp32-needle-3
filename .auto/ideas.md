@@ -193,8 +193,9 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   ends: int16 PIE assembly (slower - unpack dominates over 2-bit decode),
   linear-space Sinkhorn (underflows), and a two-token blocked CQ2 kernel
   (only 1.11x for a lot of state). Its TIE728 note is about aligned float loads
-  + 2-row/8-accumulator CQ2 - this repo measured 2-row blocking (-0.7%) and
-  packed-word row reads (+6.7%, kept), so that lever is already banked here.
+  + a handwritten 2-row/8-accumulator CQ2 kernel. This repo's C row blocking
+  (-0.7%) and packed-word row reads (+6.7%, kept) are not an equivalent test;
+  the exact assembly microkernel remains open as Experiment 2.
 
 ## Historical ledger of closed lever families (as of run #70, plateau 4.185 tok/s)
 

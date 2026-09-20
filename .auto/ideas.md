@@ -75,6 +75,23 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   device speed in either direction. The earlier tap_projection part of this
   entry remains genuinely untried (see below).
 
+- **MimiModel queue lever (overlap the gate projection with the Q/K path on core
+  1): UNSAFE, not taken.** Two independent reasons, both measured on device.
+  (1) The schedule itself is a data race: the gate job writes m->gate[half:out]
+  while core 1's attention-head split reads and writes around m->gate, so the
+  rows core 1 consumes are not stable. That is exactly what the
+  `EVT ERR async-overlap` tripwire exists to catch.
+  (2) It also exposed a REAL latent hazard in the splitter that is now fixed in
+  main.c: the worker gave s_done on EVERY wake and a second splitter shared the
+  same s_go/s_done pair, so a wake could be taken by the wrong waiter, which
+  then read rows the worker had not written. One serialized job slot (fn
+  published before the wake, cleared after it runs, s_done given only for a job
+  that ran) removes the whole class. Verified: pristine tree 4.185 / 12-12
+  byte-exact on the same board that had been showing 0/12, so no stock-code
+  regression ever existed - every divergence was harness-local.
+  Lesson for this repo: any new cross-core job must go through the single job
+  slot, and no job may run concurrently with an nd_parallel_rows split.
+
 ## Measured dead ends (fill in as found)
 
 - **fp32 staging of the Monarch Kronecker factors (w1a..w3b) + d2/b2/d3/d4:

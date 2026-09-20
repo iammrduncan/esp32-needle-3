@@ -256,3 +256,15 @@ cycles for verification only.
   earlier "16 MB boots at 4.107" reading came from a stale pre-reset tree.
   Conclusion: the span is at its ceiling and stride/order/limit variants cannot
   add value. The 12 MB span + single memcpy is final.
+- **Experiment 5 (async cross-operator overlap) - CANNOT WORK with this job
+  slot, and the tripwire proves it quantitatively.** Overlapping the pair-table
+  build (the only per-layer job whose inputs are ready and whose output is not
+  consumed by a split) left it in flight until attention, and the very next
+  `nd_parallel_rows` fired the guard 3543 times in one run: the table is 16 KB,
+  its build is ~2 us, and the q/k/v GEMVs that follow each take ~30 us - the job
+  is over before it could ever hide anything, so there is no schedule that both
+  overlaps and avoids the slot collision. The gate-projection variant of the
+  same idea was already shown to race the attention-head split on m->gate.
+  Two independent schedules, two structural failures: with row-level splitting
+  already covering every GEMV, there is no independent per-layer work left for a
+  second core. Closed.

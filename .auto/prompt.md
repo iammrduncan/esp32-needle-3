@@ -1,5 +1,80 @@
 # Autoresearch: Needle 3 decode tokens/second on ESP32-S3 (N32R16)
 
+## Active campaign -- authoritative after context compaction
+
+This section is the source of truth for choosing work. It overrides older
+"converged", "verification only", and "nothing left" notes elsewhere in the
+repository. Read `.auto/mimimodel-experiments.md` completely before editing.
+
+**NEXT: complete Experiment 2, the isolated TIE728 CQ2 microkernel proof.** Do
+not choose another optimization until Experiment 2 has a measured, documented
+disposition. A normal firmware build, a C-only row-blocking change, or another
+memory-tier sweep does not count as Experiment 2.
+
+Campaign status:
+
+- Experiment 1 is complete: CQ2 projections are about 48% of decode time, so
+  the assembly and integer-path work is justified.
+- Experiments 2-4 are incomplete.
+- Experiment 5 is complete and rejected: the one worker job slot collides with
+  the row splitter, and the gate schedule also races shared state.
+- Experiment 6 is not applicable because Experiment 5 was structurally invalid,
+  not correct-but-neutral.
+- Experiments 7-11 are incomplete. Experiments 10-11 remain conditional on the
+  results of Experiments 8-9.
+- The accepted control is commit `db8fba9`, approximately 4.19 decode tok/s.
+  Later commits only document closed experiments and retain that runtime.
+
+Closed families -- **do not build, flash, or measure these again** unless this
+section is deliberately updated first:
+
+- PSRAM tier span, stride, copy order, copy limit, or allocation ceiling;
+- unchanged plateau/control verification;
+- C row blocking or row-order variants;
+- 32/64/128-bit packed-load-width sweeps;
+- async cross-operator overlap with the existing worker slot.
+
+Experiment 2 must produce all of the following:
+
+1. A device-side microbenchmark comparing the existing C `lut2_rows` kernel
+   with handwritten Xtensa/TIE728 assembly.
+2. Needle 3's real LUT/index/group layout and dominant projection shapes,
+   including 768x768; do not copy MimiModel layout assumptions.
+3. Isolated kernel timing, maximum/mean numeric error, alignment requirements,
+   and an inspection of generated/handwritten instructions.
+4. A measured disposition: faster and eligible for Experiment 3, or rejected
+   with evidence. If assembly syntax, ABI, or hardware support blocks the test,
+   record the exact blocker instead of silently switching experiments.
+5. A concise result in `.auto/ideas.md` and `.auto/log.jsonl` before selecting
+   any next experiment.
+
+### Three-board measurement protocol
+
+Use all three ESP32-S3 boards concurrently whenever device images are ready;
+never serialize three independent full device suites.
+
+- Build candidate images first, using a fresh build directory per compile-time
+  variant, and verify that intended flags appear in `compile_commands.json` and
+  that meaningfully different variants do not accidentally have the same hash.
+- For an isolated Experiment 2 microbenchmark, assign board 1 to the existing C
+  control, board 2 to assembly candidate A, and board 3 to assembly candidate B
+  or a duplicate control/noise check. Start them together with
+  `/root/bin/image-batch.sh 1=<control.bin> 2=<candidate-a.bin> 3=<candidate-b.bin>`.
+- For a promising full-model candidate, use one control and two identical
+  candidate images in the first batch. Swap board assignments in the repeat so
+  a board-specific effect cannot masquerade as a win.
+- Use short, microbenchmark-specific firmware runs for kernel screening. Spend
+  the 12-case full suite only after an isolated candidate is correct and faster.
+- Never allow multiple processes to access one board outside `needle-board run`;
+  the batch helper already acquires one lock per board.
+- Record image hashes, board assignments, batch directory, raw kernel timings,
+  quality results, and the candidate/control delta. A build-only result is not
+  evidence.
+
+Before every build, state the active experiment and hypothesis in the run notes.
+If the proposed command belongs to a closed family above, abort it and return to
+Experiment 2.
+
 ## Objective
 
 Make the shipping inference path on the attached board decode faster, without

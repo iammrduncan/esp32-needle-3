@@ -1,5 +1,13 @@
 # MimiModel follow-up experiment queue
 
+## Execution status (authoritative)
+
+Current next action: **Experiment 2 only**. Experiment 1 is complete; Experiment
+5 is complete and rejected; Experiment 6 is not applicable; Experiments 2-4 and
+7-11 remain incomplete. The PSRAM tier/stride/order family is closed and is not
+part of this queue. See the top of `.auto/prompt.md` for the compaction-safe
+three-board execution protocol and acceptance requirements.
+
 Prepared 2026-09-19 from `memovai/mimimodel` at commit
 `1a19329707c5ca8b9833ef9f079c796647887eba`.
 

@@ -9,6 +9,12 @@ idf_component_register(
     REQUIRES esp_timer
 )
 
+# Print the tier span requested and the span the blob directory allows.
+option(NEEDLE_TIER_TRACE "Print the requested tier span at open" OFF)
+if(NEEDLE_TIER_TRACE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_TIER_TRACE=1)
+endif()
+
 option(NEEDLE_PROFILE "Measure inference phases" OFF)
 if(NEEDLE_PROFILE)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC ND_PROFILE)

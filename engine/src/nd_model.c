@@ -393,6 +393,14 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
 #ifndef ND_TIER_SPAN_BYTES
 #define ND_TIER_SPAN_BYTES (12u << 20)
 #endif
+/* Copy granularity for the tier. Measured: the S3's copy engine leaves the
+ * source bytes it touched last resident in the internal cache, so a span
+ * bigger than the staged content pays off by warming the tier HEAD - which is
+ * the part decode reads first. STRIDE sets how much is touched per block;
+ * ND_TIER_ASC=1 copies ascending instead (order vs granularity probe). */
+#ifndef ND_TIER_STRIDE
+#define ND_TIER_STRIDE (12u << 20)
+#endif
 
     {
         uint32_t ss3, k3;
@@ -477,8 +485,29 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             if (span < (ND_TIER_SPAN_BYTES) + (3u << 20)) {
                 m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
                 if (m->eg_vpsram) {
-                    memcpy(m->eg_vpsram,
-                           (const uint8_t *)m->c.base + m->eg_region_lo, span);
+                    {
+                        const uint8_t *src =
+                            (const uint8_t *)m->c.base + m->eg_region_lo;
+                        size_t  off    = span;
+                        size_t  stride = (size_t)ND_TIER_STRIDE;
+#if defined(ND_TIER_ASC) && ND_TIER_ASC
+                        /* Ascending blocks: isolates ORDER from GRANULARITY.
+                         * Same stride as the accepted low-block-last copy, run
+                         * in memcpy's own direction. */
+                        for (off = 0; off < span; off += stride) {
+                            size_t b = (span - off > stride) ? stride : span - off;
+                            memcpy(m->eg_vpsram + off, src + off, b);
+                        }
+#else
+                        if (stride == 0 || stride > span) stride = span;
+                        do {
+                            size_t b = (off > stride) ? stride : off;
+                            size_t o = off - b;
+                            memcpy(m->eg_vpsram + o, src + o, b);
+                            off = o;
+                        } while (off);
+#endif
+                    }
                     m->eg_vpsram_len = (uint32_t)span;
                 } else {
                     m->eg_region_lo = m->eg_region_hi = 0;

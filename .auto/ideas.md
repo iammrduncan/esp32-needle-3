@@ -244,3 +244,9 @@ cycles for verification only.
   effect: with a span bigger than the content, the LAST bytes memcpy touched are
   the ones the S3's copy engine leaves resident, so a padded span keeps the
   tier's head hot. Do not re-derive this by changing strides again.
+- **Tier copy STRIDE at span 12 MB: fully mapped, no lever.** 128/192/256/384/
+  512/768/1024/4k/8k/16k/64k and ascending order all give 4.190-4.195 with the
+  byte-exact gate green; the accepted plain single memcpy at the same span is
+  indistinguishable. Keep one memcpy, keep the 12 MB span. The 14 MB span does
+  NOT boot: a 14 MB allocation succeeds but the tier copy then exceeds the bench
+  harness's window (no EVT ready at all, twice). Family CLOSED.

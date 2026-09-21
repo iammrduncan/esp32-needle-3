@@ -1,3 +1,13 @@
+## Measurement noise floor of the primary metric (run #144)
+
+Three byte-identical-source images, freshly configured, measured on all three
+boards in one batch: 4.7800 / 4.7783 / 4.7817 decode tok/s - **spread 0.071 %
+peak-to-peak, sigma ~0.03 %**, all 12 cases byte-exact. The 0.2 % keep bar is
+therefore about 6 sigma, and a candidate claiming <= 0.1 % is not resolvable on
+one run: it needs a repeat batch, not a verdict. Identical sources legitimately
+produce *different* md5s per board (ESP-IDF stamps the build time); identical md5
+across *different* flags is the failure signal, not this.
+
 # Ideas backlog
 
 Ranked by expected payoff per unit of risk. Delete entries as they are tried.
@@ -214,7 +224,7 @@ diagnostics only (ND_PROFILE is off in every measured image).
 
 | phase | ms/token | share | state |
 |---|---|---|---|
-| 2-bit GEMV total (`proj2bit`) | 86.5 | 43 % | TIE728 kernel in use; ~3 instructions/weight is the floor for this layout |
+| 2-bit GEMV total (`proj2bit`) | 86.5 | 43 % | TIE728 kernel in use. **At its instruction floor: `W8D` is 32 instructions (8 `extui` + 8 `addx4` + 8 `lsi` + 8 `add.s`) per 32-bit index word, one word = 8 nibbles = 8 weight *pairs* = 16 weights, so 2 instructions/weight.** 14.3 M weights/token x 2 = 28.6 M instructions ~ 86.5 ms means sustained IPC ~1.33, i.e. throughput-bound. See the "Instruction floor" section below. |
 |  - q/k/v/gate projections (inside `attention()`) | ~59 | 29 % | derived: `attn-stage` 101.8 - heads 36.7 - stage 5.1 |
 |  - out_proj + logits | ~27 | 13 % | same kernel |
 | attention head split | 36.7 | 18.3 % | products+exp bound; KV row staging already shared 6 ways |
@@ -225,10 +235,54 @@ diagnostics only (ND_PROFILE is off in every measured image).
 | mHC mix 4.7, sinkhorn 4.3, prep+LUT 3.5, step tail 0.5, sampler 0.0, conf pool 0.0 | 13.0 | 6.5 % | sampler and conf pool are *free*; sinkhorn is exp-bound |
 | unattributed | ~14 | 7 % | per-layer glue, lane init, tier pointer math, timer overhead |
 
-Two things this map kills: the missing decode time is **not** per-request
-overhead, the sampler, the tokenizer or UART emit (sample = 0.0 ms, step tail
-0.5 ms), and it is **not** an unnamed attention stage (taps+norms+rope+KV store
-is 5.1 ms total). Do not go looking for it again; spend runs on the 4-bit path.
+Two things this map kills: the missing decode time is **not** an unnamed
+attention stage (taps+norms+rope+KV store is 5.1 ms total), and it is not the
+per-layer glue.
+
+**CORRECTION (run #145): `sample = 0.0 ms` was a provenance artefact and the
+sampler is NOT free.** The `EVT prof` block this map came from is printed after
+the *boot bench*, and the bench drives `nd_model_step_hidden` directly - it never
+runs the grammar or the sampler. Two independent measurements say the real
+request path costs ~4% more than the bench (bench 4.984 tok/s vs primary 4.7783
+at 201 ms/token), i.e. ~8-9 ms/token of work the bench cannot see, and the
+per-case data below localises part of it to the grammar/sampler. `prof_dump()` in
+`esp32/main/main.c` (ND_PROFILE-only) now prints the same table for a real
+request's decode window, so this is measurable; the first harvest is still
+pending (see "Route-phase gap", below).
+
+## Route-phase gap: the last identified lever worth a run (run #145)
+
+Per-case decode rates on one image (identical on all three boards, spread 0.07 %):
+
+| case | phase | decode tps | prefill tps |
+|---|---|---|---|
+| sampling5 / timer60 / batch / heldout_timer45 / heldout_sampling15 / heldout_batch | tools | 4.77-4.85 | 5.25-5.27 |
+| **route_translate** | **route** | **4.560** | **4.97** |
+| route_code / heldout_route_timer | route | 4.500 / 4.520 | 4.95-4.97 |
+
+`primary` = five tools cases + `route_translate`, and its mean reproduces exactly:
+(4.840+4.830+4.770+4.850+4.830+4.560)/6 = 4.780. So the route case alone costs
+**~6 %**, and bringing it to the tools rate is **+0.94 % on the metric** - well
+above the 0.2 % keep bar, and it is *not* an arithmetic change (the model runs
+identically; this is per-request/per-token overhead in the selection path).
+
+What it is **not**: a prefix re-priming cost. `run_inference` restores a cached
+prefix per phase (`s_prefixes[phase]`), both prefixes exist, and restore is
+O(1). What it also is not: the attention context (route runs one pass, tools two,
+so tools has the *longer* context and is still faster).
+
+What is left, in order of evidence: (a) the route grammar's per-token candidate
+enumeration / subset-logit construction in `nd_sample.c` - never measured on a
+real request, and the phase that the boot bench structurally cannot see; (b) the
+per-token console emit (both phases pay it, so it cannot explain the *gap*, but
+it is part of the ~8-9 ms/token bench-to-request difference). Measure with
+`prof_dump` on a tools request and a `!route` request before writing anything.
+
+Harness caveat for that measurement: a bare `pyserial` reader on the board
+console (DTR set, RTS reset pulse) returned **zero bytes** here, even for the
+non-mutating `!status\n` - it hung in `open()`. The repo harness and
+`tools/serial_api.py` both read that console fine, so drive the harvest through
+one of them rather than inventing a third reader.
 
 ## The phi anomaly (open, run #140 follow-up)
 
@@ -256,6 +310,35 @@ order unchanged). This deliberately revisits "row blocking is a loss", which was
 measured on the **2-bit** path where the activation (3 KB) is the *small* operand
 against 192 B rows - phi is the inverse ratio (12 KB activation, 1.5 KB rows), so
 the assumption changed, which is the only legitimate reason to retry.
+
+## Instruction floor: why the 2-bit GEMV (43 % of the token) cannot go faster
+
+Established from the disassembly and the archive directory, not from a guess
+(runs #144-#145). Two floors that agree on the same number:
+
+- **Instructions.** `W8D` - the inner body - is 8 `extui` + 8 `addx4` + 8 `lsi` +
+  8 `add.s` = 32 instructions, and consumes a whole 32-bit index word: 8 nibbles,
+  each a *pair* of 2-bit weights, so **16 weights per 32 instructions = 2
+  instructions per weight**. 14.3 M weights per token x 2 = 28.6 M instructions,
+  which at the measured 86.5 ms is a sustained IPC of ~1.33 - the kernel is
+  throughput-bound, so instruction count is the lever, and 4 ops per nibble
+  (extract, 4x-scaled index, table load, add) is the floor for any table that
+  stays cache-resident, because `lsi` can only take base+immediate. Halving it
+  needs 4 weights per lookup (an 8-bit index, 1 KB per slot), which was measured
+  38 % slower: the table stops fitting.
+- **Bytes.** The 2-bit path reads q(576)+k(96)+v(128)+gate(768)+out_proj(768) =
+  2336 rows x 768 weights = 1.79 M weights per layer, 14.3 M per token = 3.59 MB
+  packed plus ~0.22 MB of group norms. At the ~64 MB/s octal-DTR PSRAM at 80 MHz
+  actually sustains through the cache, that is ~59 ms: the measured phase is at
+  69 % of bus peak. Fewer bytes means changing quantisation, which is frozen.
+
+Things that follow, and that were each confirmed by measurement rather than
+argument: row blocking the LUT path (2-row -5.1 %, 4-row -5 %), the quad table
+(-38 %), deeper index prefetch (-1.9 pp), packed-word widths (32-bit is optimal),
+and 20+ scheduling nulls all sit on this floor. And the same ratio reasoning says
+`kron_apply`, at 1.75 instructions per product with `loop`+`lsi`+`madd.s`, has no
+asm headroom either. Do not re-derive any of it; if it changes, it changes with
+the archive.
 
 ## mHC phi / generic-path family CLOSED (run #141)
 

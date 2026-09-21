@@ -156,6 +156,32 @@ static int prime_prefix(int phase)
     return 0;
 }
 
+#ifdef ND_PROFILE
+/* Phase table, printed per boot-bench token and (for diagnostics) per real
+ * request. The two views differ in one important way: the boot bench drives
+ * nd_model_step_hidden directly, so it never runs the grammar or the sampler,
+ * and a phase that looks free there is only free *there*. ND_P_SAMPLE reads
+ * 0.0 ms in the bench for exactly that reason, while real requests run ~4%
+ * slower than the bench. Keep this out of shipping builds - the timers add work
+ * to every layer. */
+static const char *s_pname[ND_P_COUNT] = { "proj2bit", "attention", "hadamard", "mhc_phi4",
+                    "engram", "logits4", "prep+lut", "confpool",
+                                         "  of-mlp:kron", "whole block", "sinkhorn",
+                                         "mhc-mix", "step-tail", "sample", "attn-stage",
+                                         "qkv taps", "head norms", "rope", "kv store" };
+
+static void prof_dump(double ms, int n)
+{
+    int p;
+
+    if (n <= 0 || ms <= 0.0) return;
+    for (p = 0; p < ND_P_COUNT; p++)
+        printf("EVT prof %-10s %8.1f ms  %5.1f%%\n", s_pname[p],
+               nd_prof[p] / 1000.0 / n, 100.0 * nd_prof[p] / 1000.0 / ms);
+    fflush(stdout);
+}
+#endif
+
 static void run_inference(const char *query, int phase)
 {
     static uint32_t ids[512];
@@ -196,6 +222,9 @@ static void run_inference(const char *query, int phase)
     printf("EVT prefill tokens=%d ms=%.0f tps=%.2f sink=%u\n",
            n, pre_ms, n / (pre_ms / 1000.0), (unsigned)s_model.n_sink);
     fflush(stdout);
+#ifdef ND_PROFILE
+    memset(nd_prof, 0, sizeof(nd_prof));   /* profile the decode window only */
+#endif
 
     /* Optionally skip the reasoning block: force an empty <think></think> and
      * open the call directly. This reduces work but can affect model quality. */
@@ -273,6 +302,9 @@ static void run_inference(const char *query, int phase)
         printf("EVT done tokens=%u ms=%.0f tps=%.2f\n", (unsigned)produced,
                dec_ms, produced ? produced / (dec_ms / 1000.0) : 0.0);
         fflush(stdout);
+#ifdef ND_PROFILE
+        prof_dump(dec_ms, (int)produced);
+#endif
     }
 
     if (phase) router_select(out, &s_grammars[1]);
@@ -402,21 +434,7 @@ void app_main(void)
             printf("EVT bench tokens=%d ms=%.0f ms_per_tok=%.0f tps=%.3f\n",
                    N, ms, ms / N, N / (ms / 1000.0));
 #ifdef ND_PROFILE
-            {   /* Per-phase breakdown; enable ND_PROFILE in the component's
-                 * CMakeLists to get it. Off by default: the timers add work
-                 * to every layer and the output is noise during a demo. */
-                static const char *PN[ND_P_COUNT] = {
-                    "proj2bit", "attention", "hadamard", "mhc_phi4",
-                    "engram", "logits4", "prep+lut", "confpool",
-                                         "  of-mlp:kron", "whole block", "sinkhorn",
-                                         "mhc-mix", "step-tail", "sample", "attn-stage",
-                                         "qkv taps", "head norms", "rope", "kv store" };
-                int p;
-                for (p = 0; p < ND_P_COUNT; p++)
-                    printf("EVT prof %-10s %8.1f ms  %5.1f%%\n", PN[p],
-                           nd_prof[p] / 1000.0 / N,
-                           100.0 * nd_prof[p] / 1000.0 / ms);
-            }
+            prof_dump(ms, N);
 #endif
             fflush(stdout);
         }

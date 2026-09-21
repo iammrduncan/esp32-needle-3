@@ -171,12 +171,23 @@ Ranked by expected payoff per unit of risk. Delete entries as they are tried.
   early-exit when the max row/col residual is below a fixed epsilon, or replace
   the exp/log pair with a scaling-only (non-log-space) Sinkhorn. Both change
   numerics; only acceptable if the fidelity probe and goldens stay exact.
-- **4-bit pair-LUT for the mHC phi GEMVs.** The phi tensors go through the
-  generic 4-bit `dot_group` (2 mults/weight). A 16-entry-per-position table
-  (`cb[i] * xh[j]`) turns them into loads+adds. Table is in_pad×16 floats
-  (~48 KB for the 3072-wide phi reduction) — probably too big for the remaining
-  37 KB of internal RAM; test whether a half-width table (per group, 16 KB)
-  beats the multiply path anyway.
+- **DONE, run #159: 4-bit folded codebook for the mHC phi GEMV (+0.17 % decode,
+  +2.6 % think, +0.21 % extended, bit-exact).** `nd_cact_codebook()` keys only on
+  archive + bit width, so `cb[k] * xh[j]` is row-independent - the same fact the
+  2-bit pair table exploits. Sized right it is *8 kB*, not the 48 kB I had guessed,
+  because one group is 128 positions x 16 levels and the group is reused by all 24
+  rows; `gemv_rows_folded` goes group-outer / row-inner and keeps dot_group's four
+  partials, so every `y[r]` is bit-identical. Two lessons: (1) the backlog entry
+  said "probably too big" without doing the per-group arithmetic; (2) the recorded
+  "-12 % ceiling, not worth it" analysis assumed the kernel was issue-bound, while
+  its own numbers (7x above both floors) said latency-bound - and the standard cure
+  for latency-bound code is fewer dependent loads, which is exactly how the 2-bit
+  kernel won +33 %. Re-derive an old disposition's *premise*, not just its number,
+  before trusting "closed".
+  Follow-ups: halve the table to 4 kB by processing each group in two position
+  halves while carrying s0..s3 across the halves (bit-exact, no speed claim); and a
+  real TIE728 kernel over this single resident table is now a different question
+  than the one the -12 % estimate answered, because the operand shape changed.
 - **Attention: int8 dot product.** The KV dot product converts every int8 to
   float per element. Accumulating in int with the LX7's 32-bit ops, or reading
   four int8 per 32-bit word (with per-head scale applied once), shortens the

@@ -899,3 +899,25 @@ function.
 next `needle-board run 1` fail with "Board 1 is busy" (it cost a control slot in
 `20260921T222845.825872Z`). Kill `serial_api.py` by pid, and confirm no `serial_api` process
 remains before releasing a board after `make capture`.
+
+## Experiment 17 (IRAM placement) - measured, closed as a lever (run #232)
+
+Symbol-table audit of the accepted image (addresses, not assumptions): `attn_heads`,
+`kron1_blocks`, `kron2_rows`, `nd_lut2_rows_c`, `nd_lut2_rows_tie1n` are all `0x4037xxxx` = IRAM
+already. The flash-mapped (`0x42xxxxxx`) set is `nd_gstate_byte` (1971 B, aggregate 0.06 ms per
+run #149 - worthless), `pool_cell` (503 B, ~0 ms), `nd_sample_hidden` (312 B), `nd_cq_prepare`
+(107 B), `nd_tok_piece` (37 B), `kron_apply` (62 B wrapper over IRAM loops),
+`nd_model_logits_subset` (58 B wrapper).
+
+Moving `nd_sample_hidden` to IRAM (`ND_HOT`, verified `0x420114d8 -> 0x4037c3c0` by `nm`, so the
+sampler driver now sits beside its already-resident `lex_words` split kernel) measured **+0.067 %
+decode** (4.9183 vs 4.9150), +0.12 % extended, every other monitor identical to the tick,
+byte-exact 14/14 + 13/13, **-256 B internal RAM**. One metric tick is inside the 0.071 % spread
+that three byte-identical images showed, so it is not confirmable and it is under the 0.2 % bar:
+rejected, reverted.
+
+Conclusion: **placement is not a lever here** - the loops that own time are resident, and what is
+left in flash is either a wrapper or so small/cold that the L1 instruction cache already covers it.
+Any remaining single-function candidate is <= 0.1 % by this measurement, so do not burn a build per
+function. Note also that `internal_free` (15503) is now the binding constraint on placement ideas:
+IRAM has to be paid for out of the same pool as data scratch.

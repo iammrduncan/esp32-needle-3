@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-09-21T14:12:29.600659+00:00",
+  "recorded_at": "2026-09-21T15:32:43.326859+00:00",
   "source": "real ESP32-S3; host orchestrates two on-device inference passes",
   "hashes": {
     "tools/model-routes.json": "419bf26a282edc8f7a234906da9cc5c0b9b976a135b3cef58e34cba981aa6d1f",
@@ -53,16 +53,16 @@
     "schema": "agent-watch-v2",
     "layers": 8,
     "model_bytes": 16155796,
-    "uptime_ms": 257752,
+    "uptime_ms": 353074,
     "free_internal_bytes": 14867,
     "free_psram_bytes": 42116,
-    "sample_period_s": 400,
-    "samples": 10,
-    "last_sample_uptime_ms": 154310,
+    "sample_period_s": 10,
+    "samples": 23,
+    "last_sample_uptime_ms": 343533,
     "last_sample_free_internal_bytes": 15247,
     "timer_status": "expired",
     "timer_remaining_ms": 0,
-    "timer_fired_count": 1
+    "timer_fired_count": 2
   },
   "cases": [
     {
@@ -96,10 +96,10 @@
           "confidence": null,
           "prefill_ms": 2617.0,
           "prefill_tps": 4.97,
-          "decode_ms": 2999.0,
+          "decode_ms": 3000.0,
           "decode_tps": 4.67,
           "decode_tokens": 14,
-          "latency_ms": 6485.0,
+          "latency_ms": 6486.5,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -119,23 +119,23 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 6485.0
+        "latency_ms": 6486.5
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 264278,
+        "uptime_ms": 359600,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
-        "sample_period_s": 400,
-        "samples": 10,
-        "last_sample_uptime_ms": 154310,
+        "sample_period_s": 10,
+        "samples": 24,
+        "last_sample_uptime_ms": 353533,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "expired",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -172,7 +172,7 @@
           "decode_ms": 2388.0,
           "decode_tps": 4.61,
           "decode_tokens": 11,
-          "latency_ms": 7298.9,
+          "latency_ms": 7299.5,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -192,23 +192,23 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 7299.0
+        "latency_ms": 7299.6
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 271618,
+        "uptime_ms": 366940,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
-        "sample_period_s": 400,
-        "samples": 10,
-        "last_sample_uptime_ms": 154310,
+        "sample_period_s": 10,
+        "samples": 25,
+        "last_sample_uptime_ms": 363533,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "expired",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -242,10 +242,10 @@
           "confidence": null,
           "prefill_ms": 4650.0,
           "prefill_tps": 4.95,
-          "decode_ms": 2812.0,
+          "decode_ms": 2813.0,
           "decode_tps": 4.62,
           "decode_tokens": 13,
-          "latency_ms": 8356.1,
+          "latency_ms": 8338.5,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -265,23 +265,23 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 8356.1
+        "latency_ms": 8338.5
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 280017,
+        "uptime_ms": 375319,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
-        "sample_period_s": 400,
-        "samples": 10,
-        "last_sample_uptime_ms": 154310,
+        "sample_period_s": 10,
+        "samples": 26,
+        "last_sample_uptime_ms": 373533,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "expired",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -323,7 +323,7 @@
           "decode_ms": 2170.0,
           "decode_tps": 4.61,
           "decode_tokens": 10,
-          "latency_ms": 6061.3,
+          "latency_ms": 6061.4,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -347,16 +347,16 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 291824,
+                "uptime_ms": 387127,
                 "free_internal_bytes": 14419,
                 "free_psram_bytes": 42116,
-                "sample_period_s": 400,
-                "samples": 10,
-                "last_sample_uptime_ms": 154310,
+                "sample_period_s": 10,
+                "samples": 27,
+                "last_sample_uptime_ms": 383533,
                 "last_sample_free_internal_bytes": 15247,
                 "timer_status": "expired",
                 "timer_remaining_ms": 0,
-                "timer_fired_count": 1
+                "timer_fired_count": 2
               }
             }
           ],
@@ -364,10 +364,10 @@
           "confidence": null,
           "prefill_ms": 2849.0,
           "prefill_tps": 5.26,
-          "decode_ms": 2053.0,
+          "decode_ms": 2054.0,
           "decode_tps": 4.87,
           "decode_tokens": 10,
-          "latency_ms": 5754.9,
+          "latency_ms": 5755.8,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "tools"
@@ -388,23 +388,23 @@
         "inference_passes": 2,
         "error": null,
         "outcome": "local_executed",
-        "latency_ms": 11816.3
+        "latency_ms": 11817.2
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 291874,
+        "uptime_ms": 387175,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
-        "sample_period_s": 400,
-        "samples": 10,
-        "last_sample_uptime_ms": 154310,
+        "sample_period_s": 10,
+        "samples": 27,
+        "last_sample_uptime_ms": 383533,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "expired",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -444,11 +444,11 @@
           "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
           "prefill_ms": 2820.0,
-          "prefill_tps": 4.96,
+          "prefill_tps": 4.97,
           "decode_ms": 3211.0,
           "decode_tps": 4.67,
           "decode_tokens": 15,
-          "latency_ms": 6899.3,
+          "latency_ms": 6900.8,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -474,16 +474,16 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 305906,
+                "uptime_ms": 401207,
                 "free_internal_bytes": 14335,
                 "free_psram_bytes": 42116,
                 "sample_period_s": 5,
-                "samples": 10,
-                "last_sample_uptime_ms": 154310,
+                "samples": 28,
+                "last_sample_uptime_ms": 393533,
                 "last_sample_free_internal_bytes": 15247,
                 "timer_status": "expired",
                 "timer_remaining_ms": 0,
-                "timer_fired_count": 1
+                "timer_fired_count": 2
               }
             }
           ],
@@ -494,7 +494,7 @@
           "decode_ms": 3630.0,
           "decode_tps": 4.96,
           "decode_tokens": 18,
-          "latency_ms": 7142.8,
+          "latency_ms": 7142.2,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "tools"
@@ -515,23 +515,23 @@
         "inference_passes": 2,
         "error": null,
         "outcome": "local_executed",
-        "latency_ms": 14042.2
+        "latency_ms": 14043.0
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 305957,
+        "uptime_ms": 401258,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
         "sample_period_s": 5,
-        "samples": 10,
-        "last_sample_uptime_ms": 154310,
+        "samples": 28,
+        "last_sample_uptime_ms": 393533,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "expired",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -575,7 +575,7 @@
           "decode_ms": 2163.0,
           "decode_tps": 4.62,
           "decode_tokens": 10,
-          "latency_ms": 5242.2,
+          "latency_ms": 5239.0,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -601,16 +601,16 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 316960,
+                "uptime_ms": 412260,
                 "free_internal_bytes": 14359,
                 "free_psram_bytes": 42116,
                 "sample_period_s": 5,
-                "samples": 12,
-                "last_sample_uptime_ms": 315906,
+                "samples": 30,
+                "last_sample_uptime_ms": 411207,
                 "last_sample_free_internal_bytes": 15247,
                 "timer_status": "running",
                 "timer_remaining_ms": 59999,
-                "timer_fired_count": 1
+                "timer_fired_count": 2
               }
             }
           ],
@@ -621,7 +621,7 @@
           "decode_ms": 2834.0,
           "decode_tps": 4.94,
           "decode_tokens": 14,
-          "latency_ms": 5771.1,
+          "latency_ms": 5770.4,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "tools"
@@ -642,23 +642,23 @@
         "inference_passes": 2,
         "error": null,
         "outcome": "local_executed",
-        "latency_ms": 11013.4
+        "latency_ms": 11009.4
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 317010,
+        "uptime_ms": 412310,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
         "sample_period_s": 5,
-        "samples": 12,
-        "last_sample_uptime_ms": 315906,
+        "samples": 30,
+        "last_sample_uptime_ms": 411207,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "running",
         "timer_remaining_ms": 59949,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     },
     {
@@ -705,10 +705,10 @@
           "confidence": null,
           "prefill_ms": 3430.0,
           "prefill_tps": 4.96,
-          "decode_ms": 3218.0,
+          "decode_ms": 3219.0,
           "decode_tps": 4.66,
           "decode_tokens": 15,
-          "latency_ms": 7540.4,
+          "latency_ms": 7538.4,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -740,16 +740,16 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 334464,
+                "uptime_ms": 429764,
                 "free_internal_bytes": 14095,
                 "free_psram_bytes": 42116,
                 "sample_period_s": 10,
-                "samples": 15,
-                "last_sample_uptime_ms": 330906,
+                "samples": 33,
+                "last_sample_uptime_ms": 426207,
                 "last_sample_free_internal_bytes": 15247,
                 "timer_status": "running",
                 "timer_remaining_ms": 42495,
-                "timer_fired_count": 1
+                "timer_fired_count": 2
               }
             },
             {
@@ -760,16 +760,16 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 334465,
+                "uptime_ms": 429765,
                 "free_internal_bytes": 12891,
                 "free_psram_bytes": 42116,
                 "sample_period_s": 10,
-                "samples": 15,
-                "last_sample_uptime_ms": 330906,
+                "samples": 33,
+                "last_sample_uptime_ms": 426207,
                 "last_sample_free_internal_bytes": 15247,
                 "timer_status": "running",
                 "timer_remaining_ms": 29999,
-                "timer_fired_count": 1
+                "timer_fired_count": 2
               }
             }
           ],
@@ -801,23 +801,23 @@
         "inference_passes": 2,
         "error": null,
         "outcome": "local_executed",
-        "latency_ms": 17500.1
+        "latency_ms": 17498.2
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 334551,
+        "uptime_ms": 429851,
         "free_internal_bytes": 14867,
         "free_psram_bytes": 42116,
         "sample_period_s": 10,
-        "samples": 15,
-        "last_sample_uptime_ms": 330906,
+        "samples": 33,
+        "last_sample_uptime_ms": 426207,
         "last_sample_free_internal_bytes": 15247,
         "timer_status": "running",
         "timer_remaining_ms": 29913,
-        "timer_fired_count": 1
+        "timer_fired_count": 2
       }
     }
   ],
@@ -826,16 +826,16 @@
     "schema": "agent-watch-v2",
     "layers": 8,
     "model_bytes": 16155796,
-    "uptime_ms": 364712,
+    "uptime_ms": 460012,
     "free_internal_bytes": 14867,
     "free_psram_bytes": 42116,
     "sample_period_s": 10,
-    "samples": 18,
-    "last_sample_uptime_ms": 364464,
+    "samples": 36,
+    "last_sample_uptime_ms": 459764,
     "last_sample_free_internal_bytes": 15247,
     "timer_status": "expired",
     "timer_remaining_ms": 0,
-    "timer_fired_count": 2
+    "timer_fired_count": 3
   },
   "verification": {
     "routes_match": true,

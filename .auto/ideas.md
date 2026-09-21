@@ -23,6 +23,27 @@ Open follow-ups in the same phase: the survivors' full byte walk and one
 split `ND_P_SAMPLE` into table-build / survivor-walk / piece-lookup in a profiled
 build (harvest recipe below works and takes ~10 min on a warm board).
 
+## Full-token accounting CLOSED (runs #147-#153)
+
+The constrained sampler's real-request cost is now fully attributed, and the last
+"5x anomaly" in it is not an anomaly. Of the ~10 ms it still costs per request
+token, **~7.2 ms is `nd_model_logits_subset`** - the projection over the grammar's
+candidate rows. At the rate the 2-bit path sustains everywhere else (~6 ns per
+weight) that implies ~1 200-1 500 candidate rows x 768, which is what a JSON-value
+grammar legitimately allows; the rows are visited in vocabulary id order, which in
+this archive *is* ascending row order, so the gather is already sequential and
+there is no sort to exploit. Cutting the candidate set would change what the model
+may say - forbidden, not optimised. The remaining ~2 ms is the piece lookup and
+survivor walks, and caching piece[0] there measured **-0.17 %** (#149).
+
+Consequence: after the #147 first-byte table there is no phase of the decode token
+above 0.2 % that is not (a) a 2-bit GEMV at the TIE728 instruction floor, (b) the
+same GEMV's subset variant over a legitimate row count, (c) exp-bound Sinkhorn or
+attention whose only bit-exact headroom was already taken, or (d) the 4-bit phi
+GEMV whose residual is PSRAM line-fill on a non-resident working set (#141). The
+campaign's remaining honest work is verification and the periodic behavioural
+capture.
+
 ## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
 
 Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,

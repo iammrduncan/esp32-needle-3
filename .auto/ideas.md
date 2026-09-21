@@ -842,3 +842,33 @@ to skip the later MimiModel experiments tracked in `.auto/mimimodel-experiments.
   Two independent schedules, two structural failures: with row-level splitting
   already covering every GEMV, there is no independent per-layer work left for a
   second core. Closed.
+
+## Experiment 14 recipe (ready to execute; do not re-derive)
+
+Goal: decide the CQ2 **integer** path on measurement, in this order, and stop as soon as a stage
+fails. Screen in **C**, not asm - Experiment 13 measured `asm volatile` costing 2x on this core.
+
+1. **Fixture (host, ~10 min).** Extend the existing `-DND_EXP_CAPTURE` hook (`host/nd_dump.c` + the
+   `#ifdef` in `engine/src/nd_model.c`, pattern already proven) to dump, for layer 0's `q_proj`
+   only: the prepared activation `xh` (768 floats, 3 KB), the 16-entry pair LUT, the packed row
+   bytes and the group norms for a few rows, plus the float kernel's output. Run one real primary
+   prompt through `/tmp/hostcap/nd_dump ... genp`. This is the "captured prepared activations" the
+   experiment demands; do not substitute synthetic ones (#149's 3x over-estimate came from that).
+2. **Numeric screen (host, cheap).** Implement both prototypes against that fixture: (a) int8
+   activation x int8 4-value codebook into int32, then tensor-wide *and* per-group scales then the
+   real row norm; (b) boot-time expansion of one tensor's codebook values to int8 rows in PSRAM
+   (model the bytes, not the run). Report max/mean abs and relative error versus the float kernel's
+   real output, staging bytes and quantization cost per token. Kill here if the error cannot plausibly
+   satisfy `logit_max_delta <= 2e-3` *and* byte-exact goldens - note byte-exactness is the binding
+   constraint, not the 2e-3 probe: an integer path is not bit-exact, so it needs the campaign to
+   accept a quality change, which it currently refuses. State that consequence explicitly in the
+   disposition either way rather than discovering it after a device run.
+3. **Speed screen (device, kbench, only if 2 survives).** Add `bench_int()` with rotated real buffers
+   (the microbench rule from #230: distinct operand buffers, consume every result, `asm volatile` is
+   a fence). Control is `nd_lut2_rows_tie1n` on the real 768x768/576x768 shapes and the split mode,
+   not the C row walker - it is 13.45% faster than C (measured #204). Report cycles and bytes read.
+   `dsps_dp_s8_aes3` is unavailable for the same reason as `dsps_dotprod_f32_aes3` (#230): esp-dsp is
+   not in the tree or IDF and is a forbidden new dependency - record it, do not silently skip it.
+4. **Decision rule.** Integrate only if it is both faster than `tie1n` *and* passes 14/14 device +
+   13/13 host byte-exact, token delta 0, fidelity, top1 10/10. Otherwise write the numbers and move
+   to Experiment 15 (GDMA double buffering) - which is a memory-system test, not a schedule test.

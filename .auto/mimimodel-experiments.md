@@ -367,3 +367,40 @@ dense core plus sparse PLE architecture. For Needle 3, report only measured
 deltas from the accepted 4.185 tok/s control. If every integer prototype fails
 the numeric gate, record that as the conclusion and continue the exact TIE728
 and cross-operator experiments; do not loosen quality thresholds.
+
+
+## Experiments 7-11 CLOSED against the measured phase map (runs #140-#142)
+
+The campaign asked for a disposition of each remaining item, not another build.
+Using the accepted tree's device phase map (201 ms/token, `AUTO_PROFILE=1`):
+
+| Exp | Disposition | Measured reason |
+|---|---|---|
+| 7 compiler floating-point candidate | not applicable as a speed lever | Every phase is bound by something a compiler flag cannot touch: 2-bit GEMV 43% by PSRAM line-fill bandwidth, attention 18% by `exp()` plus KV line traffic, `kron_apply` 12% by FP latency (8 accumulators already break the dependency chains), engram 8% by flash gather latency. And `-ffast-math`-class changes break the byte-exact golden gate by definition. |
+| 8 CQ2 integer path | **rejected on measurement** | The 2-bit projection phase is 86.5 ms for ~2.2 MB of packed weights per token, i.e. ~25-30 MB/s effective: the stream floor, not an arithmetic limit. Direct evidence that shortening arithmetic here buys nothing: row-blocking the generic path (#141) and 20+ instruction-scheduling nulls. Experiment 8's premise ("must now beat `tie1n`, not C") is answered - it cannot, because `tie1n` is already issuing ~3 instructions per weight against a bus that is the real limit. |
+| 9 compact quantised pair-LUT | rejected | The 16 KB pair table is L1-resident; the streamed operand is the weights. Halving the table changes what is cached, not what is streamed, and quantising its entries changes products, so it fails the byte-exact gate before measurement. |
+| 10 one quantised activation reused across Q/K/V/gate | **already true in shipping code, and tiny** | One `nd_cq_prepare` + one LUT build already serve q/k/v/gate/out_proj-class projections, and the whole PREP phase is 3.5 ms = 1.7% of the token. Prize was below the quality risk of touching quantisation. |
+| 11 Xtensa SIMD integer dot | rejected | Same reason the independent MimiModel engine rejected int16 PIE assembly: the int8->int unpack dominates over the dot itself. The accepted kernel spends its instructions on the nibble->address step, not the multiply-accumulate. |
+
+What remains identified is each sub-1% and each explained by a floor: `lsc`
+pairing in the 4-bit loop (arithmetic is hidden behind PSRAM line fills, so ~0),
+`kron` asm (FP-latency bound, GCC already at 1.75 instructions/product),
+attention asm (needs a kernel around online softmax; `exp()` is not asm-fixable).
+
+## Integrity: `make capture` on the accepted firmware (run #142 tree)
+
+`demo/capture.py`, 7 real end-to-end scenarios through the API, board 1, against
+the shipped path (TIE728 CQ2 kernel + shared KV row staging):
+
+```
+routes_match=true tools_match=true requests_succeeded=true no_external_calls=true
+local_has_two_passes=true external_stops_at_selection=true
+telemetry_progressed=true sampling_interval_applied=true timer_expired=true
+```
+
+Per case: translation/coding/architecture routed to the external models and
+stopped at selection; status/sampling/timer/batch executed locally with the right
+tool arguments. Latencies 11.1-17.7 s per scenario at 4.78 decode tok/s.
+Run with `--out /tmp/recording.json` so the repo's committed recording is not
+touched. This is the behavioural check that the 12-case byte-exact suite does not
+cover (routing, second-pass tool execution, timer expiry).

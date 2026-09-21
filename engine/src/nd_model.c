@@ -1131,10 +1131,13 @@ static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
 {
     /* One reciprocal per call instead of one software divide per element.
      *
-     * The ESP32-S3 has no FP divider, so `src[i] / scale` calls __divsf3 (~150
-     * cycles) once per element: 48 elements x two tensors x two KV heads x eight
-     * layers = 1,536 divides per decode token, which is what makes this 1.1 ms
-     * phase divide-bound rather than store-bound. The divisor is invariant across
+     * The S3's TIE FP does have a divide (`quou.s`, visible in this function's
+     * own disassembly), so this is not a library-call problem - but the divide is
+     * still far too expensive to pay per element. Measured, not guessed: removing
+     * these divides was worth +0.204% of the whole decode token (run #233), i.e.
+     * ~65 cycles each across 48 elements x two tensors x two KV heads x eight
+     * layers = 1,536 divides per token, which is what made this 1.1 ms phase
+     * divide-bound rather than store-bound. The divisor is invariant across
      * the row, so it is the textbook case for division by a reciprocal - but the
      * naive `x * (1/scale)` is NOT usable here: it double-rounds, so a value
      * within an ulp of a .5 boundary stores a different int8, and the int8 KV

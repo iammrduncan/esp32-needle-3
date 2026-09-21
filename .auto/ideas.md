@@ -1,3 +1,47 @@
+# Experiment 12 - paired attention exp: KEPT, +0.48% decode (run #229, 4.8917 -> 4.9150)
+
+**Isolated kernel (device, real inputs).** `nd_expf_pair(a,b)` interleaves the two independent
+degree-5 Horner chains of the attention online softmax. Fixture = 1024 argument pairs **captured
+from the six real primary generations** (`host/nd_dump.c -DND_EXP_CAPTURE` writes the actual
+`(s0-m, s1-m)` arguments; 49,152 pairs collected, strided to 1024 so all six prompts appear;
+range [-10.63, 0], 27.5% exact zeros because the running max makes the larger of a pair exactly
+zero). kbench on board 2, CCOUNT calibrated 24000 cycles/us:
+
+| variant | cycles/pair | saving | mismatch |
+|---|---|---|---|
+| two scalar `nd_expf` | 247.42 | - | control |
+| `nd_expf_pair` (C) | **198.04** | **+19.96 %** | **0 / 1024** |
+
+**Why there was room (disassembly, not guesswork).** `attn_heads` lives in IRAM at 0x4037b138 and
+GCC expanded the two inlined `nd_expf` calls **one after the other**, spilling live floats to
+`a1+0x4a0..0x4f8` to do it. Interleaving gives the scheduler two independent operands per slot
+and both chains stay in registers. Bit-exactness is by construction: each chain performs
+`nd_expf`'s operations in `nd_expf`'s order with the same constants, and the two clamps stay in
+the scalar path (the pair falls back to two scalar calls out of range).
+
+**End to end.** Batch `20260921T210606.624475Z`: board 1 pristine control read 4.8917 exactly (so
+the batch is trustworthy), boards 2/3 both **4.9150**, extended 4.8371, prefill 5.2433, min_case
+4.70, byte-exact 14/14. Swapped confirmation with the candidate on the canonical board: 4.9150 /
+4.8357 / 3.88 think / 5.2433 prefill / 4.70 min, 14/14 device + 13/13 host, fidelity 5.341e-05,
+boot bench 201 -> **199 ms/token**, internal_free 15759 -> 15503, flash +256 B.
+
+**Prediction vs measurement, kept on the record**: arithmetic said +0.86 % (49 cycles x ~8500
+pairs/token); it delivered +0.48 %. The estimate assumed none of the exp latency was already
+hidden by neighbouring work - some was. Half of an analytically predicted win is still a win.
+
+**Banked headroom (new candidate, not a follow-up to a failure).** 198 cycles/pair is ~99 cycles
+per exponential against ~11 FP ops + a handful of int ops of actual work. Experiment 12's own
+condition for reaching for assembly ("if C does not schedule it") was not met, because C did
+schedule it and paid. But a handwritten TIE728 pair with no spill/reload at 60-80 cycles/pair
+would be a further ~+1.5 %, and the same kbench + captured-pair fixture path is already built, so
+it is cheap to screen. Do it as its own experiment with the same bit-exactness gate.
+
+**Reusable method, worth more than the 0.48 %**: capture the real predicate arguments on the host
+(it runs the same engine) and feed them to the device microbenchmark. This kills the
+#149-calibration failure mode (a synthetic/fresh-state microbench overstated a sampler saving 3x)
+at its root: the bench now runs on the distribution the shipping model produces, and reports
+per-element bit mismatch rather than a tolerance.
+
 ## PSRAM tier: LOW-END coverage now measured too (run #206) - and a knob beat a model
 
 `ND_TIER_TRACE=1` (already in the tree, prints at model open) answered a question the campaign

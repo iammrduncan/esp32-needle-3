@@ -6,9 +6,15 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #227, authoritative).** Accepted runtime: **4.8917 decode tok/s (+100.5 %
-over the 2.44 baseline)**, 4.81 extended, 3.87 think, 5.2167 prefill, boot bench 201 ms/token,
-14/14 device + 13/13 host byte-exact, fidelity 5.341e-05 / top1 10/10, internal_free 15759.
+**CURRENT STATE (run #229, authoritative).** Accepted runtime: **4.9150 decode tok/s (+101.3 %
+over the 2.44 baseline)**, 4.8357 extended, 3.88 think, 5.2433 prefill, boot bench 199 ms/token,
+14/14 device + 13/13 host byte-exact, fidelity 5.341e-05 / top1 10/10, internal_free 15503.
+Experiment 12 is measured, integrated and kept (paired attention `nd_expf`, isolated kernel
++19.96 %, end to end +0.48 %); its evidence and the reusable capture/bench path are in
+`.auto/ideas.md`.
+
+**Superseded state (run #227).** 4.8917 decode, 4.81 extended, 3.87 think, 5.2167 prefill,
+boot bench 201 ms/token, internal_free 15759.
 Repeated three-board batches agree to the last digit, so there is no board drift and the metric is
 deterministic to ~0.04 % (one quantisation tick), not noisy. Runs #222-#227 were unchanged
 verification repeats and added no information; do not continue that pattern.
@@ -22,9 +28,12 @@ re-run with no code change adds cost and no information), couple three-board con
 candidates instead of running periodic baseline-only batches, and treat any candidate below the
 0.2 % keep bar as not worth a build.
 
-**NEXT: the measurement-backed experiment queue is REOPENED.** The accepted control is
-**4.8917 decode tok/s**. The immediate target is 5.00 tok/s, which requires saving about
-4.4 ms from the ~204.4 ms request token. Earlier analytical closures for Experiments 7-11 are
+**NEXT: Experiment 13 (ESP-DSP S3 dot-product audit).** Experiment 12 is closed as kept.
+`make capture` is **due now**, because the shipping sampler/attention code changed at #229 (last
+green #188). The accepted control is **4.9150 decode tok/s**. The immediate target is 5.00 tok/s,
+which now requires saving about 3.5 ms from the ~203.5 ms request token. Two things are known
+after #229: the exp chains were worth ~1.75 ms of latency (half of it recovered), and the
+capture-real-inputs-then-device-microbench path works, so prefer it for 13-19. Earlier analytical closures for Experiments 7-11 are
 historical hypotheses, not substitutes for the concrete microbenchmarks below. Do not call an
 experiment complete merely because the phase map predicts a null.
 

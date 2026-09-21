@@ -512,6 +512,73 @@ static void probes(void)
     fflush(stdout);
 }
 
+/* ------------------------------------------------------------------ *
+ * Experiment 12: paired attention exponential.
+ *
+ * The attention online softmax calls exp() twice back to back per KV position
+ * pair per query head, and each expansion is a serial degree-5 Horner chain.
+ * exp_pairs.h holds real captured arguments, so the fixture is the shipping
+ * distribution rather than a synthetic range. Both variants accumulate
+ * identically (acc += e0 + e1), so the timed difference is the kernel and not
+ * the harness. Per-element bit equality against two scalar calls is required.
+ * ------------------------------------------------------------------ */
+#include "exp_pairs.h"
+
+__attribute__((noinline)) static float kb_exp_scalar(const float *p, unsigned n)
+{
+    float    acc = 0.0f;
+    unsigned i;
+    for (i = 0; i < n; i++)
+        acc += nd_expf(p[2 * i]) + nd_expf(p[2 * i + 1]);
+    return acc;
+}
+
+__attribute__((noinline)) static float kb_exp_pair_c(const float *p, unsigned n)
+{
+    float    acc = 0.0f, a, b;
+    unsigned i;
+    for (i = 0; i < n; i++) {
+        nd_expf_pair(p[2 * i], p[2 * i + 1], &a, &b);
+        acc += a + b;
+    }
+    return acc;
+}
+
+static void bench_exp_pair(void)
+{
+    const unsigned n = (unsigned)KB_EXP_NPAIRS;
+    uint32_t best_s = 0xFFFFFFFFu, best_p = 0xFFFFFFFFu, sink = 0;
+    unsigned i, r, bad = 0;
+    float    s, t, a, b;
+
+    for (i = 0; i < n; i++) {
+        float x = nd_expf(kb_exp_pairs[2 * i]);
+        float y = nd_expf(kb_exp_pairs[2 * i + 1]);
+        nd_expf_pair(kb_exp_pairs[2 * i], kb_exp_pairs[2 * i + 1], &a, &b);
+        if (memcmp(&x, &a, 4) || memcmp(&y, &b, 4)) bad++;
+    }
+    s = kb_exp_scalar(kb_exp_pairs, n);
+    t = kb_exp_pair_c(kb_exp_pairs, n);
+
+    for (r = 0; r < KB_ROUNDS; r++) {
+        uint32_t c0 = esp_cpu_get_cycle_count(), d;
+        sink += (uint32_t)kb_exp_scalar(kb_exp_pairs, n);
+        d = esp_cpu_get_cycle_count() - c0;
+        if (d < best_s) best_s = d;
+        c0 = esp_cpu_get_cycle_count();
+        sink += (uint32_t)kb_exp_pair_c(kb_exp_pairs, n);
+        d = esp_cpu_get_cycle_count() - c0;
+        if (d < best_p) best_p = d;
+    }
+    printf("KB EXP npairs=%u rounds=%u scalar_cyc_pair=%u.%02u pair_cyc_pair=%u.%02u "
+           "saving_pct=%+.2f mismatch=%u sumexact=%d sink=%u\n",
+           n, (unsigned)KB_ROUNDS,
+           (unsigned)(best_s / n), (unsigned)((best_s % n) * 100 / n),
+           (unsigned)(best_p / n), (unsigned)((best_p % n) * 100 / n),
+           100.0 * (double)((int)best_s - (int)best_p) / (double)best_s,
+           bad, memcmp(&s, &t, 4) == 0, (unsigned)sink);
+}
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -548,6 +615,8 @@ int kbench_run(void)
 
     /* CCOUNT has to be real before any of this means anything: bracket 50 ms of
      * busy wait with the timer and the cycle counter and report the ratio. */
+    bench_exp_pair();
+
     t0 = esp_timer_get_time();
     c0 = esp_cpu_get_cycle_count();
     while (esp_timer_get_time() - t0 < 50000)

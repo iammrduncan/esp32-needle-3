@@ -579,6 +579,184 @@ static void bench_exp_pair(void)
            bad, memcmp(&s, &t, 4) == 0, (unsigned)sink);
 }
 
+/* ------------------------------------------------------------------ *
+ * Experiment 13: dot-product schedule audit.
+ *
+ * Two shapes matter. The attention Q.K dot is qk_hd=48 floats, evaluated once
+ * per query head per KV position (two dots per head per position pair, 12
+ * heads, 8 layers), and it is written as one accumulator with a two-term
+ * group, i.e. 24 serially dependent adds for 48 products. The Kronecker dot is
+ * 32 floats inside kron_apply. Both accumulation orders are frozen by the
+ * byte-exact golden gate, so a candidate has to keep them exactly: what is
+ * still available is (a) interleaving the two independent dots of a position
+ * pair, the same lever that paid off for exp(), and (b) getting the loads out
+ * of the way with 128-bit float loads on 16-byte-aligned operands.
+ *
+ * Espressif's esp-dsp component (dsps_dotprod_f32_aes3) is not present in this
+ * tree or in ESP-IDF 5.5.2, so its schedule is reproduced locally rather than
+ * called; a reordered multi-accumulator variant is measured here only to size
+ * the prize that the byte-exact gate refuses.
+ *
+ * Dots have no data-dependent timing on the TIE FPU, so the fixture is real
+ * int8-derived K values and a plausible activation; alignments are the ones
+ * the shipping code actually has (stack arrays for the staged K rows, head rows
+ * 192 bytes apart for q).
+ * ------------------------------------------------------------------ */
+
+#define ND_DOT_N   48          /* qk_head_dim, floats            */
+#define ND_KRON_N  32          /* kron factor side, floats        */
+
+__attribute__((noinline)) static float dot_c4(const float *q, const float *k, int n)
+{
+    float s = 0.0f;
+    int   i;
+    for (i = 0; i < n; i += 4) {
+        s += q[i + 0] * k[i + 0] + q[i + 1] * k[i + 1];
+        s += q[i + 2] * k[i + 2] + q[i + 3] * k[i + 3];
+    }
+    return s;
+}
+
+/* Two dots, chains interleaved, each chain's order untouched: bit-identical to
+ * calling dot_c4 twice. */
+__attribute__((noinline)) static void dot_pair_c(const float *q, const float *k0,
+                                                 const float *k1, int n,
+                                                 float *r0, float *r1)
+{
+    float s0 = 0.0f, s1 = 0.0f;
+    int   i;
+    for (i = 0; i < n; i += 4) {
+        s0 += q[i + 0] * k0[i + 0] + q[i + 1] * k0[i + 1];
+        s1 += q[i + 0] * k1[i + 0] + q[i + 1] * k1[i + 1];
+        s0 += q[i + 2] * k0[i + 2] + q[i + 3] * k0[i + 3];
+        s1 += q[i + 2] * k1[i + 2] + q[i + 3] * k1[i + 3];
+    }
+    *r0 = s0; *r1 = s1;
+}
+
+/* Reordered 4-accumulator dot: measures the prize the byte-exact gate refuses. */
+__attribute__((noinline)) static float dot_reord(const float *q, const float *k, int n)
+{
+    float a = 0.0f, b = 0.0f, c = 0.0f, d = 0.0f;
+    int   i;
+    for (i = 0; i < n; i += 4) {
+        a += q[i + 0] * k[i + 0];
+        b += q[i + 1] * k[i + 1];
+        c += q[i + 2] * k[i + 2];
+        d += q[i + 3] * k[i + 3];
+    }
+    return (a + b) + (c + d);
+}
+
+/* Eight distinct rows per role, so no call is loop-invariant: with one fixed
+ * operand pair the compiler hoists a pure noinline call out of the timing loop
+ * (measured: 8 cycles for a 48-element dot, and a pair variant that wrote only
+ * locals measured 0). Every result is consumed through an FP register barrier,
+ * which keeps the value live without adding memory traffic. */
+static float s_kf[8][ND_DOT_N], s_qr[ND_DOT_N], s_kr[8][ND_KRON_N], s_xa[8][ND_KRON_N];
+static float s_q16[ND_DOT_N] __attribute__((aligned(16)));
+
+__attribute__((noinline)) static float fp_keep(float v)
+{
+    asm volatile("" : "+f"(v));
+    return v;
+}
+
+static void bench_dot(void)
+{
+    float kf0[ND_DOT_N], kf1[ND_DOT_N];                 /* stack-aligned, as in attn_heads */
+    float a, b, worst = 0.0f, sink = 0.0f;
+    uint32_t best_c4 = 0xFFFFFFFFu, best_pr = 0xFFFFFFFFu, best_ro = 0xFFFFFFFFu;
+    uint32_t best_k4 = 0xFFFFFFFFu, best_kp = 0xFFFFFFFFu, best_kr = 0xFFFFFFFFu;
+    unsigned r, i, j, bad = 0;
+    const float *q = s_q16;                              /* 16-byte aligned, like qh rows */
+
+    for (i = 0; i < 8; i++) {
+        unsigned t;
+        for (t = 0; t < ND_DOT_N; t++)
+            s_kf[i][t] = (float)(((int)(t * 37 + i * 11)) % 255) - 127.0f;  /* int8 range */
+        for (t = 0; t < ND_KRON_N; t++) {
+            s_kr[i][t] = 0.01f * (float)((t * 7 + i * 5) % 61) - 0.3f;
+            s_xa[i][t] = 0.5f * (float)((t * 11 + i * 3) % 37) - 9.0f;
+        }
+    }
+    for (i = 0; i < ND_DOT_N; i++)
+        s_q16[i] = 0.25f * (float)((int)(i * 13) % 41) - 5.0f;
+    for (i = 0; i < ND_DOT_N; i++) {                     /* the real staged rows */
+        kf0[i] = s_kf[0][i];
+        kf1[i] = s_kf[1][i];
+    }
+
+    for (i = 0; i < 8; i++) {                            /* correctness, not timing */
+        float x = dot_c4(s_kf[i], s_kf[(i + 1) & 7], ND_DOT_N);
+        float y = dot_reord(s_kf[i], s_kf[(i + 1) & 7], ND_DOT_N);
+        float d = fabsf(y - x);
+        const float *kk0 = s_kf[(i + 2) & 7], *kk1 = s_kf[(i + 3) & 7];
+        float e0 = dot_c4(s_kf[i], kk0, ND_DOT_N), e1 = dot_c4(s_kf[i], kk1, ND_DOT_N);
+        dot_pair_c(s_kf[i], kk0, kk1, ND_DOT_N, &a, &b);
+        if (memcmp(&a, &e0, 4) || memcmp(&b, &e1, 4)) bad++;
+        if (d > worst) worst = d;
+    }
+
+    for (r = 0; r < KB_ROUNDS; r++) {
+        uint32_t c0, d;
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++) {
+            sink += dot_c4(q, s_kf[j & 7], ND_DOT_N);
+            sink += dot_c4(q, s_kf[(j + 1) & 7], ND_DOT_N);
+        }
+        d = (esp_cpu_get_cycle_count() - c0) / 128;
+        if (d < best_c4) best_c4 = d;
+
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++) {
+            dot_pair_c(q, s_kf[j & 7], s_kf[(j + 1) & 7], ND_DOT_N, &a, &b);
+            sink += fp_keep(a) + fp_keep(b);
+        }
+        d = (esp_cpu_get_cycle_count() - c0) / 64;
+        if (d < best_pr) best_pr = d;
+
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++)
+            sink += dot_reord(q, s_kf[j & 7], ND_DOT_N);
+        d = (esp_cpu_get_cycle_count() - c0) / 64;
+        if (d < best_ro) best_ro = d;
+
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++) {
+            sink += dot_c4(s_kr[j & 7], s_xa[j & 7], ND_KRON_N);
+            sink += dot_c4(s_kr[(j + 1) & 7], s_xa[(j + 1) & 7], ND_KRON_N);
+        }
+        d = (esp_cpu_get_cycle_count() - c0) / 128;
+        if (d < best_k4) best_k4 = d;
+
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++) {
+            dot_pair_c(s_kr[j & 7], s_xa[j & 7], s_xa[(j + 1) & 7], ND_KRON_N, &a, &b);
+            sink += fp_keep(a) + fp_keep(b);
+        }
+        d = (esp_cpu_get_cycle_count() - c0) / 64;
+        if (d < best_kp) best_kp = d;
+
+        c0 = esp_cpu_get_cycle_count();
+        for (j = 0; j < 64; j++)
+            sink += dot_reord(s_kr[j & 7], s_xa[j & 7], ND_KRON_N);
+        d = (esp_cpu_get_cycle_count() - c0) / 64;
+        if (d < best_kr) best_kr = d;
+    }
+    printf("KB DOT n=%d c4_pair_cyc=%u pair_cyc=%u pair_pct=%+.2f reord_cyc=%u "
+           "reord_vs_c4_pct=%+.2f reord_maxabs=%.3e kron_c4_pair_cyc=%u kron_pair_cyc=%u "
+           "kron_pair_pct=%+.2f kron_reord_cyc=%u kron_reord_pct=%+.2f bad=%u sink=%.1f\n",
+           ND_DOT_N, (unsigned)best_c4, (unsigned)best_pr,
+           100.0 * (double)(2 * (int)best_c4 - (int)best_pr) / (double)(2 * (int)best_c4),
+           (unsigned)best_ro,
+           100.0 * (double)((int)best_c4 - (int)best_ro) / (double)best_c4, worst,
+           (unsigned)best_k4, (unsigned)best_kp,
+           100.0 * (double)(2 * (int)best_k4 - (int)best_kp) / (double)(2 * (int)best_k4),
+           (unsigned)best_kr,
+           100.0 * (double)((int)best_k4 - (int)best_kr) / (double)best_k4, bad, sink);
+}
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -616,6 +794,7 @@ int kbench_run(void)
     /* CCOUNT has to be real before any of this means anything: bracket 50 ms of
      * busy wait with the timer and the cycle counter and report the ratio. */
     bench_exp_pair();
+    bench_dot();
 
     t0 = esp_timer_get_time();
     c0 = esp_cpu_get_cycle_count();

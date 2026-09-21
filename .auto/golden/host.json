@@ -1,5 +1,5 @@
 {
- "saved_at": "2026-09-18T07:41:40",
+ "saved_at": "2026-09-21T07:07:25",
  "cases": {
   "sampling5": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
@@ -54,6 +54,16 @@
   "heldout_route_timer": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{}}]</tool_call>",
    "tokens": 14,
+   "calls": null
+  },
+  "heldout_route_research": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"research_and_plan\",\"arguments\":{}}]</tool_call>",
+   "tokens": 17,
+   "calls": null
+  },
+  "heldout_interval_over_max": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":400}}]</tool_call>",
+   "tokens": 23,
    "calls": null
   }
  }

@@ -29,7 +29,7 @@ Work that is still worth spending a run on, in order:
 2. **`make capture`** (`demo/capture.py --out /tmp/recording.json`, driven
    through `tools/serial_api.py` on the board's console port) every ~10 kept
    changes: it is the only behavioural check of routing, second-pass tool
-   execution and timer expiry, which the 12-case byte-exact suite does not
+   execution and timer expiry, which the 14-case byte-exact suite does not
    cover. Last green: run #143 tree, all 7 scenarios; due again shortly.
 2b. **Closed now, but the pattern is the one to reuse:** the sampler win came
    from *repeating the cheap part of a hot predicate per small domain* (256 byte
@@ -128,7 +128,7 @@ compute-limited in the same way — do not trust host speed as a proxy.
 ## How to Run
 
 `./.auto/measure.sh` (~10-13 min: host pre-check, `idf.py build`, flash, boot +
-prefix priming, then 12 real requests on the board). It prints `METRIC name=value`
+prefix priming, then 14 real requests on the board (6 primary + 7 extended + 1 think)). It prints `METRIC name=value`
 lines plus `CASE`, `GROUP`, `BOOT`, `PROF` diagnostics.
 
 `./.auto/checks.sh` runs the correctness/quality gates (host build, repo tests,

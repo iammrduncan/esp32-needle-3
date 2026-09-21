@@ -1,3 +1,28 @@
+## PSRAM tier: LOW-END coverage now measured too (run #206) - and a knob beat a model
+
+`ND_TIER_TRACE=1` (already in the tree, prints at model open) answered a question the campaign
+had been assuming: `emb=11136..3255168 in_span=0` - the logits embedding and candidate-gather
+rows, read every token, were entirely **below** the staged span, while 8 MB of the 12 MB
+allocation was dead padding. Because `hi_p = lo_p + ND_TIER_SPAN_BYTES`, pulling `lo_p` down to
+the embedding's offset cost **zero extra copy bytes** (the padding above the blob shrinks) and
+`nd_cact_tier()` translates relative to `lo_p`, so coverage followed for free: three lines.
+
+Measured result: **4.8917, exactly the accepted value**, extended 4.81, think 3.87 (decisive -
+think reads all 3.14 MB of the embedding every token), byte-exact 14/14. Re-ran with the trace
+to prove it was live (`in_span=1`, `content=7848512` vs 4602944) before calling it a null, since
+a silent fallback looks identical. **Tier family closed**: span, stride, copy order, allocation
+ceiling, and now low-end coverage.
+
+Why it is worth nothing: the tier is a *copy into PSRAM*, not a cache, and its measured value
+belongs to converting big sequential flash reads (the ~4.4 MB/token of per-layer projections)
+into PSRAM reads. Scattered logits rows (~1500 of 8192, spread over 3.14 MB) are limited by the
+access pattern, not the address space.
+
+**Method lesson (the keeper):** a two-line diagnostic knob already in the tree settled this in
+one build, where earlier cycles had built models of the same question. When something is
+cheaply observable, observe it: `ND_TIER_TRACE` both generated the candidate and then falsified
+its own null against the silent-fallback failure mode.
+
 ## The sampler was a real lever, and the bench could not see it (run #147: KEPT, +2.16 %)
 
 `nd_sample_hidden` decided legality by walking every vocabulary piece's bytes

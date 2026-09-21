@@ -92,6 +92,12 @@ Work that is still worth spending a run on, in order:
    fast, and the fidelity probe would probably allow it, but it changes the int8 rounding of
    the KV cache - the model's memory - and 14 prompts cannot certify that. Not shipped.
 
+2f. **Tier family is closed on every axis, including low-end coverage (run #206).** The
+   logits embedding was outside the staged span and could be pulled in for free; staging it
+   changed decode by exactly nothing (and think too, which reads all 3.14 MB per token). The
+   tier's value is specific to big sequential per-layer projection reads. `ND_TIER_TRACE=1` is
+   the knob that answers residency questions in one build - use it instead of reasoning.
+
 3. **Sub-1 % candidates, only if a floor is shown to be wrong**: `lsc`-pairing
    the 4-bit loop's activation loads, an asm `kron_apply`, asm around online
    softmax. Each needs a *new* measurement that contradicts the floor before it

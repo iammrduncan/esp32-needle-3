@@ -1,4 +1,4 @@
-# Experiment 13 - dot-product schedule audit: PARTIAL (run #230), C half measured, asm half open
+# Experiment 13 - dot-product schedule audit: CLOSED, rejected, no integration (run #230)
 
 **Blocker, recorded exactly:** Espressif's `esp-dsp` component is not in this tree, not a managed
 component, and not in ESP-IDF 5.5.2 (`find / -name 'dsps_dotprod*'` -> nothing), and the campaign
@@ -28,13 +28,22 @@ independent chains made things *worse*, so the loop is bound by instruction issu
 traffic, and extra accumulators only add live registers plus the final fold. That closes
 "interleave the two dots" and "more accumulators" as C-level levers.
 
-It does **not** close the one thing C cannot express: cutting the 48 scalar `lsi` loads per dot to
-12 `ee.ldf.128.ip` loads. `qh` head rows are 192 bytes apart, so a 16-byte-aligned model base
+**And the 128-bit-load assembly lost too** (measured, same board/image): `dot_tie` with
+`ee.ldf.128.ip` post-increment loads and the shipped two-term group into one accumulator -
+bit-exact, `bad=0` - took **286 cycles against the C loop's 138 (-107 %)**. Two reasons, both
+general: a 128-bit float load on the S3's ai engine is not one LSU operation, and an
+`asm volatile` block is a scheduling fence, so GCC's own loop - which interleaves the two dots of
+a position pair and software-pipelines across iterations - loses none of that to a hand-written
+body. The `loop` instruction itself adds per-iteration overhead the C loop does not pay. `qh` head rows are 192 bytes apart, so a 16-byte-aligned model base
 makes every head row 16-aligned; the staged `kf0/kf1` rows are plain stack arrays and would need
 `__attribute__((aligned(16)))`. An order-preserving assembly dot (128-bit loads, still the shipped
 two-term group into one accumulator) stays bit-exact by construction, so it is the only candidate
-that could pass the byte-exact gate. **That asm is the remaining half of Experiment 13.** If it
-does not beat 138 cycles isolated, Experiment 13 is closed with no integration.
+that could pass the byte-exact gate. **Disposition: the shipped `dot_c4` is the measured best of four
+schedules** (pair -46 %, reorder -54 %, 128-bit asm -107 %; Kronecker n=32: pair -50 %, reorder
+-61 % against 97 cycles). No integration, main tree unchanged, `esp-dsp` absence recorded as the
+concrete blocker for the library-comparison half. The dot's 8.3 ms/token (138 cycles x ~14,400
+dots) is therefore *not* reducible by schedule, load width, accumulator count or pairing - only by
+changing what is computed, which the byte-exact gate refuses.
 
 **Fixture caveat, on the record:** `reord_maxabs = 0.000e+00` is an artefact - the fixture values
 are near-integers in int8 range, so every partial sum is exactly representable and the probe

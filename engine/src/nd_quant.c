@@ -247,6 +247,70 @@ ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *bl
 
 
 
+/* Folded codebook for the 4-bit path, laid out [position][level].
+ *
+ * nd_cact_codebook() keys only on the archive and the bit width, so for a given
+ * activation cb[k] * xh[j] is the same number for every output row - which is
+ * precisely what the 2-bit path already exploits with its pair table. Turning
+ * each weight into one gather instead of two (cb[..] and xh[..]) removes an
+ * instruction and, more importantly, a dependent load from the chain, on the
+ * phase that sits ~7x above both its issue and bandwidth floors.
+ *
+ * Only g == 128 is folded, because that is the geometry the archive actually
+ * uses for 4-bit tensors (in=3072, group=128) and 128 positions x 16 levels is
+ * 8 kB - which fits the internal RAM that is left. Anything else keeps the
+ * existing loop. The table is rebuilt once per group per worker and used by
+ * every row that worker owns.
+ */
+#define ND_FOLD_GROUP 128u
+#define ND_FOLD_LEVELS 16u
+static float s_fold[ND_FOLD_GROUP * ND_FOLD_LEVELS];
+
+/* Same products, same grouping, same order as dot_group's 4-bit branch. */
+static ND_HOT float dot_group_folded(const uint8_t *q, uint32_t g, const float *fold)
+{
+    float    s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+    uint32_t j;
+
+    for (j = 0; j < g; j += 8u) {
+        uint32_t w = ((const uint32_t *)(const void *)q)[0];
+        const float *f = fold + (size_t)j * ND_FOLD_LEVELS;
+        q += 4;
+        s0 += f[               w & 15u];
+        s1 += f[ND_FOLD_LEVELS + ((w >>  4) & 15u)];
+        s2 += f[ND_FOLD_LEVELS * 2u + ((w >>  8) & 15u)];
+        s3 += f[ND_FOLD_LEVELS * 3u + ((w >> 12) & 15u)];
+        s0 += f[ND_FOLD_LEVELS * 4u + ((w >> 16) & 15u)];
+        s1 += f[ND_FOLD_LEVELS * 5u + ((w >> 20) & 15u)];
+        s2 += f[ND_FOLD_LEVELS * 6u + ((w >> 24) & 15u)];
+        s3 += f[ND_FOLD_LEVELS * 7u + (w >> 28)];
+    }
+    return (s0 + s1) + (s2 + s3);
+}
+
+/* Group-outer / row-inner: y[] is accumulated in the same ascending group
+ * order the row-outer loop used, so every y[r] is bit-identical. */
+static ND_HOT void gemv_rows_folded(void *vc, uint32_t r0, uint32_t r1)
+{
+    const gemv_ctx *c = (const gemv_ctx *)vc;
+    uint32_t        r, gi, k, j;
+
+    for (r = r0; r < r1; r++)
+        c->y[r] = 0.0f;
+
+    for (gi = 0; gi < c->ngroup; gi++) {
+        const float *xh = c->xh + (size_t)gi * c->g;
+        for (j = 0; j < c->g; j++)
+            for (k = 0; k < ND_FOLD_LEVELS; k++)
+                s_fold[(size_t)j * ND_FOLD_LEVELS + k] = c->cb[k] * xh[j];
+        for (r = r0; r < r1; r++) {
+            const uint8_t *row = c->packed + (size_t)r * c->rowbytes;
+            c->y[r] += nd_f16(c->norms[(size_t)r * c->ngroup + gi]) *
+                      dot_group_folded(row + (size_t)gi * c->g / 2u, c->g, s_fold);
+        }
+    }
+}
+
 static ND_HOT void gemv_rows_generic(void *vc, uint32_t r0, uint32_t r1)
 {
     const gemv_ctx *c = (const gemv_ctx *)vc;
@@ -285,7 +349,13 @@ ND_HOT void nd_cq_gemv_prepared(const nd_cact *c, const nd_tensor *t, const void
     ctx.bits     = t->bits;
     ctx.rowbytes = rowbytes;
 
-    nd_parallel_rows(gemv_rows_generic, &ctx, out);
+    /* The folded path needs the 4-bit packed loop's alignment preconditions,
+     * which are the same ones dot_group tests, plus the geometry the 8 kB
+     * table covers. */
+    if (t->bits == 4u && t->group == ND_FOLD_GROUP && (t->group & 7u) == 0u)
+        nd_parallel_rows(gemv_rows_folded, &ctx, out);
+    else
+        nd_parallel_rows(gemv_rows_generic, &ctx, out);
 }
 
 ND_HOT void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,

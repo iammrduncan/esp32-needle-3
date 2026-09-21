@@ -6,28 +6,39 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**NEXT: no open experiment remains.** Experiments 1-6 of the MimiModel queue are
-dispositioned (1 complete, 2-4 complete and *shipped*: the TIE728 CQ2 kernel at
-+13.0 % decode, 5 rejected as structurally invalid, 6 not applicable), and
-Experiments 7-11 were closed against the measured per-token phase map in runs
-#140-#142, with each disposition and its evidence written to
-`.auto/mimimodel-experiments.md`. The accepted control is the current HEAD at
-**4.7783 decode tok/s** (+95.7 % over the 2.44 baseline); every phase above 5 %
-of the 201 ms token is now at a named floor (2-bit GEMV 43 % = PSRAM line-fill
-bandwidth, attention heads 18 % = `exp()` plus KV line traffic, MLP `kron_apply`
-12 % = FP latency with 8 accumulators already in place, engram 8 % = flash gather
-latency, 4-bit mHC phi 6.7 % = a non-resident PSRAM working set).
+**NEXT: no open experiment remains.** The MimiModel queue is dispositioned (Experiments 1-6:
+1 complete, 2-4 complete and *shipped* as the TIE728 CQ2 kernel at +13.0 % decode, 5 rejected as
+structurally invalid, 6 not applicable; 7-11 closed against the measured phase map). Since then the
+**sampler** turned out to be a real lever, because the boot bench never runs it: a first-byte
+legality table for the constrained sampler took decode from 4.7783 to **4.8817 tok/s (+2.16 %**,
+byte-exact 12/12 device + 11/11 host, extended +2.13 %, worst case +2.42 %, confirmed on two
+independent boards against a control that reproduced the old value exactly). That closes the last
+phase that was not at a named floor.
+
+The accepted control is the current HEAD at **4.8817 decode tok/s** (+99.9 % over the 2.44
+baseline); every phase above 0.5 % of the ~205 ms token is now at a floor - 2-bit GEMV ~53 %
+(TIE728 instruction floor), attention heads ~18 %, MLP `kron_apply` ~11 %, engram ~8 %, 4-bit mHC
+phi ~6.7 % (non-resident PSRAM working set), constrained sampler ~1 % (was 7 %), subset logits
+~3.5 %.
 
 Work that is still worth spending a run on, in order:
 
 1. **Verification cycles** on HEAD (the metric is stable to +-0.05 % across
    boards, so a control that reads low is a build-integrity failure - fresh
    configure every board and check `compile_commands.json`).
-2. **`make capture`** (`demo/capture.py --out /tmp/recording.json`, needs
-   `tools/serial_api.py` on the board's console port) every ~10 kept changes: it
-   is the only behavioural check of routing, second-pass tool execution and timer
-   expiry, which the 12-case byte-exact suite does not cover. Last green: run
-   #142 tree, all 7 scenarios.
+2. **`make capture`** (`demo/capture.py --out /tmp/recording.json`, driven
+   through `tools/serial_api.py` on the board's console port) every ~10 kept
+   changes: it is the only behavioural check of routing, second-pass tool
+   execution and timer expiry, which the 12-case byte-exact suite does not
+   cover. Last green: run #143 tree, all 7 scenarios; due again shortly.
+2b. **Closed now, but the pattern is the one to reuse:** the sampler win came
+   from *repeating the cheap part of a hot predicate per small domain* (256 byte
+   values per state) instead of trying to skip it. Memoizing the same work on the
+   grammar state measured exactly zero, because the state changes on essentially
+   every accepted token. Two corollaries recorded in `.auto/ideas.md`: microbench
+   a predicate on the states the real loop sees (a fresh-open grammar state made
+   my estimate 3x optimistic), and the paths the boot bench cannot run - sampler,
+   per-token emit - are the only territory that was still unexplored.
 3. **Sub-1 % candidates, only if a floor is shown to be wrong**: `lsc`-pairing
    the 4-bit loop's activation loads, an asm `kron_apply`, asm around online
    softmax. Each needs a *new* measurement that contradicts the floor before it

@@ -115,6 +115,36 @@ forbidden) or a faster 2-bit GEMV (measured at its floor a dozen times). A
 measurement that cannot alter the next action is not worth 14 minutes of board
 time, which is what a flash costs here including the five-minute priming.
 
+## 4-bit folded codebook: CLOSED UNSAFE (runs #159-#162), and a shared-state audit of everything shipped
+
+`gemv_rows_folded` (kept at #159 for +0.17 %) wrote **one file-scope 8 kB table from
+both cores**. `rows_dual_core` (esp32/main/main.c) releases `s_go` and then runs its
+own half with **no barrier between the halves**, so the two invocations drift; a
+tick landing mid-build mixes two groups' values into one operand. It was byte-exact
+on three boards and the host by timing luck - equal-sized halves starting together
+stay in phase often - and the host can never catch it because `nd_parallel_rows` is
+`rows_serial` there. Reverted at #162; the race-free caller-side variant (build the
+table outside the split, one `nd_parallel_rows` per group) measured worse on every
+monitor (4.87 / 4.7857 / 3.95 vs 4.8817 / 4.7986 / 3.87) because it trades one
+handshake per projection for one per group plus a read-modify-write of `y` per
+group, and per-core tables need 16 kB against 8.3 kB of free internal RAM. The
+deeper reason it was always going to be small: the fold replaces one **internal
+SRAM** operand (`xh`) with another; the phase is dominated by the 4-bit *weight*
+stream in PSRAM, which the fold does not touch. Micro-optimising a non-dominant
+operand cannot exceed that operand's share.
+
+**Audit rule this created:** before keeping any kernel that `nd_parallel_rows` runs,
+check for shared mutable state, not just for matching numbers. Every kept split
+kernel was re-read with that question and all are clean:
+
+| kernel | why it is safe |
+|---|---|
+| `lut2_rows_tie1n` (TIE728) | per-row registers only; the pair table is read-only |
+| `attn_heads` (#139) | staging arrays are function locals (`kf0/kf1/vf0/vf1/mx/denom/ohp`), head ranges are disjoint, outputs are per-head |
+| `gather_rows`, `gemv_rows_generic`, `gemv_rows_offset` | pure per-row, no file-scope writes |
+| first-byte legality table (#147) | 256-byte array on the stack, sampler runs on one core |
+| fp32 weight pools, 12 MB PSRAM tier | built once, read-only afterwards |
+
 ## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
 
 Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,

@@ -15,8 +15,13 @@ byte-exact 12/12 device + 11/11 host, extended +2.13 %, worst case +2.42 %, conf
 independent boards against a control that reproduced the old value exactly). That closes the last
 phase that was not at a named floor.
 
-The accepted control is the current HEAD at **4.89 decode tok/s** (+100.3 % over the 2.44
-baseline); every phase above 0.5 % of the ~205 ms token is now at a floor - 2-bit GEMV ~53 %
+The accepted control is the current HEAD at **4.8817 decode tok/s** (+99.9 % over the 2.44
+baseline). The 4-bit folded codebook that briefly reached 4.8917 was withdrawn at #162:
+as implemented it wrote one static table from both cores, which `rows_dual_core`
+runs concurrently with no barrier - byte-exactness passed by timing luck. The
+race-free variant measured worse. **Audit rule now in force: any kernel handed to
+`nd_parallel_rows` must be checked for shared mutable state, not only for matching
+numbers** (the audit of every kept split kernel is in `.auto/ideas.md`; all clean); every phase above 0.5 % of the ~205 ms token is now at a floor - 2-bit GEMV ~53 %
 (TIE728 instruction floor), attention heads ~18 %, MLP `kron_apply` ~11 %, engram ~8 %, 4-bit mHC
 phi ~6.7 % (non-resident PSRAM working set), constrained sampler ~1 % (was 7 %), subset logits
 ~3.5 %.

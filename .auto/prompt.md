@@ -6,6 +6,20 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
+**CURRENT STATE (run #201, authoritative).** Accepted runtime: **4.8917 decode tok/s (+100.5 %
+over the 2.44 baseline)**, 4.81 extended, 3.87 think, 5.2167 prefill, boot bench 201 ms/token,
+14/14 device + 13/13 host byte-exact, fidelity 5.341e-05 / top1 10/10, internal_free 15759.
+Seven three-board batches agree to the last digit, so there is no board drift and the metric is
+deterministic to ~0.04 % (one quantisation tick), not noisy.
+
+The campaign's productive lens at the end was **request-path work the boot bench cannot see that
+runs while core 1 is idle**; it yielded #147 (first-byte legality table, +2.16 %) and #176
+(two-core legality filter, +0.20 %). Everything else in the token is now two-core or at a named
+floor, and the closures with evidence are in `.auto/ideas.md`. Cadence rules that apply now:
+run `make capture` **when the shipping code changes** (green at #188 on this code; a periodic
+re-run with no code change adds cost and no information), keep the three-board batch every ~5
+cycles for drift, and treat any candidate below the 0.2 % keep bar as not worth a build.
+
 **NEXT: no open experiment remains.** The MimiModel queue is dispositioned (Experiments 1-6:
 1 complete, 2-4 complete and *shipped* as the TIE728 CQ2 kernel at +13.0 % decode, 5 rejected as
 structurally invalid, 6 not applicable; 7-11 closed against the measured phase map). Since then the

@@ -15,8 +15,9 @@ byte-exact 12/12 device + 11/11 host, extended +2.13 %, worst case +2.42 %, conf
 independent boards against a control that reproduced the old value exactly). That closes the last
 phase that was not at a named floor.
 
-The accepted control is the current HEAD at **4.8817 decode tok/s** (+99.9 % over the 2.44
-baseline). The 4-bit folded codebook that briefly reached 4.8917 was withdrawn at #162:
+The accepted control is the current HEAD at **4.8917 decode tok/s** (+100.5 % over the 2.44
+baseline): 4.8817 plus the two-core sampler-filter split (#176, confirmed by batch at
+#177 with the control reading 4.8817 exactly). The 4-bit folded codebook that briefly reached 4.8917 was withdrawn at #162:
 as implemented it wrote one static table from both cores, which `rows_dual_core`
 runs concurrently with no barrier - byte-exactness passed by timing luck. The
 race-free variant measured worse. **Audit rule now in force: any kernel handed to
@@ -60,6 +61,22 @@ Work that is still worth spending a run on, in order:
    `think=False` or send `!think 0` first, or you will measure the 8192-row
    full-vocabulary path instead (that trap showed `logits4` at 63 ms and looked like a
    30 % phase).
+
+2d. **The bench-invisible part of the request path is where the wins are, and it has now
+   yielded two (#147 first-byte table +2.16 %, #176 split legality filter +0.20 %).** The
+   rule that found both: after the boot-bench phase map is exhausted, look for request-path
+   work that (a) the bench cannot see and (b) runs while core 1 is idle. Sampling is exactly
+   that point, because the next token's projections depend on the token being sampled. What
+   is left there is under 0.8 % of the token.
+
+2e. **Two more candidates closed by analysis, so do not spend a run on them.**
+   `kv_store_int8` (1.1 ms, 0.55 %) is divide-bound - one software `__divsf3` per element,
+   ~340 cycles/element implied - but it has only 2 units per call (k and v per KV head) so
+   `rows_dual_core` would run it on one core, and re-rolling it as one 4-unit split per layer
+   costs 8 handshakes a token against a 0.55 ms prize, which the measured +0.04..0.13 % band
+   for splits of this size says loses. Replacing `x / scale` with `x * (1/scale)` would be
+   fast, and the fidelity probe would probably allow it, but it changes the int8 rounding of
+   the KV cache - the model's memory - and 14 prompts cannot certify that. Not shipped.
 
 3. **Sub-1 % candidates, only if a floor is shown to be wrong**: `lsc`-pairing
    the 4-bit loop's activation loads, an asm `kron_apply`, asm around online

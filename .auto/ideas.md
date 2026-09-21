@@ -23,6 +23,34 @@ Open follow-ups in the same phase: the survivors' full byte walk and one
 split `ND_P_SAMPLE` into table-build / survivor-walk / piece-lookup in a profiled
 build (harvest recipe below works and takes ~10 min on a warm board).
 
+## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
+
+Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,
+**`nd_gstate_byte` = 93 cycles** per call. After the first-byte table, the
+constrained sampler costs ~2 ms of a ~205 ms token: ~0.1 ms to build the 256-entry
+table, ~1.6 ms for the piece lookup + filter over ~8176 ids, ~0.06 ms for the
+survivors' byte walks. The subset-logits projection is timed separately (7.2 ms,
+TIE728 kernel, at its floor).
+
+Caching piece[0] per id in 8 KB of internal RAM (built once, falls back to the
+call if the allocation fails) measured **-0.17 %** - byte-exact, correct, and
+slower. Replacing one 45-cycle call with a dependent-load chain (global pointer,
+branch, byte array, 256-byte stack table) gave the scheduler less to work with
+than the call did.
+
+**Calibration lesson (this is the keeper):** run #147's win was predicted at
+~12.8 ms from the 93-cycle microbench and delivered ~4.5 ms, because that
+microbench probed a *freshly opened* grammar state - the cheapest possible
+predicate - and copied the state struct per call. Mid-string states are several
+times more expensive. A microbench of a predicate has to run on the states the
+real loop visits, or it will overstate savings ~3x. Both this #149 (and probably
+#146's zero) trace back to that same over-estimate.
+
+**Bonus: this closes the last anomaly in the campaign.** The boot bench measured
+~4 % faster than real requests purely because requests paid a 12.8 ms grammar
+walk the bench structurally never runs. After #147 the bench-to-request gap is a
+~2 % ordinary residue (console emit, bookkeeping).
+
 ## Measurement noise floor of the primary metric (run #144)
 
 Three byte-identical-source images, freshly configured, measured on all three

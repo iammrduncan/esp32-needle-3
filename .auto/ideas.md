@@ -88,6 +88,33 @@ been:
   bench.py had the right port). If longer held-out prompts are ever wanted, the
   timeout is the knob to look at, not the port.
 
+## Request-path profile harvest: how to do it in one shot (and why I stopped at run #158)
+
+Two ways I failed to get a per-request `EVT prof` table, both worth not repeating:
+
+- `idf.py -DNEEDLE_PROFILE=ON` in a **fresh** build dir does not define
+  `ND_PROFILE` even though `esp32/components/needle/CMakeLists.txt` has
+  `option(NEEDLE_PROFILE ... OFF)` + `target_compile_definitions(... PUBLIC
+  ND_PROFILE)`. Verify with `-D CMAKE_C_FLAGS="-DND_PROFILE=1"` on a fresh dir,
+  and grep the **exact token** `-DND_PROFILE` in `compile_commands.json` - not
+  `-DND_PROFILE=1`, which is not how a bare define appears (that wrong grep made
+  a working build look broken and a broken one look verified).
+- To read the table for a real request: attach with
+  `sys.path.insert(0, '/workspace/esp32-needle-3/tools'); import serial_api;
+  serial_api.Device('/dev/ttyACM1', ...)` **inside `needle-board run N`** (that
+  port is the console; 0 is flash), then write the prompt with
+  `dev.serial.write(b"...\n")` and drain with `dev._line()` until `END`.
+  `Device.complete()` swallows the raw lines, and `prof_dump` prints **after**
+  `EVT done`, so breaking on `EVT done` hides the table. `prof_dump` does not
+  zero `nd_prof`, so a request dump also contains the boot bench's totals.
+
+Stopped because the answer cannot change a decision: the only number in dispute
+was whether `nd_model_logits_subset` costs ~7 ms (my arithmetic) or more, and its
+only fixes are a smaller candidate set (changes what the model may emit -
+forbidden) or a faster 2-bit GEMV (measured at its floor a dozen times). A
+measurement that cannot alter the next action is not worth 14 minutes of board
+time, which is what a flash costs here including the five-minute priming.
+
 ## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
 
 Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,

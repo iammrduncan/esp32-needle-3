@@ -1,164 +1,192 @@
 {
-  "_comment": "Frozen benchmark prompt set. `primary` defines the primary metric and is NOT to be edited during the session (adding coverage to `extended` is fine). Expectations are asserted only where the correct tool call is unambiguous from the prompt text; `expect: null` means grammar validity + successful execution + golden exactness still apply but no specific tool is prescribed. Device RAW text is compared token-for-token against .auto/golden/device.json.",
-  "probe_ids": [2, 101, 7, 512, 305, 1288, 42, 4096, 900, 63],
-  "primary": [
+ "_comment": "Frozen benchmark prompt set. `primary` defines the primary metric and is NOT to be edited during the session (adding coverage to `extended` is fine). Expectations are asserted only where the correct tool call is unambiguous from the prompt text; `expect: null` means grammar validity + successful execution + golden exactness still apply but no specific tool is prescribed. Device RAW text is compared token-for-token against .auto/golden/device.json.",
+ "probe_ids": [
+  2,
+  101,
+  7,
+  512,
+  305,
+  1288,
+  42,
+  4096,
+  900,
+  63
+ ],
+ "primary": [
+  {
+   "id": "sampling5",
+   "phase": "tools",
+   "input": "Sample telemetry every 5 seconds",
+   "expect": [
     {
-      "id": "sampling5",
-      "phase": "tools",
-      "input": "Sample telemetry every 5 seconds",
-      "expect": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 5
-          }
-        }
-      ]
-    },
-    {
-      "id": "timer60",
-      "phase": "tools",
-      "input": "Start a 60 second timer",
-      "expect": [
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 60
-          }
-        }
-      ]
-    },
-    {
-      "id": "status_heap",
-      "phase": "tools",
-      "input": "How much free memory does this device have?",
-      "expect": [
-        {
-          "name": "get_status",
-          "arguments": {}
-        }
-      ]
-    },
-    {
-      "id": "batch",
-      "phase": "tools",
-      "input": "Sample every 10 seconds and start a 30 second timer",
-      "expect": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 10
-          }
-        },
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 30
-          }
-        }
-      ]
-    },
-    {
-      "id": "heldout_timer45",
-      "phase": "tools",
-      "input": "Start a 45 second timer",
-      "expect": [
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 45
-          }
-        }
-      ]
-    },
-    {
-      "id": "route_translate",
-      "phase": "route",
-      "input": "Translate good morning into Spanish",
-      "expect": [
-        {
-          "name": "translate_or_write",
-          "arguments": {}
-        }
-      ]
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 5
+     }
     }
-  ],
-  "extended": [
+   ]
+  },
+  {
+   "id": "timer60",
+   "phase": "tools",
+   "input": "Start a 60 second timer",
+   "expect": [
     {
-      "id": "heldout_sampling15",
-      "phase": "tools",
-      "input": "Sample telemetry every 15 seconds",
-      "expect": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 15
-          }
-        }
-      ]
-    },
-    {
-      "id": "heldout_batch",
-      "phase": "tools",
-      "input": "Set the sampling interval to 7 seconds and start a 120 second timer",
-      "expect": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 7
-          }
-        },
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 120
-          }
-        }
-      ]
-    },
-    {
-      "id": "heldout_status",
-      "phase": "tools",
-      "input": "Is a timer running right now?",
-      "expect": null,
-      "note": "phrasing is ambiguous (a countdown read-out is also defensible): grammar validity, successful execution and golden exactness still apply"
-    },
-    {
-      "id": "route_code",
-      "phase": "route",
-      "input": "Write a Python function to deduplicate a list",
-      "expect": [
-        {
-          "name": "write_code",
-          "arguments": {}
-        }
-      ]
-    },
-    {
-      "id": "heldout_route_timer",
-      "phase": "route",
-      "input": "Start a 15 second timer",
-      "expect": [
-        {
-          "name": "set_timer",
-          "arguments": {}
-        }
-      ]
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 60
+     }
     }
-  ],
-  "think": [
+   ]
+  },
+  {
+   "id": "status_heap",
+   "phase": "tools",
+   "input": "How much free memory does this device have?",
+   "expect": [
     {
-      "id": "think_timer60",
-      "phase": "tools",
-      "input": "Start a 60 second timer",
-      "expect": [
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 60
-          }
-        }
-      ]
+     "name": "get_status",
+     "arguments": {}
     }
-  ]
+   ]
+  },
+  {
+   "id": "batch",
+   "phase": "tools",
+   "input": "Sample every 10 seconds and start a 30 second timer",
+   "expect": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 10
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 30
+     }
+    }
+   ]
+  },
+  {
+   "id": "heldout_timer45",
+   "phase": "tools",
+   "input": "Start a 45 second timer",
+   "expect": [
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 45
+     }
+    }
+   ]
+  },
+  {
+   "id": "route_translate",
+   "phase": "route",
+   "input": "Translate good morning into Spanish",
+   "expect": [
+    {
+     "name": "translate_or_write",
+     "arguments": {}
+    }
+   ]
+  }
+ ],
+ "extended": [
+  {
+   "id": "heldout_sampling15",
+   "phase": "tools",
+   "input": "Sample telemetry every 15 seconds",
+   "expect": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 15
+     }
+    }
+   ]
+  },
+  {
+   "id": "heldout_batch",
+   "phase": "tools",
+   "input": "Set the sampling interval to 7 seconds and start a 120 second timer",
+   "expect": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 7
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 120
+     }
+    }
+   ]
+  },
+  {
+   "id": "heldout_status",
+   "phase": "tools",
+   "input": "Is a timer running right now?",
+   "expect": null,
+   "note": "phrasing is ambiguous (a countdown read-out is also defensible): grammar validity, successful execution and golden exactness still apply"
+  },
+  {
+   "id": "route_code",
+   "phase": "route",
+   "input": "Write a Python function to deduplicate a list",
+   "expect": [
+    {
+     "name": "write_code",
+     "arguments": {}
+    }
+   ]
+  },
+  {
+   "id": "heldout_route_timer",
+   "phase": "route",
+   "input": "Start a 15 second timer",
+   "expect": [
+    {
+     "name": "set_timer",
+     "arguments": {}
+    }
+   ]
+  },
+  {
+   "id": "heldout_route_research",
+   "phase": "route",
+   "input": "Research how we should restructure on-device log rotation",
+   "expect": [
+    {
+     "name": "research_and_plan",
+     "arguments": {}
+    }
+   ]
+  },
+  {
+   "id": "heldout_interval_over_max",
+   "phase": "tools",
+   "input": "Sample telemetry every 40000 seconds",
+   "expect": null
+  }
+ ],
+ "think": [
+  {
+   "id": "think_timer60",
+   "phase": "tools",
+   "input": "Start a 60 second timer",
+   "expect": [
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 60
+     }
+    }
+   ]
+  }
+ ]
 }

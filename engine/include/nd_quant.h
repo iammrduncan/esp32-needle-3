@@ -96,6 +96,57 @@ static inline float nd_expf(float x)
     return p * scale;
 }
 
+/* exp() for two independent arguments at once.
+ *
+ * The attention online softmax evaluates `w0 = exp(s0 - m)` and
+ * `w1 = exp(s1 - m)` back to back for the two KV positions of a pair: 12
+ * heads x ~half the context x 8 layers, so ~10K pairs and two thirds of all
+ * exponential calls in a decode token. Each scalar expansion is a degree-5
+ * Horner chain with a strict serial dependency (~5 x FP-add latency of pure
+ * latency, nothing to issue in between), and disassembly of attn_heads showed
+ * GCC scheduling the two expansions one after the other and spilling live
+ * floats to the stack to do it. Interleaving the two chains gives the
+ * scheduler two independent operands per slot and lets both stay in
+ * registers.
+ *
+ * Each chain performs exactly the operations nd_expf() performs, in the same
+ * order with the same constants, so the pair is bit-identical to two scalar
+ * calls - this is not an approximation swap. Out-of-range arguments take the
+ * scalar path, which is the only place the two clamps live. */
+static inline void nd_expf_pair(float x0, float x1, float *r0, float *r1)
+{
+    float    z0, z1, f0, f1, p0, p1, sc0, sc1;
+    int      k0, k1;
+    uint32_t b0, b1;
+
+    if (x0 > 88.0f || x0 < -88.0f || x1 > 88.0f || x1 < -88.0f) {
+        *r0 = nd_expf(x0);
+        *r1 = nd_expf(x1);
+        return;
+    }
+
+    z0 = x0 * 1.44269504f;
+    z1 = x1 * 1.44269504f;
+    k0 = (int)(z0 + (z0 >= 0.0f ? 0.5f : -0.5f));
+    k1 = (int)(z1 + (z1 >= 0.0f ? 0.5f : -0.5f));
+    f0 = z0 - (float)k0;
+    f1 = z1 - (float)k1;
+
+    p0 = 0.0013333f;  p1 = 0.0013333f;
+    p0 = p0 * f0 + 0.0096181f;  p1 = p1 * f1 + 0.0096181f;
+    p0 = p0 * f0 + 0.0555041f;  p1 = p1 * f1 + 0.0555041f;
+    p0 = p0 * f0 + 0.2402265f;  p1 = p1 * f1 + 0.2402265f;
+    p0 = p0 * f0 + 0.6931472f;  p1 = p1 * f1 + 0.6931472f;
+    p0 = p0 * f0 + 1.0f;        p1 = p1 * f1 + 1.0f;
+
+    b0 = (uint32_t)(k0 + 127) << 23;
+    b1 = (uint32_t)(k1 + 127) << 23;
+    memcpy(&sc0, &b0, 4);
+    memcpy(&sc1, &b1, 4);
+    *r0 = p0 * sc0;
+    *r1 = p1 * sc1;
+}
+
 /* In-place unnormalised fast Walsh-Hadamard transform. `n` must be a power
  * of two. Apply 1/sqrt(n) yourself if you want the orthonormal H. */
 void nd_fwht(float *x, uint32_t n);

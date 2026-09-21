@@ -6,6 +6,10 @@
 
 #include "nd_quant.h"
 
+#ifdef ND_EXP_CAPTURE
+void nd_exp_capture(float a, float b);   /* host tool sink, capture builds only */
+#endif
+
 uint64_t nd_prof[ND_P_COUNT];
 
 #ifdef ND_PROFILE
@@ -14,6 +18,7 @@ uint64_t nd_prof[ND_P_COUNT];
 #define ND_NOW_US() ((uint64_t)esp_timer_get_time())
 #else
 #include <time.h>
+
 #define ND_NOW_US() ((uint64_t)(clock() * (1000000.0 / CLOCKS_PER_SEC)))
 #endif
 #define ND_T0(v) uint64_t v = ND_NOW_US()
@@ -1249,8 +1254,16 @@ static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
                         }
                         mx[t] = mnew;
                     }
-                    w0 = nd_expf(s0 - mx[t]);
-                    w1 = nd_expf(s1 - mx[t]);
+#ifdef ND_EXP_CAPTURE
+                    nd_exp_capture(s0 - mx[t], s1 - mx[t]);
+#endif
+                    /* One call for both positions of the pair: run #229 measured
+                     * 198.04 vs 247.42 cycles/pair on real captured arguments,
+                     * because each scalar expansion is a serial Horner chain and
+                     * GCC scheduled the two one after the other, spilling live
+                     * floats to do it. Bit-identical by construction - see
+                     * nd_expf_pair(). */
+                    nd_expf_pair(s0 - mx[t], s1 - mx[t], &w0, &w1);
                     denom[t] += w0 + w1;
                     {
                         float wv0 = w0 * vs0;

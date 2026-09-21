@@ -18,6 +18,32 @@
 #include "nd_grammar.h"
 #include "nd_sample.h"
 
+#ifdef ND_EXP_CAPTURE
+/* Experiment 12 capture: record the real (s0-m, s1-m) argument pairs that
+ * reach the adjacent attention exp() calls, so the device microbenchmark runs
+ * on the distribution the shipping model actually produces. */
+#include <stdlib.h>
+#define ND_CAP_MAX 8192
+static FILE   *s_capf;
+static float   s_cap[2 * ND_CAP_MAX];
+static size_t  s_capn;
+void nd_exp_capture(float a, float b)
+{
+    if (!s_capf) {
+        const char *p = getenv("ND_EXPCAP");
+        if (!p || !*p) return;
+        s_capf = fopen(p, "ab");
+        if (!s_capf) return;
+    }
+    if (s_capn < 2 * ND_CAP_MAX) s_cap[s_capn++] = a, s_cap[s_capn++] = b;
+}
+__attribute__((destructor)) static void nd_exp_cap_dtor(void)
+{
+    if (s_capf) { fwrite(s_cap, sizeof(float), s_capn, s_capf); fclose(s_capf); s_capf = NULL; }
+}
+#endif
+
+
 static void *slurp(const char *path, size_t *size)
 {
     FILE *f = fopen(path, "rb");

@@ -1129,9 +1129,40 @@ typedef struct {
 static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
                                  float scale)
 {
-    uint32_t i;
+    /* One reciprocal per call instead of one software divide per element.
+     *
+     * The ESP32-S3 has no FP divider, so `src[i] / scale` calls __divsf3 (~150
+     * cycles) once per element: 48 elements x two tensors x two KV heads x eight
+     * layers = 1,536 divides per decode token, which is what makes this 1.1 ms
+     * phase divide-bound rather than store-bound. The divisor is invariant across
+     * the row, so it is the textbook case for division by a reciprocal - but the
+     * naive `x * (1/scale)` is NOT usable here: it double-rounds, so a value
+     * within an ulp of a .5 boundary stores a different int8, and the int8 KV
+     * cache is the model's memory (run #2e rejected exactly that for that reason).
+     *
+     * This is the Markstein residual form instead: with r = RN(1/scale) correctly
+     * rounded by the one real divide, y0 = RN(x*r) is within one ulp of x/scale,
+     * e = RN(x - scale*y0) is the exact residual (that is what the fused multiply
+     * add buys), and q = RN(y0 + RN(e*r)) is then provably the correctly rounded
+     * quotient for round-to-nearest, i.e. bit-identical to the divide, at three FP
+     * operations. Verified element-by-element against `x / scale` over random and
+     * adversarial rows (see .auto/ideas.md) and byte-exact on every golden.
+     *
+     * The guard keeps the original semantics for non-finite x, where the fixup
+     * would produce NaN from infinity; it never triggers on real activations. */
+    const float r = 1.0f / scale;
+    uint32_t  i;
     for (i = 0; i < n; i++) {
-        float q = src[i] / scale;
+        float x = src[i];
+        float q;
+        if (x > -1e30f && x < 1e30f) {
+            float e;
+            q = x * r;
+            e = fmaf(-scale, q, x);
+            q = fmaf(e, r, q);
+        } else {
+            q = x / scale;
+        }
         if (q > 127.0f)  q = 127.0f;
         if (q < -127.0f) q = -127.0f;
         dst[i] = (int8_t)lrintf(q);

@@ -44,6 +44,37 @@ GEMV whose residual is PSRAM line-fill on a non-resident working set (#141). The
 campaign's remaining honest work is verification and the periodic behavioural
 capture.
 
+## Benchmark-coverage extension attempt, and two things the firmware does that matter (run #155)
+
+Tried to widen `extended` (the rules invite this; `primary` is frozen and was
+verified byte-identical to git before and after). Added 4 held-out cases covering
+real gaps: `research_and_plan` had **zero** routing coverage, `get_status` only
+appeared with a memory question, and nothing tested the schema's numeric bound.
+Host side was clean - 15/15 byte-exact, and the model chose `research_and_plan`
+and emitted the 4-digit `3600` correctly. The **device** run could not complete
+the `think` group: reproducibly, after ~15 requests in one attached session, the
+`!think 1` toggle goes unacknowledged and the next request times out - the same
+"console reads fine, writes block" signature as the API attach failure in #152.
+Reverted; the 12-case canonical run is green again, so the campaign's own numbers
+are unaffected. Two theories were falsified rather than assumed: it is not the
+long-running timer my case started (removed it, still failed), and it is not
+request-line length (my longest line was 237 bytes of the 272-byte reader).
+
+Two durable findings came out of it, both worth more than the coverage would have
+been:
+
+- **`esp32/main/main.c` silently truncates a request line at `ND_LINE_MAX-1` = 271
+  bytes.** The console read loop drops overflow characters and keeps waiting for
+  `\n`, so a longer request is answered as its first 271 characters with no error
+  of any kind. Fine for this benchmark (longest request today is 75 bytes); a real
+  product defect for any host that sends arbitrary user text. Flagged for the
+  owner; the fix is an explicit `ERR line_too_long`, not a bigger buffer.
+- **Anything that keeps the firmware out of its console read loop long enough
+  leaves the host unable to write.** That is now sighted three times: during boot
+  priming (#145), the API attach (#152), and this 15-request sequence. Fixing it
+  is a harness/firmware conversation, and until then any benchmark enlargement
+  needs a re-attach between groups, and `make capture` needs the same.
+
 ## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
 
 Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,

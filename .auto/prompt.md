@@ -29,8 +29,8 @@ candidates instead of running periodic baseline-only batches, and treat any cand
 0.2 % keep bar as not worth a build.
 
 **NEXT: Experiment 13 (ESP-DSP S3 dot-product audit).** Experiment 12 is closed as kept.
-`make capture` is **due now**, because the shipping sampler/attention code changed at #229 (last
-green #188). The accepted control is **4.9150 decode tok/s**. The immediate target is 5.00 tok/s,
+`make capture` was re-run at #229 on the new shipping code and is green again (7 scenarios, all 9
+flags true), so it is next due after the next shipping change. The accepted control is **4.9150 decode tok/s**. The immediate target is 5.00 tok/s,
 which now requires saving about 3.5 ms from the ~203.5 ms request token. Two things are known
 after #229: the exp chains were worth ~1.75 ms of latency (half of it recovered), and the
 capture-real-inputs-then-device-microbench path works, so prefer it for 13-19. Earlier analytical closures for Experiments 7-11 are

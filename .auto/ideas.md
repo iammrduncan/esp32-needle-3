@@ -230,6 +230,76 @@ overhead, the sampler, the tokenizer or UART emit (sample = 0.0 ms, step tail
 0.5 ms), and it is **not** an unnamed attention stage (taps+norms+rope+KV store
 is 5.1 ms total). Do not go looking for it again; spend runs on the 4-bit path.
 
+## The phi anomaly (open, run #140 follow-up)
+
+`mhc_phi4` is 13.5 ms/token = prepare 4.3 + generic-path GEMVs 9.2, for roughly
+74 K weights. That is **~12x the per-weight cost of the 2-bit pair-LUT path** and
+it survives every analytic explanation tried so far: the tensors are inside the
+PSRAM weight tier, `xh` is internal SRAM, the packed rows are sequential, and the
+arithmetic floor is ~5 instructions per weight. So either the 12 KB padded
+activation is costing far more than its size suggests (re-read once per row, 24
+rows per token), or something in the memory path is pathological.
+
+Attempted microbench, blocked by a harness fact worth knowing: `NEEDLE_KBENCH=ON`
+adds `bench_phi()`/`kbench.c` to the *same* `app_main`, so a kbench image still
+runs the two-prefix priming first, and the firmware's console stream **stalls at
+exactly 4096 bytes right after `EVT priming tokens=14`** in a raw
+`pyserial`/DTR-deasserted capture - i.e. a plain reader sees the ROM log and the
+first EVT lines and then nothing, so you cannot harvest `KB ...` output without
+whatever the repo harness does (its 5-minute window and its own console
+handling). Do not conclude "the app hung" from an empty capture.
+
+First fix attempt instead of the microbench: `ND_GEMV_BLOCK` (`nd_quant.c`,
+opt-in via `NEEDLE_GEMV_BLOCK`, default 0) blocks the generic path's rows so N
+rows share one activation sweep. Bit-exact by construction (per-row accumulation
+order unchanged). This deliberately revisits "row blocking is a loss", which was
+measured on the **2-bit** path where the activation (3 KB) is the *small* operand
+against 192 B rows - phi is the inverse ratio (12 KB activation, 1.5 KB rows), so
+the assumption changed, which is the only legitimate reason to retry.
+
+## mHC phi / generic-path family CLOSED (run #141)
+
+`ND_GEMV_BLOCK` row blocking (4 and 8 rows per activation sweep, opt-in knob,
+reverted) measured **null**: control 4.7783 (exactly HEAD), B=4 4.7700, B=8
+4.7717, all byte-exact. Combined with the geometry and disassembly work in the
+same cycle, phi's 9.2 ms is now fully accounted and *not* addressable:
+
+- geometry (archive directory): tensors 223/224/225, `in=3072`, `group=128`,
+  `bits=4`, `rowbytes=1536`, out 32/32/128 rows; packed+norms byte accounting is
+  exact, and decode touches 24 rows = 36,864 B and 73,728 weights per token.
+- codegen: GCC's 4-bit loop is a hardware `loop` of 1 `l32i` + 8 `extui` +
+  8 `addx4` + 8 `lsi(cb)` + 8 `lsi(xh)` + 8 `madd.s` = **4.1 instructions per
+  weight**. A handwritten kernel's whole ceiling is `lsc`-pairing the `xh` loads
+  (-12%) = ~1.1 ms = **+0.5 %**, not worth the ABI risk on top of a 1 KB IRAM
+  budget already spent.
+- memory: phi is *inside* the PSRAM tier, so it is not a flash stream; 37 KB per
+  token cannot stay resident in 32 KB of L2, and 17 KB of free internal RAM
+  cannot hold it either. The residual 12x per-weight gap vs the 2-bit path is
+  PSRAM line-fill latency on a non-resident working set. Row blocking leaving it
+  untouched is exactly what that diagnosis predicts.
+
+Do not re-open: phi asm, phi row blocking, phi in internal SRAM, "phi is
+4-bit-slow because of unpacking". If a future archive changes phi's `in_pad` or
+`group`, re-measure `mhc_phi4` once and revisit.
+
+## Harness facts worth keeping (learned by losing device time)
+
+- New compile-time knobs: declare them `set(FOO "0" CACHE STRING ...)` in
+  `esp32/components/needle/CMakeLists.txt`. `idf.py -DNEEDLE_KBENCH=ON` did
+  **not** enable an `option()` in a fresh build dir (binary byte-identical to
+  HEAD), while the cache-string form worked the same day. Always verify through
+  `compile_commands.json`.
+- The asm define is `ND_LUT2_ASM=1` but the option is `NEEDLE_LUT2_ASM`; a guard
+  that greps the option name false-fails.
+- Fresh-configure **every** board in a batch: a stale board1 build dir dropped
+  the asm kernel and read 4.2217 = the C-kernel runtime (-11.7 %). A control that
+  reads low is a build-integrity failure, never a result.
+- Raw `pyserial` console capture stalls at exactly 4096 bytes right after
+  `EVT priming tokens=14` when DTR is deasserted - the USB CDC bridge needs DTR.
+  Set `dtr=True` before concluding the app hung.
+- `AUTO_PROFILE=1` device profiling is the cheapest way to localise a phase: two
+  runs of it located a 65 ms double-count and then excluded it, at ~8 min each.
+
 ## External cross-checks
 - **Cross-check vs the independent MimiModel engine (memovai/mimimodel, Needle 2
   on ESP32-S3).** Its published optimization log agrees with everything measured

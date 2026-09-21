@@ -1,3 +1,53 @@
+# Experiment 13 - dot-product schedule audit: PARTIAL (run #230), C half measured, asm half open
+
+**Blocker, recorded exactly:** Espressif's `esp-dsp` component is not in this tree, not a managed
+component, and not in ESP-IDF 5.5.2 (`find / -name 'dsps_dotprod*'` -> nothing), and the campaign
+forbids new dependencies. So the library-vs-library comparison cannot be run as written; the
+prompt's alternative - reproduce its schedule in a local kernel and let the shapes decide - is what
+was measured. `dot_reord` is a C model of the aes3 schedule (multiple accumulators, fold at the
+end), not the assembly itself.
+
+**Measured on device (kbench, board 2, accepted 4.9150 base, CCOUNT 24000/us, min of 25 rounds,
+rows rotated over 8 distinct buffers):**
+
+| shape | variant | cycles | vs control |
+|---|---|---|---|
+| attention Q.K, n=48 | `dot_c4`: one accumulator, two-term groups (what ships) | 138 | control |
+| | `dot_pair_c`: the two dots of a position pair interleaved | 403 per pair vs 276 | **-46.0 %** |
+| | `dot_reord`: four accumulators, fold once | 213 | **-54.4 %** |
+| Kronecker, n=32 | `dot_c4` | 97 | control |
+| | pair / reorder | 288 / 157 | -48.5 % / -61.9 % |
+
+`bad=0`: the interleaved pair really is bit-identical to two scalar dots, so it was rejected on
+speed alone, not on numerics. The Q.K dot is ~138 cycles and ~14,400 dots/token, i.e. ~8.3 ms =
+4 % of the token, so the prize was worth having.
+
+**What this kills, and what it does not.** The exp() pair win (Experiment 12) came from removing a
+*latency* stall; these dots are not latency-bound - splitting the dependency chain into four
+independent chains made things *worse*, so the loop is bound by instruction issue and operand
+traffic, and extra accumulators only add live registers plus the final fold. That closes
+"interleave the two dots" and "more accumulators" as C-level levers.
+
+It does **not** close the one thing C cannot express: cutting the 48 scalar `lsi` loads per dot to
+12 `ee.ldf.128.ip` loads. `qh` head rows are 192 bytes apart, so a 16-byte-aligned model base
+makes every head row 16-aligned; the staged `kf0/kf1` rows are plain stack arrays and would need
+`__attribute__((aligned(16)))`. An order-preserving assembly dot (128-bit loads, still the shipped
+two-term group into one accumulator) stays bit-exact by construction, so it is the only candidate
+that could pass the byte-exact gate. **That asm is the remaining half of Experiment 13.** If it
+does not beat 138 cycles isolated, Experiment 13 is closed with no integration.
+
+**Fixture caveat, on the record:** `reord_maxabs = 0.000e+00` is an artefact - the fixture values
+are near-integers in int8 range, so every partial sum is exactly representable and the probe
+cannot see a reduction-order error. It did not matter here (reorder lost on speed anyway, so no
+gate decision was needed), but a future numeric-fixture dot test must use irrational-ish values or
+it will report false exactness.
+
+**Microbench discipline rule (cost two wasted builds, applies to every kbench addition):** with a
+single fixed operand pair, GCC hoists a *pure noinline* call out of the timing loop (a 48-element
+dot measured 8 cycles), and a variant that writes only to locals measures 0. Rotate over several
+distinct operand buffers and consume every result through an FP register barrier
+(`asm volatile("":"+f"(v))`) - a memory sink adds traffic and biases the comparison.
+
 # Experiment 12 - paired attention exp: KEPT, +0.48% decode (run #229, 4.8917 -> 4.9150)
 
 **Isolated kernel (device, real inputs).** `nd_expf_pair(a,b)` interleaves the two independent

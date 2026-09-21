@@ -1,3 +1,28 @@
+## The sampler was a real lever, and the bench could not see it (run #147: KEPT, +2.16 %)
+
+`nd_sample_hidden` decided legality by walking every vocabulary piece's bytes
+through the grammar, once per decode step. On device that was 14.6 ms of a 207 ms
+request token (7 %) - and the boot-bench phase map reported `sample = 0.0 ms`
+because the bench calls `nd_model_step_hidden` and never samples. Fixed by
+resolving byte 0 once per byte value for the current state (256 grammar steps)
+and vetoing candidates by table lookup before any grammar call; survivors still
+take the full byte walk, so the candidate set, the argmax and its tie-breaking are
+identical. **+2.16 % decode, +2.13 % extended, +2.4 % on the worst case, with the
+boot bench and prefill unchanged to the digit** - that invariance is the cleanest
+internal control of this campaign, because neither path samples.
+
+Dead end on the way, worth remembering as a method lesson (#146): memoizing the
+whole candidate list on the grammar state measured **exactly zero**, because the
+state changes on essentially every accepted token. The lever was not *skipping*
+the walk, it was *repeating the cheap part of it per byte value instead of per
+candidate*. When a hot loop is too expensive, look for the work inside it that
+only depends on a small domain - a byte, a type tag, a shift - and hoist that.
+
+Open follow-ups in the same phase: the survivors' full byte walk and one
+`nd_tok_piece` call per candidate per step remain, so if another look is wanted,
+split `ND_P_SAMPLE` into table-build / survivor-walk / piece-lookup in a profiled
+build (harvest recipe below works and takes ~10 min on a warm board).
+
 ## Measurement noise floor of the primary metric (run #144)
 
 Three byte-identical-source images, freshly configured, measured on all three
@@ -250,7 +275,30 @@ per-case data below localises part of it to the grammar/sampler. `prof_dump()` i
 request's decode window, so this is measurable; the first harvest is still
 pending (see "Route-phase gap", below).
 
-## Route-phase gap: the last identified lever worth a run (run #145)
+## Route-phase gap: CLOSED as context size, not overhead (run #145 harvest)
+
+Harvested with `prof_dump` on a profiled board-3 image, driven through
+`tools/serial_api.py`'s `Device` (open with **DTR/RTS pinned False**: toggling
+them resets the chip into the ROM loader, which is why a hand-rolled reader sees
+nothing). Tools vs route request, same board, same image:
+
+| phase | tools ms/tok | route ms/tok |
+|---|---|---|
+| proj2bit | 111.2 | 111.2 |
+| attention (head split) | 36.3 | **51.6** |
+| hadamard / engram / phi / logits / prep / sinkhorn / mix / taps / norms / rope / kv | identical | identical |
+| sample | 14.6 | 15.2 |
+| whole block | 195.8 | 211.1 |
+
+Every phase matches to 0.1 ms except attention, and the prefill lines explain it:
+`sink=143` vs `sink=213`. The route case simply attends over ~50 % more positions.
+Not a defect, and the fixes (shorter span, fewer sinks) are frozen by the archive.
+
+**Real-request phase map, and how to read it.** The boot bench understates every
+phase by ~28 % and cannot see `sample` at all, so use the request table above for
+sizing work. Note the timers overlap: `whole block` (94 %) contains the GEMVs that
+`proj2bit`, `engram` and `mhc_phi4` also count, so do not sum them; the block plus
+`sample` is the token.
 
 Per-case decode rates on one image (identical on all three boards, spread 0.07 %):
 

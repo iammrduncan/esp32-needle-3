@@ -1,4 +1,5 @@
 #include "nd_sample.h"
+#include "nd_quant.h"
 
 #include <string.h>
 
@@ -65,11 +66,67 @@ uint32_t nd_sample(nd_sampler *s, const float *logits, uint32_t vocab)
     return best;
 }
 
+/* Candidate legality, computed one word (32 vocabulary ids) at a time.
+ *
+ * This is the walk over the whole vocabulary that decides which pieces the
+ * grammar can spell, and it costs ~1.6 ms per decode token, measured. It runs
+ * while the second core has nothing to do - the next token's projections depend
+ * on the token being sampled here - so splitting it is free capacity.
+ *
+ * Rows are whole words, so each core writes only words inside its own range and
+ * builds its own 256-entry first-byte table on its own stack: no shared scratch,
+ * no barrier needed (see the nd_parallel_rows contract in nd_quant.h). The
+ * predicate is the one the inline walk used; token_ok() takes the sampler const
+ * and copies the grammar state, so it is pure. Ids below 16 are the tokenizer's
+ * control range and stay illegal here, and a zero-length piece stays illegal
+ * even though token_ok() alone would accept it.
+ */
+#define ND_LEX_BITS 32u
+#define ND_LEX_MAX_WORDS 256u     /* sized for this archive's 8192-id vocabulary */
+
+typedef struct {
+    const nd_sampler *s;
+    uint32_t         *bits;       /* one bit per vocabulary id */
+    uint32_t          w0;         /* first word of this chunk */
+    uint32_t          vocab;
+} lex_ctx;
+
+static ND_HOT void lex_words(void *vc, uint32_t wrel0, uint32_t wrel1)
+{
+    const lex_ctx *c = (const lex_ctx *)vc;
+    uint8_t        first_ok[256];
+    uint32_t       w, b;
+
+    for (b = 0; b < 256u; b++) {
+        nd_gstate trial = c->s->st;
+        first_ok[b] = nd_gstate_byte(&trial, (char)b) ? 1u : 0u;
+    }
+
+    for (w = wrel0; w < wrel1; w++) {
+        uint32_t word = 0u, i;
+        for (i = 0; i < ND_LEX_BITS; i++) {
+            uint32_t     j = (c->w0 + w) * ND_LEX_BITS + i;
+            uint16_t     plen;
+            const char  *piece;
+
+            if (j < 16u || j >= c->vocab)
+                continue;
+            piece = nd_tok_piece(c->s->tok, j, &plen);
+            if (!piece || plen == 0u || !first_ok[(unsigned char)piece[0]])
+                continue;
+            if (!token_ok(c->s, j, NULL))
+                continue;
+            word |= 1u << i;
+        }
+        c->bits[c->w0 + w] = word;
+    }
+}
+
 uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
 {
     static uint32_t cand[ND_SAMPLE_MAX_CAND];
     static float    score[ND_SAMPLE_MAX_CAND];
-    uint32_t        n = 0, j, b, best = (uint32_t)-1;
+    uint32_t        n = 0, j, best = (uint32_t)-1;
     float           bv = -1e30f;
 
     /* Unconstrained (the <think> block): plain argmax over everything. */
@@ -96,25 +153,35 @@ uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
      * are exactly the set the old loop produced: no numerical change, and the
      * argmax and its tie-breaking are untouched. */
     {
-        uint8_t first_ok[256];
-        for (b = 0; b < 256; b++) {
-            nd_gstate trial = s->st;
-            first_ok[b] = nd_gstate_byte(&trial, (char)b) ? 1u : 0u;
+        static uint32_t s_legal[ND_LEX_MAX_WORDS];
+        lex_ctx    lc;
+        uint32_t   base = 0u, w;
+
+        lc.s = s; lc.bits = s_legal; lc.vocab = m->vocab;
+        /* Chunked so a vocabulary larger than the static bitmap still works: one
+         * split for this archive's 8192 ids, more for a hypothetical bigger one. */
+        while (base < m->vocab) {
+            uint32_t words = (m->vocab - base + ND_LEX_BITS - 1u) / ND_LEX_BITS;
+            if (words > ND_LEX_MAX_WORDS)
+                words = ND_LEX_MAX_WORDS;
+            lc.w0 = base / ND_LEX_BITS;
+            nd_parallel_rows(lex_words, &lc, words);
+            base += words * ND_LEX_BITS;
         }
-        for (j = 16; j < m->vocab; j++) {
-            uint16_t    plen;
-            const char *piece = nd_tok_piece(s->tok, j, &plen);
-            if (!piece || plen == 0u)
-                continue;              /* no bytes: excluded while constrained */
-            if (!first_ok[(unsigned char)piece[0]])
-                continue;
-            if (!token_ok(s, j, NULL))
-                continue;
-            if (n < ND_SAMPLE_MAX_CAND)
-                cand[n] = j;
-            n++;
-            if (n > ND_SAMPLE_MAX_CAND)
-                break;
+
+        /* Ascending id order, so the argmax below sees exactly the candidate list
+         * - and therefore the tie-break - the serial walk used to produce. The
+         * count is complete rather than cut off at the cap, which is equivalent:
+         * over the cap both forms take the full-vocabulary path. */
+        for (w = 0; w * ND_LEX_BITS < m->vocab; w++) {
+            uint32_t word = s_legal[w];
+            while (word) {
+                uint32_t i = (uint32_t)__builtin_ctz(word);
+                word &= word - 1u;
+                if (n < ND_SAMPLE_MAX_CAND)
+                    cand[n] = w * ND_LEX_BITS + i;
+                n++;
+            }
         }
     }
 

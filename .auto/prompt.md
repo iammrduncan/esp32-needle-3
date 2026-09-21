@@ -31,6 +31,14 @@ Work that is still worth spending a run on, in order:
    changes: it is the only behavioural check of routing, second-pass tool
    execution and timer expiry, which the 14-case byte-exact suite does not
    cover. Last green: run #143 tree, all 7 scenarios; due again shortly.
+2a. **`make capture` is green again (run #157)** on the 4.8817 runtime: 7 real
+   scenarios, all 9 verification flags true (routes_match, tools_match,
+   requests_succeeded, no_external_calls, local_has_two_passes,
+   external_stops_at_selection, telemetry_progressed,
+   sampling_interval_applied, timer_expired). Run it inside the board namespace
+   with `needle-api --serial /dev/ttyACM1` - **/dev/ttyACM0 is the flash port**,
+   and pointing the API at it produces write timeouts that look like a dead
+   console. Due again in ~10 kept changes.
 2b. **Closed now, but the pattern is the one to reuse:** the sampler win came
    from *repeating the cheap part of a hot predicate per small domain* (256 byte
    values per state) instead of trying to skip it. Memoizing the same work on the

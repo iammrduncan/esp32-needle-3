@@ -69,11 +69,24 @@ been:
   of any kind. Fine for this benchmark (longest request today is 75 bytes); a real
   product defect for any host that sends arbitrary user text. Flagged for the
   owner; the fix is an explicit `ERR line_too_long`, not a bigger buffer.
-- **Anything that keeps the firmware out of its console read loop long enough
-  leaves the host unable to write.** That is now sighted three times: during boot
-  priming (#145), the API attach (#152), and this 15-request sequence. Fixing it
-  is a harness/firmware conversation, and until then any benchmark enlargement
-  needs a re-attach between groups, and `make capture` needs the same.
+- **CORRECTION (run #157): there was no console write-block defect.** Three cycles
+  were spent diagnosing "console reads fine but writes block" across #145, #152 and
+  #154. The real cause is mine and mundane: inside `needle-board run N`,
+  `/dev/ttyACM0` is the **flash** port (`needle-pi/flash`) and `/dev/ttyACM1` is the
+  **console** (`needle-pi/console`) - the AGENTS.md alias convention. I pointed
+  `needle-api --serial /dev/ttyACM0` at the flash port, so every write timed out
+  while the boot log still streamed (the USB-Serial-JTAG flash port shows boot
+  output, which is what made it look like a working-but-gated console). One flag
+  change and the API came up first try and `make capture` passed all 7 scenarios
+  with all 9 verification flags true on the 4.8817 runtime. Lesson: when a
+  home-rolled reader behaves differently from the repo harness that uses the *same*
+  device class, suspect the arguments, not the driver - bench.py was succeeding
+  with `serial_api.Device` the whole time, which was the fact I should have
+  followed.
+- Still open and real: `bench.py`'s per-request timeout, not the console, is what
+  killed the long-route-request extended cases in #154 (writes were fine there;
+  bench.py had the right port). If longer held-out prompts are ever wanted, the
+  timeout is the knob to look at, not the port.
 
 ## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
 

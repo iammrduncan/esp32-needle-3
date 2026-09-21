@@ -1,12 +1,19 @@
 # MimiModel follow-up experiment queue
 
-## Execution status (authoritative)
+## Execution status
 
-Current next action: **Experiment 2 only**. Experiment 1 is complete; Experiment
-5 is complete and rejected; Experiment 6 is not applicable; Experiments 2-4 and
-7-11 remain incomplete. The PSRAM tier/stride/order family is closed and is not
-part of this queue. See the top of `.auto/prompt.md` for the compaction-safe
-three-board execution protocol and acceptance requirements.
+Historical queue: Experiments 1-4 were completed with real device work;
+Experiment 5 was tested and rejected; Experiment 6 was not applicable. The
+later "Experiments 7-11 CLOSED" table records useful phase-map predictions, but
+Experiments 7-9 and 11 were not all built as their original specifications
+required. In particular, Experiment 8's requested integer numerical/device
+microbenchmark was not performed.
+
+**The top of `.auto/prompt.md` is the sole current authority after compaction.**
+It reopens the missing concrete screen as Experiment 14 and defines new
+Experiments 12-19, their order, three-board protocol, quality gates, and stop
+conditions. Do not use this historical document to select "Experiment 2 only"
+or to resume unchanged verification cycles.
 
 Prepared 2026-09-19 from `memovai/mimimodel` at commit
 `1a19329707c5ca8b9833ef9f079c796647887eba`.

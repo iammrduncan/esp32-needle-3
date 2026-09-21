@@ -6,156 +6,119 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #201, authoritative).** Accepted runtime: **4.8917 decode tok/s (+100.5 %
+**CURRENT STATE (run #227, authoritative).** Accepted runtime: **4.8917 decode tok/s (+100.5 %
 over the 2.44 baseline)**, 4.81 extended, 3.87 think, 5.2167 prefill, boot bench 201 ms/token,
 14/14 device + 13/13 host byte-exact, fidelity 5.341e-05 / top1 10/10, internal_free 15759.
-Seven three-board batches agree to the last digit, so there is no board drift and the metric is
-deterministic to ~0.04 % (one quantisation tick), not noisy.
+Repeated three-board batches agree to the last digit, so there is no board drift and the metric is
+deterministic to ~0.04 % (one quantisation tick), not noisy. Runs #222-#227 were unchanged
+verification repeats and added no information; do not continue that pattern.
 
 The campaign's productive lens at the end was **request-path work the boot bench cannot see that
 runs while core 1 is idle**; it yielded #147 (first-byte legality table, +2.16 %) and #176
 (two-core legality filter, +0.20 %). Everything else in the token is now two-core or at a named
 floor, and the closures with evidence are in `.auto/ideas.md`. Cadence rules that apply now:
 run `make capture` **when the shipping code changes** (green at #188 on this code; a periodic
-re-run with no code change adds cost and no information), keep the three-board batch every ~5
-cycles for drift, and treat any candidate below the 0.2 % keep bar as not worth a build.
+re-run with no code change adds cost and no information), couple three-board controls to novel
+candidates instead of running periodic baseline-only batches, and treat any candidate below the
+0.2 % keep bar as not worth a build.
 
-**NEXT: no open experiment remains.** The MimiModel queue is dispositioned (Experiments 1-6:
-1 complete, 2-4 complete and *shipped* as the TIE728 CQ2 kernel at +13.0 % decode, 5 rejected as
-structurally invalid, 6 not applicable; 7-11 closed against the measured phase map). Since then the
-**sampler** turned out to be a real lever, because the boot bench never runs it: a first-byte
-legality table for the constrained sampler took decode from 4.7783 to **4.8817 tok/s (+2.16 %**,
-byte-exact 12/12 device + 11/11 host, extended +2.13 %, worst case +2.42 %, confirmed on two
-independent boards against a control that reproduced the old value exactly). That closes the last
-phase that was not at a named floor.
+**NEXT: the measurement-backed experiment queue is REOPENED.** The accepted control is
+**4.8917 decode tok/s**. The immediate target is 5.00 tok/s, which requires saving about
+4.4 ms from the ~204.4 ms request token. Earlier analytical closures for Experiments 7-11 are
+historical hypotheses, not substitutes for the concrete microbenchmarks below. Do not call an
+experiment complete merely because the phase map predicts a null.
 
-The accepted control is the current HEAD at **4.8917 decode tok/s** (+100.5 % over the 2.44
-baseline): 4.8817 plus the two-core sampler-filter split (#176, confirmed by batch at
-#177 with the control reading 4.8817 exactly). The 4-bit folded codebook that briefly reached 4.8917 was withdrawn at #162:
-as implemented it wrote one static table from both cores, which `rows_dual_core`
-runs concurrently with no barrier - byte-exactness passed by timing luck. The
-race-free variant measured worse. **Audit rule now in force: any kernel handed to
-`nd_parallel_rows` must be checked for shared mutable state, not only for matching
-numbers** (the audit of every kept split kernel is in `.auto/ideas.md`; all clean); every phase above 0.5 % of the ~205 ms token is now at a floor - 2-bit GEMV ~53 %
-(TIE728 instruction floor), attention heads ~18 %, MLP `kron_apply` ~11 %, engram ~8 %, 4-bit mHC
-phi ~6.7 % (non-resident PSRAM working set), constrained sampler ~1 % (was 7 %), subset logits
-~3.5 %.
+### Research loop rules
 
-Work that is still worth spending a run on, in order:
+1. **No unchanged verification loops.** The current three-board batch is the final baseline-only
+   batch. After it is recorded, do not run or log another unchanged HEAD verification. A control
+   belongs in the same batch as a novel candidate, not in a standalone cycle.
+2. Work on the first unmeasured experiment below. Each experiment must end in a concise measured
+   disposition in `.auto/ideas.md` and `.auto/log.jsonl`: hypothesis, implementation/variant,
+   image hashes and board assignments, isolated timing where requested, full-model delta, quality,
+   memory, and accept/reject reason. Then immediately advance to the next experiment.
+3. Use all three boards concurrently whenever images are ready: board 1 control, boards 2 and 3
+   two candidate variants or duplicate candidates. For a plausible winner, repeat with assignments
+   swapped. Fresh-configure every compile-time variant and verify `compile_commands.json` plus
+   image hashes before flashing.
+4. Screen cheaply with real captured inputs and a device microbenchmark. Run the full device suite
+   only for a correct, plausibly faster screen. A shipping candidate must retain 14/14 device and
+   13/13 host byte-exact output, token delta 0, the existing fidelity threshold, top1 10/10, and all
+   ordinary tests. Run `make capture` after a shipping code/config change, not periodically when the
+   code is unchanged.
+5. Change one lever per candidate. Revert rejected implementation code before starting the next
+   experiment. Never share mutable static scratch between `nd_parallel_rows` workers. Record internal
+   free RAM for every full candidate; only 15,759 bytes remain on the accepted control.
+6. An analytical objection is a prediction to test, not a disposition. Stop an experiment without
+   device measurement only for a concrete build/ABI/hardware blocker, and record that exact blocker.
 
-1. **Verification cycles** on HEAD (the metric is stable to +-0.05 % across
-   boards, so a control that reads low is a build-integrity failure - fresh
-   configure every board and check `compile_commands.json`).
-2. **`make capture`** (`demo/capture.py --out /tmp/recording.json`, driven
-   through `tools/serial_api.py` on the board's console port) every ~10 kept
-   changes: it is the only behavioural check of routing, second-pass tool
-   execution and timer expiry, which the 14-case byte-exact suite does not
-   cover. Last green: run #143 tree, all 7 scenarios; due again shortly.
-2a. **`make capture` is green again (run #169, previous #157)** on the 4.8817 runtime: 7 real
-   scenarios, all 9 verification flags true (routes_match, tools_match,
-   requests_succeeded, no_external_calls, local_has_two_passes,
-   external_stops_at_selection, telemetry_progressed,
-   sampling_interval_applied, timer_expired). Run it inside the board namespace
-   with `needle-api --serial /dev/ttyACM1` - **/dev/ttyACM0 is the flash port**,
-   and pointing the API at it produces write timeouts that look like a dead
-   console. Due again in ~10 kept changes.
-2b. **Closed now, but the pattern is the one to reuse:** the sampler win came
-   from *repeating the cheap part of a hot predicate per small domain* (256 byte
-   values per state) instead of trying to skip it. Memoizing the same work on the
-   grammar state measured exactly zero, because the state changes on essentially
-   every accepted token. Two corollaries recorded in `.auto/ideas.md`: microbench
-   a predicate on the states the real loop sees (a fresh-open grammar state made
-   my estimate 3x optimistic), and the paths the boot bench cannot run - sampler,
-   per-token emit - are the only territory that was still unexplored.
-2c. **The request-path phase map is now measured on the shipping tree (run #166), and it
-   closes the sampler family on data rather than arithmetic**: `sample` is 8.9 ms of the
-   ~202 ms request token and 5.7 ms of that is the subset-logits projection, so there is
-   ~3 ms of sampler arithmetic left and nothing above it is unaccounted. Reproduce with
-   `AUTO_PROFILE=1` plus a direct `tools/serial_api.py` `Device` drive - and pass
-   `think=False` or send `!think 0` first, or you will measure the 8192-row
-   full-vocabulary path instead (that trap showed `logits4` at 63 ms and looked like a
-   30 % phase).
+### Ordered open experiments
 
-2d. **The bench-invisible part of the request path is where the wins are, and it has now
-   yielded two (#147 first-byte table +2.16 %, #176 split legality filter +0.20 %).** The
-   rule that found both: after the boot-bench phase map is exhausted, look for request-path
-   work that (a) the bench cannot see and (b) runs while core 1 is idle. Sampling is exactly
-   that point, because the next token's projections depend on the token being sampled. What
-   is left there is under 0.8 % of the token.
+**Experiment 12 -- paired/interleaved attention exponential.** Disassemble the current `nd_expf`
+calls in `attn_heads`. Capture the real input pairs reaching the adjacent `w0`/`w1` calls. Build a
+device microbenchmark for `nd_expf_pair(a,b)` that interleaves the two degree-5 polynomial dependency
+chains while preserving each scalar chain's operation order, clamp behavior, and output bits. Try
+carefully structured C and, if C does not schedule it, handwritten Xtensa/TIE728. Report cycles per
+pair over captured inputs and bit mismatches versus two scalar calls. Integrate only a bit-exact,
+faster kernel, then measure attention phase and end-to-end decode.
 
-2e. **Two more candidates closed by analysis, so do not spend a run on them.**
-   `kv_store_int8` (1.1 ms, 0.55 %) is divide-bound - one software `__divsf3` per element,
-   ~340 cycles/element implied - but it has only 2 units per call (k and v per KV head) so
-   `rows_dual_core` would run it on one core, and re-rolling it as one 4-unit split per layer
-   costs 8 handshakes a token against a 0.55 ms prize, which the measured +0.04..0.13 % band
-   for splits of this size says loses. Replacing `x / scale` with `x * (1/scale)` would be
-   fast, and the fidelity probe would probably allow it, but it changes the int8 rounding of
-   the KV cache - the model's memory - and 14 prompts cannot certify that. Not shipped.
+**Experiment 13 -- ESP-DSP S3 dot-product audit.** Benchmark Espressif's optimized
+`dsps_dotprod_f32_aes3` against the current 64-wide attention Q.K dot and representative small
+Kronecker dot shapes, using the real alignments. Also inspect/borrow its instruction schedule in a
+specialized inline-free local kernel so component-call overhead does not decide the result. Report
+isolated cycles and numeric deltas. Full-model-test only the shapes that win; reject any reduction
+order that fails the existing output/fidelity gates.
 
-2f. **Tier family is closed on every axis, including low-end coverage (run #206).** The
-   logits embedding was outside the staged span and could be pulled in for free; staging it
-   changed decode by exactly nothing (and think too, which reads all 3.14 MB per token). The
-   tier's value is specific to big sequential per-layer projection reads. `ND_TIER_TRACE=1` is
-   the knob that answers residency questions in one build - use it instead of reasoning.
+**Experiment 14 -- perform the original CQ2 integer feasibility screen.** The old Experiment 8 was
+not performed as specified and is reopened. Use real CQ2 shapes, codebooks, row norms, alignments,
+and captured prepared activations. Measure both (a) packed 2-bit indices with int8 activation and
+codebook arithmetic and (b) one representative tensor expanded to int8 rows in PSRAM. Test tensor
+and per-group scales. Report quantization cost, bytes read, staging bytes, cycles, maximum/mean error,
+and fidelity/top1. If a scalar representation passes the numeric screen, benchmark
+`dsps_dp_s8_aes3` or a handwritten S3 integer dot before deciding whether the path is bandwidth-bound.
+Do not expand to full integration unless the screen is both acceptable and faster.
 
-3. **Sub-1 % candidates, only if a floor is shown to be wrong**: `lsc`-pairing
-   the 4-bit loop's activation loads, an asm `kron_apply`, asm around online
-   softmax. Each needs a *new* measurement that contradicts the floor before it
-   is worth a build.
+**Experiment 15 -- operator-internal GDMA double buffering.** This is distinct from the rejected
+cross-operator worker overlap. Use ESP32-S3 AHB GDMA async memcpy to prefetch the next sequential
+PSRAM weight block into one of two small DMA-capable internal buffers while TIE728 consumes the
+current buffer. Start with 2 KiB and 4 KiB buffers and representative dominant CQ2 shapes. Measure
+copy-only bandwidth, compute-only time, overlapped time, wait time, and heap impact. Verify cache/DMA
+coherency explicitly. Integrate only if overlap beats direct cached PSRAM reads and fits safely.
 
-If a future archive changes phi's `in_pad`/`group`, or the PSRAM tier or
-fp32-pool geometry changes, re-measure the phase map once (`AUTO_PROFILE=1`,
-~8 min) before choosing.
+**Experiment 16 -- compact first-byte grammar index.** Build once a PSRAM-resident vocabulary index
+of ascending `uint16_t` token IDs grouped by first byte plus 257 offsets. At each grammar state,
+enumerate only allowed-byte buckets; preserve the exact legal candidate set and restore globally
+ascending token-ID order before logits and tie-breaking. Do not repeat the rejected 8 KiB internal
+first-byte cache. Microbenchmark table build, per-token filtering on captured real grammar states,
+memory, and complete candidate-list equality before end-to-end measurement.
 
-Closed families -- **do not build, flash, or measure these again** unless this
-section is deliberately updated first:
+**Experiment 17 -- selective hot-code IRAM audit.** Use the map file and disassembly to determine
+whether `attn_heads`, the hot grammar traversal, subset logits, or paired-exp helper execute from
+flash. Move one measured hot function at a time to IRAM; record IRAM/DRAM movement and end-to-end
+timing. Do not blanket-annotate functions and do not retain a placement that endangers the current
+internal-memory margin.
 
-- PSRAM tier span, stride, copy order, copy limit, or allocation ceiling;
-- unchanged plateau/control verification;
-- C row blocking or row-order variants;
-- 32/64/128-bit packed-load-width sweeps;
-- async cross-operator overlap with the existing worker slot.
+**Experiment 18 -- exact KV reciprocal screen.** Microbenchmark Xtensa `recip0.s` plus Newton
+refinement for the divisions in KV int8 storage and any similarly shaped measured division hotspot.
+First compare produced int8 KV-cache bytes over captured real inputs; a KV candidate is eligible only
+if every byte matches the control. Report cycles and full `kv_store_int8` phase time. Reject quickly
+if the 1.1 ms phase cannot yield a measurable full-token improvement.
 
-Experiment 2 must produce all of the following:
+**Experiment 19 -- 120 MHz octal-memory diagnostic, isolated and non-shipping by default.** Build one
+120 MHz octal flash/PSRAM candidate against two 80 MHz controls to test whether external-memory clock
+is the remaining CQ2 limit. Record boot/config evidence, temperatures, phase timings, and correctness.
+If it wins, repeat with board assignments swapped and perform a long hot/cold thermal soak with memory
+integrity checks. ESP-IDF labels 120 MHz DDR experimental; do not call it shipping-safe or make it the
+default unless the stability campaign passes and temperature tuning/recovery is addressed.
 
-1. A device-side microbenchmark comparing the existing C `lut2_rows` kernel
-   with handwritten Xtensa/TIE728 assembly.
-2. Needle 3's real LUT/index/group layout and dominant projection shapes,
-   including 768x768; do not copy MimiModel layout assumptions.
-3. Isolated kernel timing, maximum/mean numeric error, alignment requirements,
-   and an inspection of generated/handwritten instructions.
-4. A measured disposition: faster and eligible for Experiment 3, or rejected
-   with evidence. If assembly syntax, ABI, or hardware support blocks the test,
-   record the exact blocker instead of silently switching experiments.
-5. A concise result in `.auto/ideas.md` and `.auto/log.jsonl` before selecting
-   any next experiment.
+After Experiment 19, derive the next candidate from the measured winners and remaining phase map.
+Do not fall back to baseline-only runs. If no experiment wins, write a final evidence table and stop
+the campaign cleanly rather than manufacturing verification work.
 
-### Three-board measurement protocol
-
-Use all three ESP32-S3 boards concurrently whenever device images are ready;
-never serialize three independent full device suites.
-
-- Build candidate images first, using a fresh build directory per compile-time
-  variant, and verify that intended flags appear in `compile_commands.json` and
-  that meaningfully different variants do not accidentally have the same hash.
-- For an isolated Experiment 2 microbenchmark, assign board 1 to the existing C
-  control, board 2 to assembly candidate A, and board 3 to assembly candidate B
-  or a duplicate control/noise check. Start them together with
-  `/root/bin/image-batch.sh 1=<control.bin> 2=<candidate-a.bin> 3=<candidate-b.bin>`.
-- For a promising full-model candidate, use one control and two identical
-  candidate images in the first batch. Swap board assignments in the repeat so
-  a board-specific effect cannot masquerade as a win.
-- Use short, microbenchmark-specific firmware runs for kernel screening. Spend
-  the 12-case full suite only after an isolated candidate is correct and faster.
-- Never allow multiple processes to access one board outside `needle-board run`;
-  the batch helper already acquires one lock per board.
-- Record image hashes, board assignments, batch directory, raw kernel timings,
-  quality results, and the candidate/control delta. A build-only result is not
-  evidence.
-
-Before every build, state the active experiment and hypothesis in the run notes.
-If the proposed command belongs to a closed family above, abort it and return to
-Experiment 2.
+Historical closed families remain closed unless an experiment above explicitly distinguishes itself:
+PSRAM tier span/stride/copy-limit sweeps; C row-block/order variants; packed load-width sweeps; and
+the old worker-slot cross-operator schedules. Experiments 15 and 19 are explicitly new memory-system
+tests, not permission to repeat those old variants.
 
 ## Objective
 

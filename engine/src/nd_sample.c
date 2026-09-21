@@ -69,7 +69,7 @@ uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
 {
     static uint32_t cand[ND_SAMPLE_MAX_CAND];
     static float    score[ND_SAMPLE_MAX_CAND];
-    uint32_t        n = 0, j, best = (uint32_t)-1;
+    uint32_t        n = 0, j, b, best = (uint32_t)-1;
     float           bv = -1e30f;
 
     /* Unconstrained (the <think> block): plain argmax over everything. */
@@ -79,16 +79,43 @@ uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
     if (nd_gstate_complete(&s->st))
         return ND_TOOL_CALL_END_ID;
 
-    /* Enumerate what the grammar allows. Byte-checking the vocabulary costs
-     * ~25K byte steps, far less than 4.2M multiply-adds. */
-    for (j = 16; j < m->vocab; j++) {
-        if (!token_ok(s, j, NULL))
-            continue;
-        if (n < ND_SAMPLE_MAX_CAND)
-            cand[n] = j;
-        n++;
-        if (n > ND_SAMPLE_MAX_CAND)
-            break;
+    /* Enumerate what the grammar allows.
+     *
+     * The straightforward walk asks the grammar about every byte of every
+     * piece: ~25K byte steps per token, and on device that measured 14.6 ms of
+     * a 207 ms decode token (7%) - far more than its share of the arithmetic,
+     * because nd_gstate_byte is not a cheap predicate. Memoizing the whole list
+     * on the grammar state does nothing (the state changes on essentially every
+     * accepted token, so it never repeats).
+     *
+     * What does work: almost every piece is rejected by its FIRST byte, so
+     * resolve byte 0 once per byte value for the current state - 256 grammar
+     * steps, ~0.1 ms - and let the table veto candidates before any grammar
+     * call. A piece whose first byte cannot be consumed from this state can
+     * never be legal, so the survivors (which still take the full byte walk)
+     * are exactly the set the old loop produced: no numerical change, and the
+     * argmax and its tie-breaking are untouched. */
+    {
+        uint8_t first_ok[256];
+        for (b = 0; b < 256; b++) {
+            nd_gstate trial = s->st;
+            first_ok[b] = nd_gstate_byte(&trial, (char)b) ? 1u : 0u;
+        }
+        for (j = 16; j < m->vocab; j++) {
+            uint16_t    plen;
+            const char *piece = nd_tok_piece(s->tok, j, &plen);
+            if (!piece || plen == 0u)
+                continue;              /* no bytes: excluded while constrained */
+            if (!first_ok[(unsigned char)piece[0]])
+                continue;
+            if (!token_ok(s, j, NULL))
+                continue;
+            if (n < ND_SAMPLE_MAX_CAND)
+                cand[n] = j;
+            n++;
+            if (n > ND_SAMPLE_MAX_CAND)
+                break;
+        }
     }
 
     if (n == 0)

@@ -24,3 +24,13 @@ endforeach()
 idf_component_register(SRCS "main.c" "router.c"
                        INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/generated"
                        REQUIRES needle esp_partition esp_timer json)
+
+# Experiment 2 (MimiModel queue): the device-side kernel microbenchmark. Off by
+# default; with it on, app_main measures the row walkers and idles instead of
+# serving requests. Needs a fresh build directory (idf.py -B), like every other
+# compile-time knob in this project.
+option(NEEDLE_KBENCH "Build the CQ2 kernel microbenchmark into the app" OFF)
+if(NEEDLE_KBENCH)
+    target_sources(${COMPONENT_LIB} PRIVATE "kbench.c")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
+endif()

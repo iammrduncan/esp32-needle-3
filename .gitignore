@@ -11,3 +11,6 @@ model/*.download
 model/*.tmp
 *.log
 .DS_Store
+
+.auto/log.jsonl
+.auto/runs/

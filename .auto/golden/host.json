@@ -1,0 +1,60 @@
+{
+ "saved_at": "2026-09-18T07:41:40",
+ "cases": {
+  "sampling5": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
+   "tokens": 22,
+   "calls": null
+  },
+  "timer60": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "status_heap": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+   "tokens": 14,
+   "calls": null
+  },
+  "batch": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":10}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":30}}]</tool_call>",
+   "tokens": 33,
+   "calls": null
+  },
+  "heldout_timer45": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":45}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "route_translate": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "heldout_sampling15": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":15}}]</tool_call>",
+   "tokens": 23,
+   "calls": null
+  },
+  "heldout_batch": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":7}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+   "tokens": 35,
+   "calls": null
+  },
+  "heldout_status": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "route_code": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"write_code\",\"arguments\":{}}]</tool_call>",
+   "tokens": 15,
+   "calls": null
+  },
+  "heldout_route_timer": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{}}]</tool_call>",
+   "tokens": 14,
+   "calls": null
+  }
+ }
+}

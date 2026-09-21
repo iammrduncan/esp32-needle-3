@@ -1,0 +1,558 @@
+## The sampler was a real lever, and the bench could not see it (run #147: KEPT, +2.16 %)
+
+`nd_sample_hidden` decided legality by walking every vocabulary piece's bytes
+through the grammar, once per decode step. On device that was 14.6 ms of a 207 ms
+request token (7 %) - and the boot-bench phase map reported `sample = 0.0 ms`
+because the bench calls `nd_model_step_hidden` and never samples. Fixed by
+resolving byte 0 once per byte value for the current state (256 grammar steps)
+and vetoing candidates by table lookup before any grammar call; survivors still
+take the full byte walk, so the candidate set, the argmax and its tie-breaking are
+identical. **+2.16 % decode, +2.13 % extended, +2.4 % on the worst case, with the
+boot bench and prefill unchanged to the digit** - that invariance is the cleanest
+internal control of this campaign, because neither path samples.
+
+Dead end on the way, worth remembering as a method lesson (#146): memoizing the
+whole candidate list on the grammar state measured **exactly zero**, because the
+state changes on essentially every accepted token. The lever was not *skipping*
+the walk, it was *repeating the cheap part of it per byte value instead of per
+candidate*. When a hot loop is too expensive, look for the work inside it that
+only depends on a small domain - a byte, a type tag, a shift - and hoist that.
+
+Open follow-ups in the same phase: the survivors' full byte walk and one
+`nd_tok_piece` call per candidate per step remain, so if another look is wanted,
+split `ND_P_SAMPLE` into table-build / survivor-walk / piece-lookup in a profiled
+build (harvest recipe below works and takes ~10 min on a warm board).
+
+## Sampler family CLOSED - measured primitive costs and a calibration lesson (runs #149)
+
+Microbenchmarked on device (ND_PROFILE boot block): **`nd_tok_piece` = 45 cycles**,
+**`nd_gstate_byte` = 93 cycles** per call. After the first-byte table, the
+constrained sampler costs ~2 ms of a ~205 ms token: ~0.1 ms to build the 256-entry
+table, ~1.6 ms for the piece lookup + filter over ~8176 ids, ~0.06 ms for the
+survivors' byte walks. The subset-logits projection is timed separately (7.2 ms,
+TIE728 kernel, at its floor).
+
+Caching piece[0] per id in 8 KB of internal RAM (built once, falls back to the
+call if the allocation fails) measured **-0.17 %** - byte-exact, correct, and
+slower. Replacing one 45-cycle call with a dependent-load chain (global pointer,
+branch, byte array, 256-byte stack table) gave the scheduler less to work with
+than the call did.
+
+**Calibration lesson (this is the keeper):** run #147's win was predicted at
+~12.8 ms from the 93-cycle microbench and delivered ~4.5 ms, because that
+microbench probed a *freshly opened* grammar state - the cheapest possible
+predicate - and copied the state struct per call. Mid-string states are several
+times more expensive. A microbench of a predicate has to run on the states the
+real loop visits, or it will overstate savings ~3x. Both this #149 (and probably
+#146's zero) trace back to that same over-estimate.
+
+**Bonus: this closes the last anomaly in the campaign.** The boot bench measured
+~4 % faster than real requests purely because requests paid a 12.8 ms grammar
+walk the bench structurally never runs. After #147 the bench-to-request gap is a
+~2 % ordinary residue (console emit, bookkeeping).
+
+## Measurement noise floor of the primary metric (run #144)
+
+Three byte-identical-source images, freshly configured, measured on all three
+boards in one batch: 4.7800 / 4.7783 / 4.7817 decode tok/s - **spread 0.071 %
+peak-to-peak, sigma ~0.03 %**, all 12 cases byte-exact. The 0.2 % keep bar is
+therefore about 6 sigma, and a candidate claiming <= 0.1 % is not resolvable on
+one run: it needs a repeat batch, not a verdict. Identical sources legitimately
+produce *different* md5s per board (ESP-IDF stamps the build time); identical md5
+across *different* flags is the failure signal, not this.
+
+# Ideas backlog
+
+Ranked by expected payoff per unit of risk. Delete entries as they are tried.
+
+## Candidate optimisations
+
+- **Monarch MLP: hoist the fp16→fp32 conversions out of `kron_apply`.** Each of
+  the three `kron_apply` calls per layer re-reads `a`/`b` once per inner
+  iteration, so ~65K `nd_f16()` calls per kron (≈1.6M per token) when only 1024
+  distinct values exist. Stage the converted factor into a small scratch buffer
+  (or transpose it once) and the arithmetic becomes a plain 32×32 matmul. Pure
+  algebra-preserving change; check bit-exactness (accumulation order changes, so
+  verify against the logit-fidelity probe).
+- **Sinkhorn budget.** `ND_SINKHORN = 20` iterations of exp/log on a 4×4 matrix,
+  twice per row/column pass — ~10K `nd_expf` + ~1.3K `logf` per token. Either
+  early-exit when the max row/col residual is below a fixed epsilon, or replace
+  the exp/log pair with a scaling-only (non-log-space) Sinkhorn. Both change
+  numerics; only acceptable if the fidelity probe and goldens stay exact.
+- **4-bit pair-LUT for the mHC phi GEMVs.** The phi tensors go through the
+  generic 4-bit `dot_group` (2 mults/weight). A 16-entry-per-position table
+  (`cb[i] * xh[j]`) turns them into loads+adds. Table is in_pad×16 floats
+  (~48 KB for the 3072-wide phi reduction) — probably too big for the remaining
+  37 KB of internal RAM; test whether a half-width table (per group, 16 KB)
+  beats the multiply path anyway.
+- **Attention: int8 dot product.** The KV dot product converts every int8 to
+  float per element. Accumulating in int with the LX7's 32-bit ops, or reading
+  four int8 per 32-bit word (with per-head scale applied once), shortens the
+  inner loop. `qk_head_dim` is 48, so 12 words per head instead of 48 bytes.
+- **Prepare/LUT reuse across the block.** `attention` prepares + builds a LUT for
+  q/k/v/gate, then again for out_proj; `nd_cq_prepare` runs an FWHT over the
+  whole padded activation each time. Check whether out_proj's in_pad differs
+  (768 vs 768) and whether one FWHT can serve both.
+- **tap_projection** calls `nd_f16(weights[...])` inside the inner loop over
+  taps — small, but it is per-element per-projection; hoisting is free.
+- **`zcrms` / `rms_unit` / lane mixing loops** are all elementwise over 768 or
+  3072 floats with a scalar loop; the ESP32-S3 GCC may vectorise with
+  `-O3 -ftree-vectorize` if the pointers are restrict-qualified. Try adding
+  `restrict` to the hot elementwise kernels (zero numerical change).
+- **Confidence pooling** (`pool_cell`) runs per layer per token over
+  n_probes × d_model. If this blob carries the head, it is pure overhead for
+  decode speed; measure `ND_P_CONF` before assuming it is small.
+- **Dual-core coverage.** Only GEMV rows and attention heads are split. The MLP,
+  sinkhorn, tap projections, rope and engram conv run single-core. A coarse
+  split (core 1 runs the MLP of the previous lane-mix stage while core 0 streams
+  weights) is complicated; a simple one may be to overlap the *out_proj* GEMV
+  with attention tails.
+- **DISPROVEN, and it nearly cost the run #2 win.** A note here claimed the
+  board downclocked to 80 MHz and that 816 -> 406 ms/tok was a power-mode
+  effect. It is not: `esp_clk_cpu_freq()` reports 240 MHz and the xtal 40 MHz
+  for both binaries, PM is disabled, and the same 2x appears from a flash A/B
+  of the two images. The 2x is the fp32 MLP-factor change (run #2).
+  Lesson: measure the clock and diff the binaries before believing any
+  "impossible" speedup is an artefact - and revert accidental `cp`s of a
+  baseline file into the tree (that is what produced the phantom 1.22).
+
+## Candidate optimisations (revised after the above)
+
+- **Iteration speed (not the metric):** priming two schema prefixes at boot costs
+  ~5 min per flash. Priming both prefixes concurrently on the two cores, or
+  caching a primed prefix in flash, would roughly halve experiment latency
+  without touching decode kernels. Worth it if the loop needs more samples/hour.
+- **`make capture`** (7 real end-to-end scenarios + renderer verification) is the
+  repo's own integrity check. Run it every ~10 kept changes to prove the board
+  still behaves, not just that it is faster.
+
+## Measured dead ends (fill in as found)
+
+- **fp32 staging of the Monarch factors is NOT a dead end: it is run #2,
+  +99.9% decode** (1.2217 -> 2.4417 tok/s). It sits in "what worked" now. What
+  is worth recording here is the *method* mistake: a host ratio of 1.24x made
+  the 2.01x device number look impossible, so it was written off as an
+  artefact, and a stale baseline copy left in `engine/` then made the device
+  appear to agree. Both binaries were later flashed back-to-back at a reported
+  240 MHz: BASE 816 ms/tok, CAND 406 ms/tok. Host speed is not a proxy for
+  device speed in either direction. The earlier tap_projection part of this
+  entry remains genuinely untried (see below).
+
+- **MimiModel queue lever (overlap the gate projection with the Q/K path on core
+  1): UNSAFE, not taken.** Two independent reasons, both measured on device.
+  (1) The schedule itself is a data race: the gate job writes m->gate[half:out]
+  while core 1's attention-head split reads and writes around m->gate, so the
+  rows core 1 consumes are not stable. That is exactly what the
+  `EVT ERR async-overlap` tripwire exists to catch.
+  (2) It also exposed a REAL latent hazard in the splitter that is now fixed in
+  main.c: the worker gave s_done on EVERY wake and a second splitter shared the
+  same s_go/s_done pair, so a wake could be taken by the wrong waiter, which
+  then read rows the worker had not written. One serialized job slot (fn
+  published before the wake, cleared after it runs, s_done given only for a job
+  that ran) removes the whole class. Verified: pristine tree 4.185 / 12-12
+  byte-exact on the same board that had been showing 0/12, so no stock-code
+  regression ever existed - every divergence was harness-local.
+  Lesson for this repo: any new cross-core job must go through the single job
+  slot, and no job may run concurrently with an nd_parallel_rows split.
+
+## Measured dead ends (fill in as found)
+
+- **fp32 staging of the Monarch Kronecker factors (w1a..w3b) + d2/b2/d3/d4:
+  NOT a dead end - it is run #2, +99.9% decode.** Recorded here because the
+  first reading (host 1.24x, device 2.01x) looked too good for ~4K ops/token
+  and was written off. The device number is real: both binaries flashed
+  back-to-back, cpu_hz=240 MHz reported by both, boot bench 816 -> 406 ms/tok,
+  text byte-identical. Host and device diverge because on x86 the 2KB factors
+  live in L1 and the only saving is the F2F instruction; on the S3 the fp16
+  loads plus per-element conversion compete with the streaming activation.
+  Lesson: do not predict device gains from a host ratio, in either direction.
+- **4-bit row norm hoist: neutral.** Same change that was a free refactor in the
+  2-bit LUT path, applied to `gemv_rows_offset`/`gemv_rows_generic`: boot bench
+  370 vs 370 ms/tok, images flashed back to back. Norm conversion is off the
+  critical path in both flavours.
+- **Packing the 2-bit row walker into 32-bit loads: broken, reverted.** Trying
+  to read two packed bytes as one word changed results (the LUT index is
+  per-pair, and the byte order is not what the shift made it), so this is not a
+  safe one-liner. The row bytes are only 32 per group anyway.
+- **Sinkhorn 20 -> 6: vetoed, not a dead end for a re-tuned budget.** Costs a
+  real logit change (max_delta 7.8, top1 6/10) for +0.8% decode. If a future
+  session re-derives a convergence-tested iteration count that keeps the probe
+  bit-exact, the win is there; 6 is not it.
+- **Attention: 4 KV positions per online-softmax iteration is SLOWER than 2.**
+  2.56 tok/s vs 2.7933 control on board2 in the same batch (-8.4%), byte-exact.
+  The quad block spills off the LX7's register file; pairing is the sweet spot.
+- **2-bit LUT GEMV: two rows at a time is slightly slower.** 2.7733 vs 2.7933
+  (-0.7%) on board2, byte-exact. The GEMV is flash-bandwidth bound, not issue
+  bound, so a second row stream competes for the same bus instead of hiding
+  latency. Row-loop unrolling in this kernel is not the lever.
+- **Constrained-logits gather: norm hoist is a small real win (+0.18%).** Kept
+  (13373e7); byte-exact, and it lifts the think path with the primary metric.
+- **Two dead-end families, so far, on top of the fp32 staging wins:** arithmetic
+  hoisting inside the GEMVs (3 nulls) and loop unrolling in the GEMVs (2 nulls).
+  Everything that has moved the needle changed *what is read* or *how many times*
+  a value is touched, not how the inner loop is scheduled.
+- **kron_apply first-half blocking is capped at 4 rows.** 8 rows: 2.995 vs
+  3.1717 control (-5.6%). Second half caps at 8 columns (+0.9% over 4). The
+  LX7 register file wants 4 accumulators when the reuse is in `a` and 8 when it
+  is in the loaded `c` value. Do not widen the first half again.
+- **Engram-gate RMS fusion (3 passes -> 1): neutral** (3.125 vs 3.1267) and it
+  quietly breaks the n1 buffer contract (n1 must still hold the attention input
+  when block() reaches the attention sub-block). Not taken.
+- **kron_apply is saturated.** Measured optimum: first half 4 rows x 2 j-columns
+  (8 accumulators), second half 8 columns with paired b rows. Wider on either
+  side regresses: 8 rows -5.6%, 4k x 4j -1.2%. The lever was always *operand
+  load reuse*, not accumulator count alone - 8 rows added accumulators without
+  reuse and lost. Stop tuning this kernel.
+- **Blocked attention-gate sigmoid: exactly zero** (3.1817 vs 3.1817). 768
+  elements once per layer is below the noise floor. Small elementwise loops are
+  not worth ILP work on this board.
+- **Six more nulls on the main board or in verified parallel batches:**
+  FWHT 8-butterfly unroll, straight-line n=4 sinkhorn, kv_slot hoist out of the
+  attention inner loop, attention-gate sigmoid blocked by 4, LUT builder 2-wide,
+  restrict on rms_unit/zcrms. All byte-exact, all within +-0.05%. Instruction
+  scheduling and loop-overhead removal are DONE as levers on this firmware: at
+  3.76 tok/s every phase is now either bandwidth-bound or latency-bound in a way
+  the scheduler cannot fix. Only structural changes remain (core-1 coverage of
+  the serial stage, or fewer bytes per token).
+- **Process rule learned the hard way:** a parallel batch whose board1 control
+  did not match HEAD's last measured value was silently stale (cp-based resets
+  instead of git). From now: `git fetch && git reset --hard FETCH_HEAD` before
+  every batch, and verify the control's decode_tps equals the last logged value
+  before trusting any candidate delta.
+- **Splitting the leftover per-layer stage now buys ~0.05%, not 1%.** The MLP
+  (both kron halves, SiLU, lane mix) and the GEMVs were the splitable mass.
+  Measured against a 3.9517 control in one batch: rms scale-pass split +0.04%,
+  engram tap-matmul split +0.04%, p1/p2 permutation split +0.13%, combined
+  fold+SiLU gate worker (one handshake instead of two) -0.4%. The lever is
+  spent; do not split anything smaller than a kron half.
+- At 3.95 tok/s the profile has no phase above ~15% that is not already
+  two-core or flash-bandwidth bound. Remaining ideas would change *what is
+  computed* (quality risk) or how bytes are streamed from flash (cache-blocking
+  the LUT GEMV - tried once and the naive 4-row block was wrong; a correct
+  cache-blocked version remains the only big-ticket idea left).
+- **Dynamic self-scheduling (both cores pull 4-unit grants from one atomic
+  counter) is 6% WORSE** than the fixed half-split: 3.70 vs 3.9517 control,
+  byte-exact. The fetch_add per 4 units is not free on the LX7 and the two
+  halves are already balanced. Do not replace the splitter with a work queue.
+- **RoPE split over heads: neutral** (3.955 / 3.9517 vs 3.9517 control, and
+  identical on a second board). 12+2 heads x 24 pairs is below the handshake.
+- **zcrms emit-pass split: +0.13%** (3.9567 vs 3.9517) - under the 0.2% keep bar
+  for a second handshake per layer. rms scale-pass split: +0.04%.
+- Everything measured since the lane-mix split is inside +-0.15%: the two-core
+  lever is closed. Reverted the rope split to keep the tree minimal.
+
+## Experiment 2/3/4 CLOSED (run #137-#138): the TIE728 assembly kernel is in
+
+**+13.0 % decode (4.190 -> 4.735 tok/s, +93.9 % over baseline), byte-exact.**
+`engine/src/lut2_tie728.S` `nd_lut2_rows_tie1n` replaces the C row walker for
+every 2-bit projection whose geometry/alignment/norms pass `nd_lut2_asm_ok()`
+(all of them in needle3.cact), selected inside `nd_cq_gemv_lut2` before
+`nd_parallel_rows`, C path retained as fallback, guarded by CMake option
+`NEEDLE_LUT2_ASM` (ON). Microkernel saving vs C on real tables: +33.4 % cycles
+saved in split mode, `exact=out/out bitexact=1` on 768x768 / 576x768 / 128x768 /
+96x96. Cost 1 KB IRAM. Full notes in `.auto/mimimodel-experiments.md`.
+
+Kernel structure that measured best (do not re-derive): one output row per call;
+four independent partials `f0..f3`; eight `lsi` gather loads per index word
+batched at the top; nibble -> address with `extui`+`addx4` (2 instructions per
+slot, that is the floor for this table layout); `add.s` into four partials, fold
+`(s0+s1)+(s2+s3)` then one `madd.s` with the group norm; the group's norm
+halfword `l16ui`'d at the *top* of the group. Losing variants, all bit-exact,
+all reproducible on three boards: deeper index prefetch (-1.9 pp), two-row
+blocking (-6.7 pp), early norm *conversion* (-1.1 pp vs hoisting the load only),
+and `lsi` cannot reach a whole group with immediates (field caps at 1020 bytes,
+so a per-group table base advance of 0x1000 is illegal - three `addi` per group
+is the floor).
+
+Remaining open work in this family: Experiments 7-11 (compiler floating-point
+candidate, CQ2 integer path, compact quantised pair-LUT, one quantised activation
+reused across Q/K/V/gate, Xtensa SIMD integer dot). Experiment 8's premise
+changed: the C kernel is no longer the baseline, so an integer path must now beat
+`tie1n`, not C.
+
+## Full per-token phase map (accepted 4.78 tok/s tree, boot-bench token = 201 ms)
+
+Measured with `AUTO_PROFILE=1` on board 3; timers added to `ND_P_*` are
+diagnostics only (ND_PROFILE is off in every measured image).
+
+| phase | ms/token | share | state |
+|---|---|---|---|
+| 2-bit GEMV total (`proj2bit`) | 86.5 | 43 % | TIE728 kernel in use. **At its instruction floor: `W8D` is 32 instructions (8 `extui` + 8 `addx4` + 8 `lsi` + 8 `add.s`) per 32-bit index word, one word = 8 nibbles = 8 weight *pairs* = 16 weights, so 2 instructions/weight.** 14.3 M weights/token x 2 = 28.6 M instructions ~ 86.5 ms means sustained IPC ~1.33, i.e. throughput-bound. See the "Instruction floor" section below. |
+|  - q/k/v/gate projections (inside `attention()`) | ~59 | 29 % | derived: `attn-stage` 101.8 - heads 36.7 - stage 5.1 |
+|  - out_proj + logits | ~27 | 13 % | same kernel |
+| attention head split | 36.7 | 18.3 % | products+exp bound; KV row staging already shared 6 ways |
+| Hadamard MLP | 24.6 | 12.2 % | of which `kron_apply` 11.1 - **GCC already emits `loop`+`lsi`+`madd.s`, no asm headroom** |
+| engram | 16.4 | 8.2 % | gathers (flash latency) + its own 2-bit GEMVs, which already use the asm kernel |
+| mHC phi (**4-bit** generic path) | 13.5 | 6.7 % | **~5 instructions/weight; the one clear arithmetic target left** |
+| attn stage: qkv taps 3.3, head norms 0.5, rope 0.2, kv store 1.1 | 5.1 | 2.5 % | all small; do not split anything here |
+| mHC mix 4.7, sinkhorn 4.3, prep+LUT 3.5, step tail 0.5, sampler 0.0, conf pool 0.0 | 13.0 | 6.5 % | sampler and conf pool are *free*; sinkhorn is exp-bound |
+| unattributed | ~14 | 7 % | per-layer glue, lane init, tier pointer math, timer overhead |
+
+Two things this map kills: the missing decode time is **not** an unnamed
+attention stage (taps+norms+rope+KV store is 5.1 ms total), and it is not the
+per-layer glue.
+
+**CORRECTION (run #145): `sample = 0.0 ms` was a provenance artefact and the
+sampler is NOT free.** The `EVT prof` block this map came from is printed after
+the *boot bench*, and the bench drives `nd_model_step_hidden` directly - it never
+runs the grammar or the sampler. Two independent measurements say the real
+request path costs ~4% more than the bench (bench 4.984 tok/s vs primary 4.7783
+at 201 ms/token), i.e. ~8-9 ms/token of work the bench cannot see, and the
+per-case data below localises part of it to the grammar/sampler. `prof_dump()` in
+`esp32/main/main.c` (ND_PROFILE-only) now prints the same table for a real
+request's decode window, so this is measurable; the first harvest is still
+pending (see "Route-phase gap", below).
+
+## Route-phase gap: CLOSED as context size, not overhead (run #145 harvest)
+
+Harvested with `prof_dump` on a profiled board-3 image, driven through
+`tools/serial_api.py`'s `Device` (open with **DTR/RTS pinned False**: toggling
+them resets the chip into the ROM loader, which is why a hand-rolled reader sees
+nothing). Tools vs route request, same board, same image:
+
+| phase | tools ms/tok | route ms/tok |
+|---|---|---|
+| proj2bit | 111.2 | 111.2 |
+| attention (head split) | 36.3 | **51.6** |
+| hadamard / engram / phi / logits / prep / sinkhorn / mix / taps / norms / rope / kv | identical | identical |
+| sample | 14.6 | 15.2 |
+| whole block | 195.8 | 211.1 |
+
+Every phase matches to 0.1 ms except attention, and the prefill lines explain it:
+`sink=143` vs `sink=213`. The route case simply attends over ~50 % more positions.
+Not a defect, and the fixes (shorter span, fewer sinks) are frozen by the archive.
+
+**Real-request phase map, and how to read it.** The boot bench understates every
+phase by ~28 % and cannot see `sample` at all, so use the request table above for
+sizing work. Note the timers overlap: `whole block` (94 %) contains the GEMVs that
+`proj2bit`, `engram` and `mhc_phi4` also count, so do not sum them; the block plus
+`sample` is the token.
+
+Per-case decode rates on one image (identical on all three boards, spread 0.07 %):
+
+| case | phase | decode tps | prefill tps |
+|---|---|---|---|
+| sampling5 / timer60 / batch / heldout_timer45 / heldout_sampling15 / heldout_batch | tools | 4.77-4.85 | 5.25-5.27 |
+| **route_translate** | **route** | **4.560** | **4.97** |
+| route_code / heldout_route_timer | route | 4.500 / 4.520 | 4.95-4.97 |
+
+`primary` = five tools cases + `route_translate`, and its mean reproduces exactly:
+(4.840+4.830+4.770+4.850+4.830+4.560)/6 = 4.780. So the route case alone costs
+**~6 %**, and bringing it to the tools rate is **+0.94 % on the metric** - well
+above the 0.2 % keep bar, and it is *not* an arithmetic change (the model runs
+identically; this is per-request/per-token overhead in the selection path).
+
+What it is **not**: a prefix re-priming cost. `run_inference` restores a cached
+prefix per phase (`s_prefixes[phase]`), both prefixes exist, and restore is
+O(1). What it also is not: the attention context (route runs one pass, tools two,
+so tools has the *longer* context and is still faster).
+
+What is left, in order of evidence: (a) the route grammar's per-token candidate
+enumeration / subset-logit construction in `nd_sample.c` - never measured on a
+real request, and the phase that the boot bench structurally cannot see; (b) the
+per-token console emit (both phases pay it, so it cannot explain the *gap*, but
+it is part of the ~8-9 ms/token bench-to-request difference). Measure with
+`prof_dump` on a tools request and a `!route` request before writing anything.
+
+Harness caveat for that measurement: a bare `pyserial` reader on the board
+console (DTR set, RTS reset pulse) returned **zero bytes** here, even for the
+non-mutating `!status\n` - it hung in `open()`. The repo harness and
+`tools/serial_api.py` both read that console fine, so drive the harvest through
+one of them rather than inventing a third reader.
+
+## The phi anomaly (open, run #140 follow-up)
+
+`mhc_phi4` is 13.5 ms/token = prepare 4.3 + generic-path GEMVs 9.2, for roughly
+74 K weights. That is **~12x the per-weight cost of the 2-bit pair-LUT path** and
+it survives every analytic explanation tried so far: the tensors are inside the
+PSRAM weight tier, `xh` is internal SRAM, the packed rows are sequential, and the
+arithmetic floor is ~5 instructions per weight. So either the 12 KB padded
+activation is costing far more than its size suggests (re-read once per row, 24
+rows per token), or something in the memory path is pathological.
+
+Attempted microbench, blocked by a harness fact worth knowing: `NEEDLE_KBENCH=ON`
+adds `bench_phi()`/`kbench.c` to the *same* `app_main`, so a kbench image still
+runs the two-prefix priming first, and the firmware's console stream **stalls at
+exactly 4096 bytes right after `EVT priming tokens=14`** in a raw
+`pyserial`/DTR-deasserted capture - i.e. a plain reader sees the ROM log and the
+first EVT lines and then nothing, so you cannot harvest `KB ...` output without
+whatever the repo harness does (its 5-minute window and its own console
+handling). Do not conclude "the app hung" from an empty capture.
+
+First fix attempt instead of the microbench: `ND_GEMV_BLOCK` (`nd_quant.c`,
+opt-in via `NEEDLE_GEMV_BLOCK`, default 0) blocks the generic path's rows so N
+rows share one activation sweep. Bit-exact by construction (per-row accumulation
+order unchanged). This deliberately revisits "row blocking is a loss", which was
+measured on the **2-bit** path where the activation (3 KB) is the *small* operand
+against 192 B rows - phi is the inverse ratio (12 KB activation, 1.5 KB rows), so
+the assumption changed, which is the only legitimate reason to retry.
+
+## Instruction floor: why the 2-bit GEMV (43 % of the token) cannot go faster
+
+Established from the disassembly and the archive directory, not from a guess
+(runs #144-#145). Two floors that agree on the same number:
+
+- **Instructions.** `W8D` - the inner body - is 8 `extui` + 8 `addx4` + 8 `lsi` +
+  8 `add.s` = 32 instructions, and consumes a whole 32-bit index word: 8 nibbles,
+  each a *pair* of 2-bit weights, so **16 weights per 32 instructions = 2
+  instructions per weight**. 14.3 M weights per token x 2 = 28.6 M instructions,
+  which at the measured 86.5 ms is a sustained IPC of ~1.33 - the kernel is
+  throughput-bound, so instruction count is the lever, and 4 ops per nibble
+  (extract, 4x-scaled index, table load, add) is the floor for any table that
+  stays cache-resident, because `lsi` can only take base+immediate. Halving it
+  needs 4 weights per lookup (an 8-bit index, 1 KB per slot), which was measured
+  38 % slower: the table stops fitting.
+- **Bytes.** The 2-bit path reads q(576)+k(96)+v(128)+gate(768)+out_proj(768) =
+  2336 rows x 768 weights = 1.79 M weights per layer, 14.3 M per token = 3.59 MB
+  packed plus ~0.22 MB of group norms. At the ~64 MB/s octal-DTR PSRAM at 80 MHz
+  actually sustains through the cache, that is ~59 ms: the measured phase is at
+  69 % of bus peak. Fewer bytes means changing quantisation, which is frozen.
+
+Things that follow, and that were each confirmed by measurement rather than
+argument: row blocking the LUT path (2-row -5.1 %, 4-row -5 %), the quad table
+(-38 %), deeper index prefetch (-1.9 pp), packed-word widths (32-bit is optimal),
+and 20+ scheduling nulls all sit on this floor. And the same ratio reasoning says
+`kron_apply`, at 1.75 instructions per product with `loop`+`lsi`+`madd.s`, has no
+asm headroom either. Do not re-derive any of it; if it changes, it changes with
+the archive.
+
+## mHC phi / generic-path family CLOSED (run #141)
+
+`ND_GEMV_BLOCK` row blocking (4 and 8 rows per activation sweep, opt-in knob,
+reverted) measured **null**: control 4.7783 (exactly HEAD), B=4 4.7700, B=8
+4.7717, all byte-exact. Combined with the geometry and disassembly work in the
+same cycle, phi's 9.2 ms is now fully accounted and *not* addressable:
+
+- geometry (archive directory): tensors 223/224/225, `in=3072`, `group=128`,
+  `bits=4`, `rowbytes=1536`, out 32/32/128 rows; packed+norms byte accounting is
+  exact, and decode touches 24 rows = 36,864 B and 73,728 weights per token.
+- codegen: GCC's 4-bit loop is a hardware `loop` of 1 `l32i` + 8 `extui` +
+  8 `addx4` + 8 `lsi(cb)` + 8 `lsi(xh)` + 8 `madd.s` = **4.1 instructions per
+  weight**. A handwritten kernel's whole ceiling is `lsc`-pairing the `xh` loads
+  (-12%) = ~1.1 ms = **+0.5 %**, not worth the ABI risk on top of a 1 KB IRAM
+  budget already spent.
+- memory: phi is *inside* the PSRAM tier, so it is not a flash stream; 37 KB per
+  token cannot stay resident in 32 KB of L2, and 17 KB of free internal RAM
+  cannot hold it either. The residual 12x per-weight gap vs the 2-bit path is
+  PSRAM line-fill latency on a non-resident working set. Row blocking leaving it
+  untouched is exactly what that diagnosis predicts.
+
+Do not re-open: phi asm, phi row blocking, phi in internal SRAM, "phi is
+4-bit-slow because of unpacking". If a future archive changes phi's `in_pad` or
+`group`, re-measure `mhc_phi4` once and revisit.
+
+## Harness facts worth keeping (learned by losing device time)
+
+- New compile-time knobs: declare them `set(FOO "0" CACHE STRING ...)` in
+  `esp32/components/needle/CMakeLists.txt`. `idf.py -DNEEDLE_KBENCH=ON` did
+  **not** enable an `option()` in a fresh build dir (binary byte-identical to
+  HEAD), while the cache-string form worked the same day. Always verify through
+  `compile_commands.json`.
+- The asm define is `ND_LUT2_ASM=1` but the option is `NEEDLE_LUT2_ASM`; a guard
+  that greps the option name false-fails.
+- Fresh-configure **every** board in a batch: a stale board1 build dir dropped
+  the asm kernel and read 4.2217 = the C-kernel runtime (-11.7 %). A control that
+  reads low is a build-integrity failure, never a result.
+- Raw `pyserial` console capture stalls at exactly 4096 bytes right after
+  `EVT priming tokens=14` when DTR is deasserted - the USB CDC bridge needs DTR.
+  Set `dtr=True` before concluding the app hung.
+- `AUTO_PROFILE=1` device profiling is the cheapest way to localise a phase: two
+  runs of it located a 65 ms double-count and then excluded it, at ~8 min each.
+
+## External cross-checks
+- **Cross-check vs the independent MimiModel engine (memovai/mimimodel, Needle 2
+  on ESP32-S3).** Its published optimization log agrees with everything measured
+  here and adds two levers this repo had not tried:
+  (a) a *request-sized PSRAM weight tier, ordered by profiled projection cost*
+      (+2.3% warm latency there; this repo has 14.6 MB free PSRAM and streams
+      ~9 MB/token from mmap'd flash at ~30 MB/s);
+  (b) *cross-operator scheduling*: running mHC/Sinkhorn/gate work on the second
+      core while core 0 does independent work (-5.6% latency there - the same
+      family as this repo's kron/silu/lane splits, and the same conclusion that
+      only whole stages are big enough).
+  Its "what did not work" list independently confirms three of this repo's dead
+  ends: int16 PIE assembly (slower - unpack dominates over 2-bit decode),
+  linear-space Sinkhorn (underflows), and a two-token blocked CQ2 kernel
+  (only 1.11x for a lot of state). Its TIE728 note is about aligned float loads
+  + a handwritten 2-row/8-accumulator CQ2 kernel. This repo's C row blocking
+  (-0.7%) and packed-word row reads (+6.7%, kept) are not an equivalent test;
+  the exact assembly microkernel remains open as Experiment 2.
+
+## Historical ledger of closed lever families (as of run #70, plateau 4.185 tok/s)
+
+This ledger's old "converged/verification only" conclusion predates the active
+MimiModel follow-up queue. It closes only the families named below; it does not
+close Experiments 2-4 or 7-11. The authoritative next action is at the top of
+`.auto/prompt.md`.
+
+Every family below is measured on device with byte-exact goldens. Nothing in
+this list should be retried unless its stated blocking assumption changes.
+
+- fp32 staging of every per-token fp16 weight (+100%). DONE - all staged
+  (MLP factors, d/b vectors, cond_u/cond_v, d1, qkv taps, engram taps, norm
+  scales, conf probes).
+- Two-core coverage of every per-layer stage (+12% cumulative): FWHT, pair
+  table build, GEMV rows, attention heads, gate, qkv/engram taps, both kron
+  halves, SiLU, cond fold, lane mix/pre-combine, zcrms/rms emits, logits
+  gather, per-head norms. Nothing smaller than a kron half pays for a
+  handshake; dynamic self-scheduling was -6%.
+- Packed-word reads (+7.5%): 32-bit is the measured optimum. 64-bit (-4.6%,
+  group start is 4 mod 8), 128-bit (illegal, slices not 16-aligned).
+- PSRAM weight tier (+1.5%): the 4.49 MB projections+phi span is the ceiling.
+  Widening it (10 MB) fails the allocation; a second span costs -1.15%.
+- GEMV row blocking: 2-row LUT block -5.1%, 4-row -5%, generic-path 2-row
+  neutral. The 24 KB pair table is already cache resident.
+- Row order: forward wins; reverse -1.1%, interleaved -0.8%.
+- Sinkhorn budget retune: vetoed by the fidelity probe (max_delta 7.8).
+- Engram slot gather split: races on m->row / xh aliasing; 0/12 byte-exact.
+- Attention: paired softmax won (+2.8%), quads lost (-8.4%); int8 K/V word
+  reads banked (+6%).
+- Instruction scheduling / loop-overhead removal: ~20 nulls, all within
+  +-0.05%. Closed.
+- Remaining levers change WHAT is computed (quantisation, vocab, grammar,
+  layers, clocks) and are forbidden by the rules.
+
+At run #70, treat 4.185 tok/s (+71.4% over the 2.44 baseline) as converged for
+the lever families listed in this historical section. Do not use that conclusion
+to skip the later MimiModel experiments tracked in `.auto/mimimodel-experiments.md`.
+- **BUILD-INTEGRITY RULE (learned by losing ~10 device runs): `-DCMAKE_C_FLAGS=...`
+  on `idf.py build` does NOT rebuild anything.** The flag is already in
+  CMakeCache from an earlier configure, so ninja sees no change and relinks the
+  SAME binary; several "identical md5 for every variant" results were this, and
+  they were then flashed and measured as if they were candidates. Always either
+  `idf.py -B <fresh build dir>` per variant (verified: `grep -o
+  '-DND_TIER_SPAN_BYTES=[0-9]*u' <dir>/compile_commands.json` shows the flag AND
+  the md5 differs), or add the knob as a CMake `option()`/`target_compile_definitions`
+  in the component. Cross-check: two builds with different flags that produce the
+  same md5 means one of them is not what you think it is.
+- **PSRAM tier geometry, fully measured (span from lo_p; content = 4.39 MB):**
+  4.5 MB tight copy 4.185-4.1867, **12 MB 4.190-4.195 (accepted)**, 16 MB 4.107.
+  Copy order does not matter (ascending == lowest-block-last), and stride
+  512/2k/8k/16k/32k are all within noise of the same-span baseline. The one real
+  effect: with a span bigger than the content, the LAST bytes memcpy touched are
+  the ones the S3's copy engine leaves resident, so a padded span keeps the
+  tier's head hot. Do not re-derive this by changing strides again.
+- **Tier copy STRIDE at span 12 MB: fully mapped, no lever.** 128/192/256/384/
+  512/768/1024/4k/8k/16k/64k and ascending order all give 4.190-4.195 with the
+  byte-exact gate green; the accepted plain single memcpy at the same span is
+  indistinguishable. Keep one memcpy, keep the 12 MB span. The 14 MB span does
+  NOT boot: a 14 MB allocation succeeds but the tier copy then exceeds the bench
+  harness's window (no EVT ready at all, twice). Family CLOSED.
+- **Tier span ceiling is the ALLOCATION, not cache: 12 MB is the maximum that
+  boots.** 13 MB and 14 MB never reach EVT ready (clean rebuilt images, two
+  boards, two spans); 12 MB boots everywhere and reads 2,052,252 B free. The
+  earlier "16 MB boots at 4.107" reading came from a stale pre-reset tree.
+  Conclusion: the span is at its ceiling and stride/order/limit variants cannot
+  add value. The 12 MB span + single memcpy is final.
+- **Experiment 5 (async cross-operator overlap) - CANNOT WORK with this job
+  slot, and the tripwire proves it quantitatively.** Overlapping the pair-table
+  build (the only per-layer job whose inputs are ready and whose output is not
+  consumed by a split) left it in flight until attention, and the very next
+  `nd_parallel_rows` fired the guard 3543 times in one run: the table is 16 KB,
+  its build is ~2 us, and the q/k/v GEMVs that follow each take ~30 us - the job
+  is over before it could ever hide anything, so there is no schedule that both
+  overlaps and avoids the slot collision. The gate-projection variant of the
+  same idea was already shown to race the attention-head split on m->gate.
+  Two independent schedules, two structural failures: with row-level splitting
+  already covering every GEMV, there is no independent per-layer work left for a
+  second core. Closed.

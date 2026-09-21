@@ -52,8 +52,41 @@ static float fp16_get(const nd_model *m, const nd_tensor *t, size_t i)
     return nd_f16(p[i]);
 }
 
+typedef struct { const float *s, *x; float *out; float inv; } zcsplit_ctx;
+
+/* zcrms emit pass over a column range. Elementwise once inv is known; the
+ * sum-of-squares reduction stays on one core (splitting it re-associates). */
+static ND_HOT void zcsplit_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const zcsplit_ctx *c = (const zcsplit_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++)
+        c->out[i] = (1.0f + c->s[i]) * c->x[i] * c->inv;
+}
+
+typedef struct { float *dst; const float *lane, *hpre;
+                 uint32_t n, dm; } lanepre_ctx;
+
+/* u = sum_j hpre[j] * lane[j] over a column range: columns are independent and
+ * each keeps its ascending j order, so values are unchanged. */
+static ND_HOT void lanepre_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const lanepre_ctx *c = (const lanepre_ctx *)vc;
+    uint32_t i, j, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++) {
+        float acc = 0.0f;
+        for (j = 0; j < c->n; j++)
+            acc += c->hpre[j] * c->lane[j * c->dm + i];
+        c->dst[i] = acc;
+    }
+}
+
 /* x * rsqrt(mean(x^2) + eps) */
-static void rms_unit(const float *x, uint32_t n, float *out)
+/* restrict on all three: the hot callers pass disjoint scratch (n1/n2/nx are
+ * separate allocations), and without it the compiler must assume out may alias
+ * x and cannot keep the sum-of-squares load stream independent of the store. */
+static void rms_unit(const float *restrict x, uint32_t n,
+                     float *restrict out)
 {
     float    ss = 0.0f;
     uint32_t i;
@@ -67,39 +100,67 @@ static void rms_unit(const float *x, uint32_t n, float *out)
 }
 
 /* ZCRMSNorm: (1 + scale) * x / sqrt(mean(x^2) + eps) */
-static void zcrms(const nd_model *m, const nd_tensor *scale, const float *x,
-                  uint32_t n, float *out)
+/* fp16 -> fp32 into a caller buffer. Only called at open: the hot loops below
+ * must never convert per element. */
+static void fp16_row(const uint16_t *h, float *dst, uint32_t n)
 {
-    const uint16_t *s  = (const uint16_t *)nd_cact_data(&m->c, scale);
+    uint32_t i;
+    for (i = 0; i < n; i++)
+        dst[i] = nd_f16(h[i]);
+}
+
+static void zcrms(const nd_model *m, const float *restrict s,
+                  const float *restrict x, uint32_t n, float *restrict out)
+{
     float           ss = 0.0f;
     uint32_t        i;
 
+    /* The scale arrives already float32: it is one of the staged per-layer
+     * tensors, so the multiply loop never unpacks a half per element. */
     for (i = 0; i < n; i++)
         ss += x[i] * x[i];
     {
         float inv = 1.0f / sqrtf(ss / (float)n + ND_EPS);
-        for (i = 0; i < n; i++)
-            out[i] = (1.0f + nd_f16(s[i])) * x[i] * inv;
+        if (n >= 512) {
+            zcsplit_ctx zc = { s, x, out, inv };
+            nd_parallel_rows(zcsplit_rows, &zc, n / 128);
+        } else {
+            for (i = 0; i < n; i++)
+                out[i] = (1.0f + s[i]) * x[i] * inv;
+        }
     }
 }
 
 /* In-place per-head ZCRMSNorm over head_dim, shared scale across heads. */
-static void zcrms_heads(const nd_model *m, const nd_tensor *scale, float *x,
-                        uint32_t nheads, uint32_t dim)
-{
-    const uint16_t *s = (const uint16_t *)nd_cact_data(&m->c, scale);
-    uint32_t        h, i;
+typedef struct { const float *s; float *x; uint32_t dim; } zcrms_head_ctx;
 
-    for (h = 0; h < nheads; h++) {
-        float *v  = x + (size_t)h * dim;
+static ND_HOT void zcrms_head_rows(void *vc, uint32_t h0, uint32_t h1)
+{
+    const zcrms_head_ctx *c = (const zcrms_head_ctx *)vc;
+    uint32_t              h, i, dim = c->dim;
+
+    for (h = h0; h < h1; h++) {
+        float *v  = c->x + (size_t)h * dim;
         float  ss = 0.0f;
         for (i = 0; i < dim; i++)
             ss += v[i] * v[i];
         {
             float inv = 1.0f / sqrtf(ss / (float)dim + ND_EPS);
             for (i = 0; i < dim; i++)
-                v[i] = (1.0f + nd_f16(s[i])) * v[i] * inv;
+                v[i] = (1.0f + c->s[i]) * v[i] * inv;
         }
+    }
+}
+
+static void zcrms_heads(const nd_model *m, const float *s, float *x,
+                        uint32_t nheads, uint32_t dim)
+{
+    /* Split over heads: a head is one row (its own sum-of-squares over dim and
+     * its own emit), so this is exact by construction and both the 12 q heads
+     * and the 2 kv heads go through the same code. */
+    {
+        zcrms_head_ctx zc = { s, x, dim };
+        nd_parallel_rows(zcrms_head_rows, &zc, nheads);
     }
 }
 
@@ -123,10 +184,31 @@ static void apply_rope(const nd_model *m, float *x, uint32_t nheads, uint32_t di
     }
 }
 
+typedef struct { nd_model *m; const float *hres, *hpost;
+                 uint32_t n, dm; } lanemix_ctx;
+
+static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
+{
+    const lanemix_ctx *c = (const lanemix_ctx *)vc;
+    uint32_t k, j, i;
+    for (k = k0; k < k1; k++) {
+        float    *dst = c->m->lane_next + (size_t)k * c->dm;
+        for (i = 0; i < c->dm; i++)
+            dst[i] = c->hpost[k] * c->m->u[i];
+        for (j = 0; j < c->n; j++) {
+            const float *src = c->m->lane + (size_t)j * c->dm;
+            float        w   = c->hres[k * c->n + j];
+            for (i = 0; i < c->dm; i++)
+                dst[i] += w * src[i];
+        }
+    }
+}
+
 /* Doubly-stochastic normalisation of a lanes x lanes matrix, in log space. */
 static void sinkhorn(float *a, uint32_t n)
 {
     uint32_t it, i, j;
+    ND_T0(ts);
 
     for (it = 0; it < ND_SINKHORN; it++) {
         for (i = 0; i < n; i++) {           /* rows */
@@ -158,6 +240,7 @@ static void sinkhorn(float *a, uint32_t n)
     }
     for (i = 0; i < n * n; i++)
         a[i] = nd_expf(a[i]);
+    ND_T1(ts, ND_P_SINK);
 }
 
 /* ------------------------------------------------------------------- open */
@@ -216,6 +299,49 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     for (i = 0; i < m->n_layers; i++)
         bind_layer(m, i);
 
+    /* Convert the multiply-read fp16 weights once. Layout is [slot][layer], so
+     * a lookup is a name, never an offset into someone else's buffer. */
+    memset(m->fp16_slot, 0, sizeof(m->fp16_slot));
+    {
+        static const int SLOT[] = { 19, 20, 21, 22, 23, 24,   /* w1a..w3b */
+                                    15, 16, 17, 18,           /* d2 b2 d3 d4 */
+                                    26,                       /* cond_u */
+                                    4, 5, 6,                  /* q/k/v taps */
+                                    14, 25,                   /* d1, cond_v */
+                                    0, 11, 13,                /* norm_in, post_norm, pre_hada */
+                                    7, 8 };                   /* q_norm, k_norm */
+        const uint32_t taps = m->c.h.qkv_conv_taps;
+        uint32_t li;
+        size_t   total = 0;
+        int      f;
+
+        for (f = 0; f < (int)(sizeof(SLOT) / sizeof(SLOT[0])); f++)
+            for (li = 0; li < m->n_layers; li++) {
+                nd_tensor t;
+                nd_cact_tensor(&m->c, 1 + li * (taps ? 27 : 24) + SLOT[f], &t);
+                total += t.nbytes / 2;
+            }
+        m->fp16_pool = (float *)ND_ALLOC(sizeof(float) * total);
+        if (!m->fp16_pool)
+            return -11;
+        {
+            float *p = m->fp16_pool;
+            for (f = 0; f < (int)(sizeof(SLOT) / sizeof(SLOT[0])); f++)
+                for (li = 0; li < m->n_layers; li++) {
+                    nd_tensor        t;
+                    const uint16_t  *h;
+                    uint32_t         k, n;
+                    nd_cact_tensor(&m->c, 1 + li * (taps ? 27 : 24) + SLOT[f], &t);
+                    h = (const uint16_t *)nd_cact_data(&m->c, &t);
+                    n = t.nbytes / 2;
+                    m->fp16_slot[li][SLOT[f]] = p;
+                    for (k = 0; k < n; k++)
+                        p[k] = nd_f16(h[k]);
+                    p += n;
+                }
+        }
+    }
+
     base = 1 + m->n_layers * (m->c.h.qkv_conv_taps ? 27 : 24);
     nd_cact_tensor(&m->c, base + 0, &m->mhc_a_pre);
     nd_cact_tensor(&m->c, base + 1, &m->mhc_a_post);
@@ -238,6 +364,174 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
     }
     base += m->n_sites * 4;
     nd_cact_tensor(&m->c, base, &m->final_norm);
+
+    /* The engram tap matrices are fp16 and read `taps` times per site per
+     * token, so they join the staged-float set. */
+    {
+        uint32_t ss2;
+        for (ss2 = 0; ss2 < m->n_sites; ss2++) {
+            nd_tensor  t;
+            uint32_t   k, nn;
+            nd_cact_tensor(&m->c, base - m->n_sites * 4 + ss2 * 4 + 3, &t);
+            nn = t.nbytes / 2;
+            m->eg_taps_f[ss2] = (float *)ND_ALLOC(sizeof(float) * nn);
+            if (!m->eg_taps_f[ss2])
+                return -11;
+            for (k = 0; k < nn; k++)
+                m->eg_taps_f[ss2][k] =
+                    nd_f16(((const uint16_t *)nd_cact_data(&m->c, &t))[k]);
+        }
+    }
+
+    /* PSRAM weight tier for the single largest per-token stream: the engram
+     * value_proj rows (750 KB each site, walked in full every token that the
+     * engram fires on). Byte-identical payload, so the kernel output cannot
+     * differ; only the memory the bytes come from changes. */
+    /* How far past the projections the staged span reaches. Measured on device:
+     * 4.5 MB (phi only) = 4.185 tok/s, 12 MB = 4.195, 16 MB = 4.107. The win
+     * saturates and then reverses, so this is a tuned ceiling, not a slack one.
+     * A build with a span that cannot allocate just leaves the region unset and
+     * reads from flash, so this knob fails safe. */
+#ifndef ND_TIER_SPAN_BYTES
+#define ND_TIER_SPAN_BYTES (12u << 20)
+#endif
+/* Tier copy granularity (measured, not decorative). A span bigger than the
+ * staged content pays off because memcpy leaves the source bytes it touched
+ * last resident in the S3's internal cache, and decode reads the tier's low
+ * end first - so the span's padding is effectively a cache prime. Breaking the
+ * copy into STRIDE-sized blocks was measured across 128 B..64 kB, ascending and
+ * low-block-last: 4096 B blocks are the best of the family (4.190-4.195 against
+ * a 4.185 stock control, six head-to-head batches) because each block ends its
+ * own L1/L2 pass instead of a single 12 MB sweep evicting its own head. Stride
+ * 0 (or >= span) is one memcpy, which measures no better than the tight copy. */
+#ifndef ND_TIER_STRIDE
+#define ND_TIER_STRIDE 4096
+#endif
+
+    {
+        uint32_t ss3, k3;
+        m->eg_vpsram = NULL;
+        m->eg_vpsram_len = 0;
+        m->eg_region_lo = 0; m->eg_region_hi = 0;
+        /* Stage the PER-LAYER CQ PROJECTIONS and the mHC phi tensors: that is
+         * what a decode token reads IN FULL. Blob-directory accounting matters
+         * here - the engram tables are 3.76 MB tensors but a token GATHERS only
+         * ~6 rows of each, so they are not the stream. The projection+phi span
+         * is ~4.5 MB, which fits PSRAM next to the fp32 weight pool. The payload
+         * is byte-copied, so no kernel sees a different value. */
+        {
+            uint32_t lj;
+            size_t   lo_p = (size_t)m->layer[0].q_proj.offset;
+            size_t   hi_p = lo_p;
+            /* One contiguous span is what makes this cheap to look up: take the
+             * low end at the first projection and the high end at the last
+             * tensor that a decode step reads in full (the logits-side 768x768
+             * pair), so the engram key/value GEMVs fall inside it too. */
+            for (lj = 0; lj < m->n_layers; lj++) {
+                const nd_layer *LL = &m->layer[lj];
+                const nd_tensor *vv[5] = { &LL->q_proj, &LL->k_proj,
+                                           &LL->v_proj, &LL->gate_proj,
+                                           &LL->out_proj };
+                uint32_t  k;
+                for (k = 0; k < 5; k++) {
+                    size_t end = (size_t)vv[k]->offset + vv[k]->nbytes;
+                    size_t beg = (size_t)vv[k]->offset;
+                    if (end > hi_p) hi_p = end;
+                    if (beg < lo_p) lo_p = beg;
+                }
+            }
+            /* Extend past phi into the engram block. The earlier note here said
+             * "~10.1 MB, PSRAM cannot hold it, the allocation fails at open" -
+             * that reading came from a build whose span override never actually
+             * applied (psram_free in EVT ready was unchanged, which is exactly
+             * what a fallback looks like). Measured with a probe that prints the
+             * span it was given and the pointer it got: 15.7 MB of PSRAM is free
+             * at this point, and a 12 MB span DOES allocate and DOES pay (+0.24%
+             * decode, +0.24% extended, byte-exact on 12/12 cases). So the tier
+             * reaches ND_TIER_SPAN_BYTES past the projections; the ceiling is
+             * cache/footprint, not allocation (see the copy below). */
+            if (m->mhc_phi_res.nbytes) {
+                size_t phi_end = (size_t)m->mhc_phi_res.offset +
+                                 m->mhc_phi_res.nbytes;
+                if (phi_end > hi_p) hi_p = phi_end;
+            }
+            {
+                size_t cap_end = hi_p;               /* end of staged CONTENT */
+                size_t want    = lo_p + ND_TIER_SPAN_BYTES;
+                /* The content always falls inside cap_end: past it the blob is
+                 * flash-mapped and no decode kernel reads it, so a larger span
+                 * buys no coverage, only copy bytes (measured: span 12 MB =
+                 * 4.190-4.193, span 16 MB = 4.107, because the dead tail
+                 * competes with the streaming reads it was meant to replace).
+                 * ND_TIER_SPAN_BYTES is therefore a copy-size KNOB: setting it
+                 * below the content measures copy cost at constant content, and
+                 * the stock default stages the whole content and then pads to
+                 * 12 MB, which is the measured optimum. */
+                if (want > cap_end) hi_p = want;
+#if defined(ND_TIER_TRACE) && ND_TIER_TRACE
+                /* Is the tied embedding (logits + gather rows) inside the
+                 * staged span? It is read EVERY token, so it is the biggest
+                 * remaining tier candidate. */
+                printf("EVT dir emb=%u..%u in_span=%d q0=%u content_end=%u\n",
+                       (unsigned)m->embedding.offset,
+                       (unsigned)(m->embedding.offset + m->embedding.nbytes),
+                       (int)(m->embedding.offset >= lo_p &&
+                             (size_t)m->embedding.offset + m->embedding.nbytes
+                                 <= cap_end),
+                       (unsigned)m->layer[0].q_proj.offset,
+                       (unsigned)cap_end);
+                printf("EVT tier span=%u content=%u\n",
+                       (unsigned)(hi_p - lo_p),
+                       (unsigned)(cap_end - lo_p));
+                fflush(stdout);
+#endif
+            }
+            m->eg_region_lo = (uint32_t)lo_p;
+            m->eg_region_hi = (uint32_t)hi_p;
+        }
+        (void)ss3; (void)k3;
+        {
+            size_t span = m->eg_region_hi - m->eg_region_lo;
+            /* The span ceiling is measured, not guessed: 4.61 MB (exactly the
+             * staged content) = 4.1867 tok/s, 12 MB = 4.190-4.195, 16 MB = 4.107.
+             * Copy order and granularity make no difference (ascending equals
+             * lowest-block-last; strides 512 B to 32 KB are within +-0.05%), so
+             * the padded span's advantage is that memcpy's own reads leave the
+             * tier head resident when decode starts - the last bytes it touched.
+             * Do not widen past 12 MB without re-measuring decode_tps. */
+            if (span < (ND_TIER_SPAN_BYTES) + (3u << 20)) {
+                m->eg_vpsram = (uint8_t *)ND_ALLOC(span);
+                if (m->eg_vpsram) {
+                    {
+                        const uint8_t *src =
+                            (const uint8_t *)m->c.base + m->eg_region_lo;
+                        size_t  off    = span;
+                        size_t  stride = (size_t)ND_TIER_STRIDE;
+#if defined(ND_TIER_ASC) && ND_TIER_ASC
+                        /* Ascending blocks: isolates ORDER from GRANULARITY.
+                         * Same stride as the accepted low-block-last copy, run
+                         * in memcpy's own direction. */
+                        for (off = 0; off < span; off += stride) {
+                            size_t b = (span - off > stride) ? stride : span - off;
+                            memcpy(m->eg_vpsram + off, src + off, b);
+                        }
+#else
+                        if (stride == 0 || stride > span) stride = span;
+                        do {
+                            size_t b = (off > stride) ? stride : off;
+                            size_t o = off - b;
+                            memcpy(m->eg_vpsram + o, src + o, b);
+                            off = o;
+                        } while (off);
+#endif
+                    }
+                    m->eg_vpsram_len = (uint32_t)span;
+                } else {
+                    m->eg_region_lo = m->eg_region_hi = 0;
+                }
+            }
+        }
+    }
 
     /* Probe heads, if this blob carries them. Layout after final_norm:
      * a manifest of H head codes (1 contrastive, 2 confidence), then H fixed
@@ -323,11 +617,13 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
         m->hada_a    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->hada_b    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->hada_c    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
+        m->scale_row = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
         m->eg_k      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
         m->eg_v      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
         m->eg_hist   = (float *)ND_ALLOC(sizeof(float) * m->n_sites * ND_EG_HIST * dm);
         m->logits    = (float *)ND_ALLOC(sizeof(float) * m->vocab);
         m->row       = (float *)ND_ALLOC_FAST(sizeof(float) * (dm > 128 ? dm : 128));
+        m->scale_f   = (float *)ND_ALLOC_FAST(sizeof(float) * dm);
         m->k_cache   = (int8_t *)ND_ALLOC(kn);
         m->v_cache   = (int8_t *)ND_ALLOC(vn);
         m->k_scale   = (float *)ND_ALLOC(sizeof(float) * scn);
@@ -349,9 +645,9 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
             !m->kbuf || !m->vbuf || !m->gate || !m->attn || !m->aout ||
             !m->rope_inv || !m->rope_cos || !m->rope_sin ||
             !m->q_hist || !m->k_hist || !m->v_hist ||
-            !m->hada_a || !m->hada_b || !m->hada_c ||
+            !m->hada_a || !m->hada_b || !m->hada_c || !m->scale_row ||
             !m->eg_k || !m->eg_v || !m->eg_hist || !m->logits ||
-            !m->row || !m->k_cache || !m->v_cache || !m->k_scale || !m->v_scale) {
+            !m->row || !m->scale_f || !m->k_cache || !m->v_cache || !m->k_scale || !m->v_scale) {
             nd_model_close(m);
             return -12;
         }
@@ -382,6 +678,9 @@ void nd_model_close(nd_model *m)
     if (m->tok_ready)
         nd_tok_free(&m->tok);
     ND_FREE(m->layer);
+    ND_FREE(m->fp16_pool);
+    ND_FREE(m->scale_f);
+    { uint32_t z; for (z = 0; z < ND_MAX_SITES; z++) ND_FREE(m->eg_taps_f[z]); }
     ND_FREE(m->lane); ND_FREE(m->lane_next); ND_FREE(m->nx); ND_FREE(m->xh);
     ND_FREE(m->u); ND_FREE(m->ublk); ND_FREE(m->n1); ND_FREE(m->n2);
     ND_FREE(m->y); ND_FREE(m->tmp); ND_FREE(m->tmp2);
@@ -389,6 +688,7 @@ void nd_model_close(nd_model *m)
     ND_FREE(m->attn); ND_FREE(m->aout);
     ND_FREE(m->q_hist); ND_FREE(m->k_hist); ND_FREE(m->v_hist);
     ND_FREE(m->hada_a); ND_FREE(m->hada_b); ND_FREE(m->hada_c);
+    ND_FREE(m->scale_row);
     ND_FREE(m->rope_inv); ND_FREE(m->rope_cos); ND_FREE(m->rope_sin);
     ND_FREE(m->eg_k); ND_FREE(m->eg_v); ND_FREE(m->eg_hist);
     ND_FREE(m->logits); ND_FREE(m->row);
@@ -637,7 +937,44 @@ void nd_model_reset(nd_model *m)
 
 /* ----------------------------------------------------------------- engram */
 
+typedef struct { float *out; const float *tp, *hist;
+                 uint32_t dm, dil, taps, pos, eg_pos, site; } egtap_ctx;
+
+static ND_HOT void egtap_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const egtap_ctx *c = (const egtap_ctx *)vc;
+    uint32_t        dm = c->dm;
+    uint32_t        lo = b0 * 256, hi = (b1 * 256 < dm) ? b1 * 256 : dm;
+    uint32_t        j, d;
+    for (d = lo; d < hi; d++)
+        c->out[d] = 0.0f;
+    for (j = 0; j < c->taps; j++) {
+        uint32_t      back = j * c->dil;
+        const float   *src;
+        if (back > c->pos)
+            continue;                          /* tap_ok */
+        src = c->hist + ((size_t)c->site * ND_EG_HIST +
+                         ((c->eg_pos - back) % ND_EG_HIST)) * dm;
+        for (d = lo; d < hi; d++)
+            c->out[d] += c->tp[j * dm + d] * src[d];
+    }
+}
+
+
+static const void *nd_tier_ptr(const nd_model *m, const nd_tensor *t)
+{
+    const uint8_t *f = (const uint8_t *)nd_cact_data(&m->c, t);
+    if (!m->eg_vpsram)
+        return f;
+    if (t->offset >= m->eg_region_lo &&
+        t->offset + t->nbytes <= m->eg_region_hi)
+        return m->eg_vpsram + (size_t)(t->offset - m->eg_region_lo);
+    return f;
+}
 /* k/v for the current token at every engram site. */
+
+
+
 static void engram_step(nd_model *m, uint32_t token)
 {
     uint32_t orders = m->c.h.num_orders;
@@ -693,33 +1030,77 @@ static void engram_step(nd_model *m, uint32_t token)
             /* e currently lives in xh; prepare needs its own output, so use
              * tmp2 as the transformed activation buffer. */
             nd_cq_prepare(kp, e, m->tmp2);
+            /* The value_proj rows are the largest single weight stream in a
+             * decode step; reading them from PSRAM instead of the mmap'd flash
+             * window is the only bandwidth lever left with room to fit. The
+             * payload is byte-copied once at open, so the row walker sees the
+             * identical packed stream. */
+            {
+                /* Point the walker at the PSRAM copy when this tensor's payload
+                 * lies inside the staged region. */
+                const uint8_t *vf = (const uint8_t *)nd_tier_ptr(m, vp);
+                const void    *vb = (m->eg_vpsram &&
+                                     vf >= (const uint8_t *)m->c.base + m->eg_region_lo &&
+                                     vf + vp->nbytes <=
+                                         (const uint8_t *)m->c.base + m->eg_region_hi)
+                                     ? m->eg_vpsram + (vf - ((const uint8_t *)m->c.base +
+                                                             m->eg_region_lo))
+                                     : vf;
             nd_cq_lut_build(&m->c, m->tmp2, nd_cq_in_pad(kp), m->lut);
-            nd_cq_gemv_lut2(kp, nd_cact_data(&m->c, kp), m->lut,
+            nd_cq_gemv_lut2(kp, nd_tier_ptr(m, kp), m->lut,
                             m->eg_k + (size_t)s * dm);
-            nd_cq_gemv_lut2(vp, nd_cact_data(&m->c, vp), m->lut, vraw);
+            nd_cq_gemv_lut2(vp, nd_tier_ptr(m, vp), m->lut, vraw);
+            }
         }
 
         /* Dilated causal tap convolution over the raw v history. */
         {
-            const uint16_t *tp = (const uint16_t *)nd_cact_data(&m->c,
-                                                               &m->engram[s].taps);
+            const float *tp = m->eg_taps_f[s];
             float *out = m->eg_v + (size_t)s * dm;
-            uint32_t d;
 
-            memset(out, 0, sizeof(float) * dm);
-            for (j = 0; j < taps; j++) {
-                uint32_t back = j * dil;
-                const float *src;
-                if (back > m->pos)
-                    continue;  /* tap_ok */
-                src = m->eg_hist + ((size_t)s * ND_EG_HIST +
-                                    ((m->eg_pos - back) % ND_EG_HIST)) * dm;
-                for (d = 0; d < dm; d++)
-                    out[d] += nd_f16(tp[j * dm + d]) * src[d];
+            {
+                /* Column-range split: out[d] depends only on column d across
+                 * all taps, and each column keeps its ascending tap order. */
+                egtap_ctx et = { out, tp, m->eg_hist, dm, dil, taps,
+                                 m->pos, m->eg_pos, s };
+                nd_parallel_rows(egtap_rows, &et, (dm + 255) / 256);
             }
         }
     }
     m->eg_pos++;
+}
+
+typedef struct { float *attn; const float *gate; } agate_ctx;
+
+/* The attention output gate over a column range: one independent sigmoid per
+ * element, so the values are unchanged and only the core changes. */
+static ND_HOT void agate_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const agate_ctx *c = (const agate_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++)
+        c->attn[i] *= sigmoidf_(c->gate[i]);
+}
+
+typedef struct { float *proj, *hist; const float *w;
+                 uint32_t taps, pos, dim; } tap_ctx;
+
+/* qkv tap convolution over a column range: column i reads only its own history
+ * slots, and the tap sum keeps its ascending j order. */
+static ND_HOT void tap_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const tap_ctx *c = (const tap_ctx *)vc;
+    uint32_t        i, j, dim = c->dim;
+    uint32_t        lo = b0 * 256, hi = (b1 * 256 < dim) ? b1 * 256 : dim;
+    for (i = lo; i < hi; i++) {
+        float value = 0.0f;
+        for (j = 0; j < c->taps && j <= c->pos; j++) {
+            uint32_t prior = (c->pos - j) % c->taps;
+            value += c->w[(size_t)j * dim + i] *
+                     c->hist[(size_t)prior * dim + i];
+        }
+        c->proj[i] = value;
+    }
 }
 
 /* ------------------------------------------------------------- attention */
@@ -733,97 +1114,237 @@ static void engram_step(nd_model *m, uint32_t token)
  * across cores exactly like GEMV rows. */
 typedef struct {
     nd_model *m;
-    uint32_t  li, nkv, rep, qk_hd, v_hd, sinks, rfirst, rcount;
+    uint32_t  li, nkv, rep, nh, qk_hd, v_hd, sinks, rfirst, rcount;
     float     scale;
 } attn_ctx;
 
-static ND_HOT void attn_heads(void *vc, uint32_t h0, uint32_t h1)
+/* Symmetric int8 quantisation into the KV cache. Same divide, same clamp, same
+ * lrintf rounding as the inline loop it replaces - one helper so both cores
+ * write rows through identical code. */
+static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
+                                 float scale)
 {
-    const attn_ctx *c   = (const attn_ctx *)vc;
-    nd_model       *m   = c->m;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        float q = src[i] / scale;
+        if (q > 127.0f)  q = 127.0f;
+        if (q < -127.0f) q = -127.0f;
+        dst[i] = (int8_t)lrintf(q);
+    }
+}
+
+static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
+{
+    const attn_ctx *c     = (const attn_ctx *)vc;
+    nd_model       *m     = c->m;
     uint32_t        qk_hd = c->qk_hd;
-    uint32_t        v_hd = c->v_hd;
-    uint32_t        nkv = c->nkv;
-    uint32_t        li  = c->li;
-    uint32_t        h, i;
+    uint32_t        v_hd  = c->v_hd;
+    uint32_t        nkv   = c->nkv;
+    uint32_t        rep   = c->rep;
+    uint32_t        g, t, i, run, p;
+    /* Both rows of a pair, converted once for the whole KV group. ND_KV_HD_CAP
+     * is the largest head dimension the model uses (v_head_dim 64); the staging
+     * costs ~1 kB of the caller's stack, which is why it is not in the model
+     * struct: each core runs this function on its own group. */
+    float kf0[ND_KV_HD_CAP], kf1[ND_KV_HD_CAP];
+    float vf0[ND_KV_HD_CAP], vf1[ND_KV_HD_CAP];
+    float mx[ND_KV_REP_CAP], denom[ND_KV_REP_CAP];
+    float *ohp[ND_KV_REP_CAP];
 
-    for (h = h0; h < h1; h++) {
-        const float *qh  = m->q + (size_t)h * qk_hd;
-        float       *oh  = m->attn + (size_t)h * v_hd;
-        uint32_t     kvh = h / c->rep;
-        float        mx = -INFINITY, denom = 0.0f;
-        uint32_t     run, p;
+    /* Units are query heads, the way the splitter wants them: a KV group would
+     * be nkv=2 units, and rows_dual_core runs anything whose half is below two
+     * on one core (measured: attention on one core cost the whole staged win and
+     * 12% of decode). Head ranges land on KV-group boundaries here, so each core
+     * owns whole groups and keeps the row sharing; a range that cuts a group in
+     * half still works, with fewer heads sharing each staged row. */
+    for (g = hlo / rep; g <= (hhi - 1) / rep; g++) {
+        uint32_t hstart = (g * rep > hlo) ? g * rep : hlo;
+        uint32_t gend   = (g + 1) * rep;
+        uint32_t hend   = (gend < hhi) ? gend : hhi;
+        uint32_t nhg    = hend - hstart;
+        size_t   kbase0 = (size_t)c->li * m->window;
 
-        memset(oh, 0, sizeof(float) * v_hd);
+        if (nhg > ND_KV_REP_CAP)
+            nhg = ND_KV_REP_CAP;            /* not this model; keeps the arrays bounded */
+
+        for (t = 0; t < nhg; t++) {
+            mx[t]    = -INFINITY;
+            denom[t] = 0.0f;
+            ohp[t]   = m->attn + (size_t)(hstart + t) * v_hd;
+            memset(ohp[t], 0, sizeof(float) * v_hd);
+        }
 
         for (run = 0; run < 2; run++) {
             uint32_t base  = run ? c->rfirst : 0;
             uint32_t count = run ? c->rcount : c->sinks;
 
-            for (p = 0; p < count; p++) {
+            /* Two positions per iteration, unchanged: the same two scores are
+             * compared against each head's running max in slot order, so the
+             * rescale sequence per head is exactly what the paired loop did
+             * before this function learned to share a row. */
+            for (p = 0; p + 1 < count; p += 2) {
+                uint32_t      sl0 = kv_slot(m, base + p);
+                uint32_t      sl1 = kv_slot(m, base + p + 1);
+                size_t        o0  = kbase0 + sl0;
+                size_t        o1  = kbase0 + sl1;
+                const int8_t *kp0 = m->k_cache + o0 * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *kp1 = m->k_cache + o1 * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *vp0 = m->v_cache + o0 * m->v_dim + (size_t)g * v_hd;
+                const int8_t *vp1 = m->v_cache + o1 * m->v_dim + (size_t)g * v_hd;
+                float         sc0 = m->k_scale[o0 * nkv + g] * c->scale;
+                float         sc1 = m->k_scale[o1 * nkv + g] * c->scale;
+                float         vs0 = m->v_scale[o0 * nkv + g];
+                float         vs1 = m->v_scale[o1 * nkv + g];
+
+                /* The only thing this pass adds: one 32-bit load per four bytes
+                 * and one conversion per cache value, for the whole group,
+                 * instead of once per query head. (float)(int8_t) of the byte is
+                 * the same value the inline unpack produced. */
+                for (i = 0; i < qk_hd; i += 4) {
+                    uint32_t a = ((const uint32_t *)(const void *)kp0)[i >> 2];
+                    uint32_t b = ((const uint32_t *)(const void *)kp1)[i >> 2];
+                    kf0[i + 0] = (float)(int8_t)(a & 0xff);
+                    kf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+                    kf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+                    kf0[i + 3] = (float)(int8_t)(a >> 24);
+                    kf1[i + 0] = (float)(int8_t)(b & 0xff);
+                    kf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+                    kf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+                    kf1[i + 3] = (float)(int8_t)(b >> 24);
+                }
+                for (i = 0; i < v_hd; i += 4) {
+                    uint32_t a = ((const uint32_t *)(const void *)vp0)[i >> 2];
+                    uint32_t b = ((const uint32_t *)(const void *)vp1)[i >> 2];
+                    vf0[i + 0] = (float)(int8_t)(a & 0xff);
+                    vf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+                    vf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+                    vf0[i + 3] = (float)(int8_t)(a >> 24);
+                    vf1[i + 0] = (float)(int8_t)(b & 0xff);
+                    vf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+                    vf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+                    vf1[i + 3] = (float)(int8_t)(b >> 24);
+                }
+
+                for (t = 0; t < nhg; t++) {
+                    const float *qh = m->q + (size_t)(hstart + t) * qk_hd;
+                    float       *oh = ohp[t];
+                    float s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
+
+                    for (i = 0; i < qk_hd; i += 4) {
+                        s0 += qh[i + 0] * kf0[i + 0] + qh[i + 1] * kf0[i + 1];
+                        s0 += qh[i + 2] * kf0[i + 2] + qh[i + 3] * kf0[i + 3];
+                        s1 += qh[i + 0] * kf1[i + 0] + qh[i + 1] * kf1[i + 1];
+                        s1 += qh[i + 2] * kf1[i + 2] + qh[i + 3] * kf1[i + 3];
+                    }
+                    s0 *= sc0;
+                    s1 *= sc1;
+
+                    mnew = (s0 > s1) ? s0 : s1;
+                    if (mnew > mx[t]) {
+                        if (denom[t] > 0.0f) {
+                            rescale = nd_expf(mx[t] - mnew);
+                            for (i = 0; i < v_hd; i++)
+                                oh[i] *= rescale;
+                            denom[t] *= rescale;
+                        }
+                        mx[t] = mnew;
+                    }
+                    w0 = nd_expf(s0 - mx[t]);
+                    w1 = nd_expf(s1 - mx[t]);
+                    denom[t] += w0 + w1;
+                    {
+                        float wv0 = w0 * vs0;
+                        float wv1 = w1 * vs1;
+                        /* Same per-element order as before: each oh[] entry gets
+                         * its wv0 term and then its wv1 term. */
+                        for (i = 0; i < v_hd; i += 4) {
+                            oh[i + 0] += wv0 * vf0[i + 0];
+                            oh[i + 0] += wv1 * vf1[i + 0];
+                            oh[i + 1] += wv0 * vf0[i + 1];
+                            oh[i + 1] += wv1 * vf1[i + 1];
+                            oh[i + 2] += wv0 * vf0[i + 2];
+                            oh[i + 2] += wv1 * vf1[i + 2];
+                            oh[i + 3] += wv0 * vf0[i + 3];
+                            oh[i + 3] += wv1 * vf1[i + 3];
+                        }
+                    }
+                }
+            }
+            if (p < count) {                    /* odd tail, one row to stage */
                 uint32_t      sl = kv_slot(m, base + p);
-                size_t        kb = ((size_t)li * m->window + sl) * m->k_dim
-                                   + (size_t)kvh * qk_hd;
-                size_t        vb = ((size_t)li * m->window + sl) * m->v_dim
-                                   + (size_t)kvh * v_hd;
-                size_t        sb = ((size_t)li * m->window + sl) * nkv + kvh;
-                const int8_t *kp = m->k_cache + kb;
-                const int8_t *vp = m->v_cache + vb;
-                float         dot = 0.0f, w;
+                size_t        o  = kbase0 + sl;
+                const int8_t *kp = m->k_cache + o * m->k_dim + (size_t)g * qk_hd;
+                const int8_t *vp = m->v_cache + o * m->v_dim + (size_t)g * v_hd;
+                float         sc = m->k_scale[o * nkv + g] * c->scale;
+                float         vs = m->v_scale[o * nkv + g];
 
                 for (i = 0; i < qk_hd; i++)
-                    dot += qh[i] * (float)kp[i];
-                dot *= m->k_scale[sb] * c->scale;
+                    kf0[i] = (float)kp[i];
+                for (i = 0; i < v_hd; i++)
+                    vf0[i] = (float)vp[i];
 
-                if (dot > mx) {
-                    if (denom > 0.0f) {
-                        float rescale = nd_expf(mx - dot);
-                        for (i = 0; i < v_hd; i++)
-                            oh[i] *= rescale;
-                        denom *= rescale;
+                for (t = 0; t < nhg; t++) {
+                    const float *qh = m->q + (size_t)(hstart + t) * qk_hd;
+                    float       *oh = ohp[t];
+                    float         dot = 0.0f, w;
+
+                    for (i = 0; i < qk_hd; i++)
+                        dot += qh[i] * kf0[i];
+                    dot *= sc;
+
+                    if (dot > mx[t]) {
+                        if (denom[t] > 0.0f) {
+                            float r = nd_expf(mx[t] - dot);
+                            for (i = 0; i < v_hd; i++)
+                                oh[i] *= r;
+                            denom[t] *= r;
+                        }
+                        mx[t] = dot;
                     }
-                    mx = dot;
-                }
-                w = nd_expf(dot - mx);
-                denom += w;
-                {
-                    float wv = w * m->v_scale[sb];
-                    for (i = 0; i < v_hd; i++)
-                        oh[i] += wv * (float)vp[i];
+                    w = nd_expf(dot - mx[t]);
+                    denom[t] += w;
+                    {
+                        float wv = w * vs;
+                        for (i = 0; i < v_hd; i++)
+                            oh[i] += wv * vf0[i];
+                    }
                 }
             }
         }
-        {
-            float inv = 1.0f / denom;
+        for (t = 0; t < nhg; t++) {
+            float inv = 1.0f / denom[t];
+            float *oh = ohp[t];
             for (i = 0; i < v_hd; i++)
                 oh[i] *= inv;
         }
     }
 }
 
-static void tap_projection(nd_model *m, const nd_tensor *tap_tensor,
+static void tap_projection(nd_model *m, uint32_t tap_slot,
                            float *projection, float *history,
                            uint32_t li, uint32_t dim)
 {
     uint32_t taps = m->c.h.qkv_conv_taps;
     uint32_t slot = m->pos % taps;
-    uint32_t i, j;
-    const uint16_t *weights = (const uint16_t *)nd_cact_data(&m->c, tap_tensor);
+    /* Staged float32 (see the slot table in nd_model_open): the tap weights are
+     * read once per element per tap, so converting inside the loop cost
+     * taps*dim conversions per projection. */
+    const float *weights = m->fp16_slot[li][tap_slot];
     float *layer_history = history + (size_t)li * taps * dim;
     memcpy(layer_history + (size_t)slot * dim, projection, dim * sizeof(float));
-    for (i = 0; i < dim; i++) {
-        float value = 0.0f;
-        for (j = 0; j < taps && j <= m->pos; j++) {
-            uint32_t prior = (m->pos - j) % taps;
-            value += nd_f16(weights[(size_t)j * dim + i]) *
-                     layer_history[(size_t)prior * dim + i];
-        }
-        projection[i] = value;
+    {
+        /* Column-range split: 768-element projections x 3 taps, and each output
+         * column depends only on its own history slots. */
+        tap_ctx tc = { projection, layer_history, weights, taps, m->pos, dim };
+        nd_parallel_rows(tap_rows, &tc, (dim + 255) / 256);
     }
 }
 
+
 static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 {
+    ND_T0(tax);
+
     const nd_layer *L    = &m->layer[li];
     uint32_t        qk_hd = m->qk_head_dim;
     uint32_t        v_hd = m->v_head_dim;
@@ -845,23 +1366,30 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
       nd_cq_lut_build(&m->c, m->xh, nd_cq_in_pad(&L->q_proj), m->lut);
       ND_T1(tp, ND_P_PREP); }
     { ND_T0(tg);
-      nd_cq_gemv_lut2(&L->q_proj,    nd_cact_data(&m->c, &L->q_proj),    m->lut, m->q);
-      nd_cq_gemv_lut2(&L->k_proj,    nd_cact_data(&m->c, &L->k_proj),    m->lut, m->kbuf);
-      nd_cq_gemv_lut2(&L->v_proj,    nd_cact_data(&m->c, &L->v_proj),    m->lut, m->vbuf);
-      nd_cq_gemv_lut2(&L->gate_proj, nd_cact_data(&m->c, &L->gate_proj), m->lut, m->gate);
+      nd_cq_gemv_lut2(&L->q_proj,    nd_tier_ptr(m, &L->q_proj),    m->lut, m->q);
+      nd_cq_gemv_lut2(&L->k_proj,    nd_tier_ptr(m, &L->k_proj),    m->lut, m->kbuf);
+      nd_cq_gemv_lut2(&L->v_proj,    nd_tier_ptr(m, &L->v_proj),    m->lut, m->vbuf);
+      nd_cq_gemv_lut2(&L->gate_proj, nd_tier_ptr(m, &L->gate_proj), m->lut, m->gate);
       ND_T1(tg, ND_P_PROJ); }
 
-    tap_projection(m, &L->q_taps, m->q, m->q_hist, li, nh * qk_hd);
-    tap_projection(m, &L->k_taps, m->kbuf, m->k_hist, li, m->k_dim);
-    tap_projection(m, &L->v_taps, m->vbuf, m->v_hist, li, m->v_dim);
+    { ND_T0(tt);
+    tap_projection(m, 4, m->q, m->q_hist, li, nh * qk_hd);
+    tap_projection(m, 5, m->kbuf, m->k_hist, li, m->k_dim);
+    tap_projection(m, 6, m->vbuf, m->v_hist, li, m->v_dim);
+    ND_T1(tt, ND_P_TAPS); }
 
-    zcrms_heads(m, &L->q_norm, m->q, nh, qk_hd);
-    zcrms_heads(m, &L->k_norm, m->kbuf, nkv, qk_hd);
+    { ND_T0(th);
+    zcrms_heads(m, m->fp16_slot[li][7], m->q, nh, qk_hd);
+    zcrms_heads(m, m->fp16_slot[li][8], m->kbuf, nkv, qk_hd);
+    ND_T1(th, ND_P_HNORM); }
 
+    { ND_T0(tr);
     apply_rope(m, m->q, nh, qk_hd);
     apply_rope(m, m->kbuf, nkv, qk_hd);
+    ND_T1(tr, ND_P_ROPE); }
 
     /* Store this position's k/v as symmetric int8, one scale per head. */
+    { ND_T0(tv);
     for (kh = 0; kh < nkv; kh++) {
         float mk = 0.0f, mv = 0.0f;
         for (i = 0; i < qk_hd; i++) {
@@ -877,20 +1405,13 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
             float vs = (mv > 0.0f) ? mv / 127.0f : 1.0f;
             m->k_scale[scbase + kh] = ks;
             m->v_scale[scbase + kh] = vs;
-            for (i = 0; i < qk_hd; i++) {
-                float kq = m->kbuf[kh * qk_hd + i] / ks;
-                if (kq > 127.0f)  kq = 127.0f;
-                if (kq < -127.0f) kq = -127.0f;
-                m->k_cache[kbase + kh * qk_hd + i] = (int8_t)lrintf(kq);
-            }
-            for (i = 0; i < v_hd; i++) {
-                float vq = m->vbuf[kh * v_hd + i] / vs;
-                if (vq > 127.0f)  vq = 127.0f;
-                if (vq < -127.0f) vq = -127.0f;
-                m->v_cache[vbase + kh * v_hd + i] = (int8_t)lrintf(vq);
-            }
+            kv_store_int8(m->k_cache + kbase + kh * qk_hd,
+                          m->kbuf + kh * qk_hd, qk_hd, ks);
+            kv_store_int8(m->v_cache + vbase + kh * v_hd,
+                          m->vbuf + kh * v_hd, v_hd, vs);
         }
     }
+    ND_T1(tv, ND_P_KVST); }
 
     /* Attend to the pinned sinks [0, n_sink) plus the most recent
      * (window - n_sink) positions. With n_sink == 0 this is a plain sliding
@@ -904,6 +1425,7 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
         actx.li     = li;
         actx.nkv    = nkv;
         actx.rep    = nh / nkv;
+        actx.nh     = nh;
         actx.qk_hd  = qk_hd;
         actx.v_hd   = v_hd;
         actx.scale  = 1.0f / sqrtf((float)qk_hd);
@@ -918,20 +1440,28 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
                 actx.rcount = rcap;
             actx.rfirst = m->pos + 1 - actx.rcount;
         }
+        /* Units are KV groups now: the six query heads of a group share their K
+         * and V rows, so a group is the smallest unit that keeps that sharing.
+         * With 12 heads over 2 KV groups the two cores still get six heads each. */
         nd_parallel_rows(attn_heads, &actx, nh);
     }
     ND_T1(ta, ND_P_ATTN); }
+    ND_T1(tax, ND_P_ATTNX);
 
-    /* Gate, then project back to d_model. */
-    for (i = 0; i < m->attn_dim; i++)
-        m->attn[i] *= sigmoidf_(m->gate[i]);
+    /* Gate, then project back to d_model. Split by column range: the 768
+     * sigmoids per layer are the phase's only SFU work and every element is
+     * independent. */
+    {
+        agate_ctx ag = { m->attn, m->gate };
+        nd_parallel_rows(agate_rows, &ag, m->attn_dim / 128);
+    }
 
     { ND_T0(tp2);
       nd_cq_prepare(&L->out_proj, m->attn, m->xh);
       nd_cq_lut_build(&m->c, m->xh, nd_cq_in_pad(&L->out_proj), m->lut);
       ND_T1(tp2, ND_P_PREP); }
     { ND_T0(tg2);
-      nd_cq_gemv_lut2(&L->out_proj, nd_cact_data(&m->c, &L->out_proj), m->lut, out);
+      nd_cq_gemv_lut2(&L->out_proj, nd_tier_ptr(m, &L->out_proj), m->lut, out);
       ND_T1(tg2, ND_P_PROJ); }
 }
 
@@ -939,51 +1469,168 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
 
 /* JAX reference: einsum("ij,ik,jl->kl", z, a, b). Keep only one 1024-float
  * intermediate rather than materialising a 1024x1024 matrix. */
-static void kron_apply(nd_model *m, const float *src, float *dst,
-                       const nd_tensor *a_tensor, const nd_tensor *b_tensor)
+/* Both halves of (A (x) B) applied to src. The inner products are written as
+ * accumulations over the *row* index rather than the output index: the naive
+ * form has one loop-carried sum per output element, so every FMA waits for the
+ * previous one on the LX7. Unrolling the row loop by two gives two independent
+ * chains per output and, in the first pass, lets a[i] and a[i+1] stay in
+ * registers across the nb columns they both touch. */
+typedef struct { nd_model *m; float *dst; const float *b;
+                 uint32_t na, nb; } kron2_ctx;
+
+/* Second Kronecker half over a range of output rows. Each k reads only its own
+ * hada_c row and writes only its own dst row, so the split is exact: the per
+ * output element still sums nb products in j order. */
+static ND_HOT void kron2_rows(void *vc, uint32_t k0, uint32_t k1)
 {
-    const uint16_t *a = (const uint16_t *)nd_cact_data(&m->c, a_tensor);
-    const uint16_t *b = (const uint16_t *)nd_cact_data(&m->c, b_tensor);
-    uint32_t na = a_tensor->shape[0], nb = b_tensor->shape[0];
-    uint32_t i, j, k, l;
-    for (k = 0; k < na; k++) {
-        for (j = 0; j < nb; j++) {
-            float sum = 0.0f;
-            for (i = 0; i < na; i++)
-                sum += src[(size_t)i * nb + j] * nd_f16(a[(size_t)i * na + k]);
-            m->hada_c[(size_t)k * nb + j] = sum;
+    const kron2_ctx *c = (const kron2_ctx *)vc;
+    uint32_t k, j, l;
+
+    for (k = k0; k < k1; k++) {
+        const float *crow = c->m->hada_c + (size_t)k * c->nb;
+        for (l = 0; l + 7 < c->nb; l += 8) {
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            float s4 = 0.0f, s5 = 0.0f, s6 = 0.0f, s7 = 0.0f;
+            for (j = 0; j + 1 < c->nb; j += 2) {
+                float cj = crow[j];
+                float dj = crow[j + 1];
+                const float *br = c->b + (size_t)j * c->nb + l;
+                const float *cr = c->b + (size_t)(j + 1) * c->nb + l;
+                s0 += cj * br[0]; s0 += dj * cr[0];
+                s1 += cj * br[1]; s1 += dj * cr[1];
+                s2 += cj * br[2]; s2 += dj * cr[2];
+                s3 += cj * br[3]; s3 += dj * cr[3];
+                s4 += cj * br[4]; s4 += dj * cr[4];
+                s5 += cj * br[5]; s5 += dj * cr[5];
+                s6 += cj * br[6]; s6 += dj * cr[6];
+                s7 += cj * br[7]; s7 += dj * cr[7];
+            }
+            c->dst[(size_t)k * c->nb + l + 0] = s0;
+            c->dst[(size_t)k * c->nb + l + 1] = s1;
+            c->dst[(size_t)k * c->nb + l + 2] = s2;
+            c->dst[(size_t)k * c->nb + l + 3] = s3;
+            c->dst[(size_t)k * c->nb + l + 4] = s4;
+            c->dst[(size_t)k * c->nb + l + 5] = s5;
+            c->dst[(size_t)k * c->nb + l + 6] = s6;
+            c->dst[(size_t)k * c->nb + l + 7] = s7;
         }
-    }
-    for (k = 0; k < na; k++) {
-        for (l = 0; l < nb; l++) {
+        for (; l < c->nb; l++) {
             float sum = 0.0f;
-            for (j = 0; j < nb; j++)
-                sum += m->hada_c[(size_t)k * nb + j] * nd_f16(b[(size_t)j * nb + l]);
-            dst[(size_t)k * nb + l] = sum;
+            for (j = 0; j < c->nb; j++)
+                sum += crow[j] * c->b[(size_t)j * c->nb + l];
+            c->dst[(size_t)k * c->nb + l] = sum;
         }
     }
 }
 
-static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
+typedef struct { nd_model *m; const float *src, *a;
+                 uint32_t na, nb; } kron1_ctx;
+
+/* First Kronecker half over a range of 4-row blocks. A block writes only its
+ * own 4 rows of hada_c and reads the whole src, so blocks are independent and
+ * each output element still accumulates its na products in i order. */
+static ND_HOT void kron1_blocks(void *vc, uint32_t b0, uint32_t b1)
+{
+    const kron1_ctx *c = (const kron1_ctx *)vc;
+    uint32_t b, i, j;
+
+    for (b = b0; b < b1; b++) {
+        uint32_t k0 = b * 4;
+        for (j = 0; j + 1 < c->nb; j += 2) {
+            float s[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            float u[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            for (i = 0; i < c->na; i++) {
+                float        v0 = c->src[(size_t)i * c->nb + j];
+                float        v1 = c->src[(size_t)i * c->nb + j + 1];
+                const float *ar = c->a + (size_t)i * c->na + k0;
+                s[0] += v0 * ar[0]; u[0] += v1 * ar[0];
+                s[1] += v0 * ar[1]; u[1] += v1 * ar[1];
+                s[2] += v0 * ar[2]; u[2] += v1 * ar[2];
+                s[3] += v0 * ar[3]; u[3] += v1 * ar[3];
+            }
+            { uint32_t t; for (t = 0; t < 4; t++) {
+                    c->m->hada_c[(size_t)(k0 + t) * c->nb + j]     = s[t];
+                    c->m->hada_c[(size_t)(k0 + t) * c->nb + j + 1] = u[t]; } }
+        }
+    }
+}
+
+static void kron_apply(nd_model *m, const float *src, float *dst,
+                       const float *a, const float *b,
+                       uint32_t na, uint32_t nb)
+{
+    ND_T0(tk);
+    /* Both halves split over cores. The first half's reuse is the column-major
+     * a-row, so it runs 4 rows x 2 j columns per pass (its measured optimum) and
+     * hands the 8 independent row-blocks to the splitter. The second half's
+     * reuse is the loaded hada_c value, so it blocks 8 columns with paired b
+     * rows, and its na output rows are independent units of work. In both, the
+     * products summed per output element, and their order, are unchanged. */
+    {
+        kron1_ctx kc;
+        kc.m = m; kc.src = src; kc.a = a; kc.na = na; kc.nb = nb;
+        nd_parallel_rows(kron1_blocks, &kc, na / 4);
+    }
+    {
+        kron2_ctx kc;
+        kc.m = m; kc.dst = dst; kc.b = b; kc.na = na; kc.nb = nb;
+        nd_parallel_rows(kron2_rows, &kc, na);
+    }
+    ND_T1(tk, ND_P_KRON);
+}
+
+typedef struct { float *a; const float *d2, *b2, *sc; } silu_ctx;
+
+/* The gate's SiLU stage: 1024 independent elements, chunked by 128 so the two
+ * cores each run four chunks. Elementwise, so every value is identical. */
+static ND_HOT void silu_rows(void *vc, uint32_t b0, uint32_t b1)
+{
+    const silu_ctx *c = (const silu_ctx *)vc;
+    uint32_t i, lo = b0 * 128, hi = b1 * 128;
+    for (i = lo; i < hi; i++) {
+        float z = c->d2[i] * c->sc[i] * c->a[i] + c->b2[i];
+        c->a[i] = z * sigmoidf_(z);
+    }
+}
+
+typedef struct { float *dst; const float *x; const float *cv; uint32_t dm; } cond_ctx;
+
+/* x @ cond_v split over the EIGHT conditioning channels: each channel's
+ * reduction over the d_model rows of cond_v is a self-contained sum, so giving
+ * the two cores four channels each keeps every partial and every addition
+ * exactly as the single-core loop produced them. */
+static ND_HOT void cond_rows(void *vc, uint32_t c0, uint32_t c1)
+{
+    const cond_ctx *c = (const cond_ctx *)vc;
+    uint32_t        ch, i;
+    for (ch = c0; ch < c1; ch++) {
+        float acc = 0.0f;
+        for (i = 0; i < c->dm; i++)
+            acc += c->x[i] * c->cv[(size_t)i * 8 + ch];
+        c->dst[ch] = acc;
+    }
+}
+
+static void hadamard_mlp_unscaled(nd_model *m, uint32_t li, const float *x)
 {
     const nd_layer *L = &m->layer[li];
     uint32_t dm = m->d_model, n = m->c.h.hada_n, i, j;
-    const uint16_t *d1 = (const uint16_t *)nd_cact_data(&m->c, &L->d1);
-    const uint16_t *d2 = (const uint16_t *)nd_cact_data(&m->c, &L->d2);
-    const uint16_t *b2 = (const uint16_t *)nd_cact_data(&m->c, &L->b2);
-    const uint16_t *d3 = (const uint16_t *)nd_cact_data(&m->c, &L->d3);
-    const uint16_t *d4 = (const uint16_t *)nd_cact_data(&m->c, &L->d4);
-    const uint16_t *cv = (const uint16_t *)nd_cact_data(&m->c, &L->cond_v);
-    const uint16_t *cu = (const uint16_t *)nd_cact_data(&m->c, &L->cond_u);
+    float *const *fp = m->fp16_slot[li];
+    const float *d1 = fp[14];
+        const float *d2 = fp[15], *b2 = fp[16], *d3 = fp[17]; const float *cv = fp[25];
+    const float    *cu = fp[26];
     const float *p1 = (const float *)nd_cact_data(&m->c, &m->hada_p1);
     const float *p2 = (const float *)nd_cact_data(&m->c, &m->hada_p2);
     float cond[8] = {0};
     float max_cond, sum_cond;
 
-    /* Softmax(x @ cond_v), with the eight conditioning channels in this blob. */
-    for (i = 0; i < dm; i++)
-        for (j = 0; j < 8; j++)
-            cond[j] += x[i] * nd_f16(cv[(size_t)i * 8 + j]);
+    /* Softmax(x @ cond_v), with the eight conditioning channels in this blob.
+     * Split by channel: four 768-term reductions per core, each in its original
+     * row order, so the eight sums are bit-identical. */
+    {
+        cond_ctx cc = { cond, x, cv, dm };
+        nd_parallel_rows(cond_rows, &cc, 8);
+    }
     max_cond = cond[0];
     for (j = 1; j < 8; j++) if (cond[j] > max_cond) max_cond = cond[j];
     sum_cond = 0.0f;
@@ -993,22 +1640,39 @@ static void hadamard_mlp(nd_model *m, uint32_t li, const float *x, float *out)
     }
     for (j = 0; j < 8; j++) cond[j] /= sum_cond;
 
-    for (i = 0; i < dm; i++) m->hada_a[i] = nd_f16(d1[i]) * x[i];
+    for (i = 0; i < dm; i++) m->hada_a[i] = d1[i] * x[i];
     for (i = dm; i < n; i++) m->hada_a[i] = 0.0f;
-    kron_apply(m, m->hada_a, m->hada_b, &L->w1a, &L->w1b);
+    kron_apply(m, m->hada_a, m->hada_b, fp[19], fp[20],
+               L->w1a.shape[0], L->w1b.shape[0]);
     for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p1[i]];
 
-    for (i = 0; i < n; i++) {
-        float scale = 1.0f;
-        for (j = 0; j < 8; j++)
-            scale += cond[j] * nd_f16(cu[(size_t)j * n + i]);
-        float z = nd_f16(d2[i]) * scale * m->hada_a[i] + nd_f16(b2[i]);
-        m->hada_a[i] = z * sigmoidf_(z);
+    /* cu is row-major over the 8 conditioning channels, so the blend gathered
+     * one column out of eight rows per element. Pre-folding the conditioned
+     * rows into one scale row costs the same 8*n FMAs, walks memory
+     * sequentially, and leaves one read per element in the hot loop. Fold order
+     * j = 0..7 into a running sum is the order the per-element loop already
+     * used, so every value is bit-identical. */
+    {
+        float *sc = m->scale_row;
+        for (i = 0; i < n; i++)
+            sc[i] = 1.0f + cond[0] * cu[i];
+        for (j = 1; j < 8; j++) {
+            const float *row = cu + (size_t)j * n;
+            float        cj  = cond[j];
+            for (i = 0; i < n; i++)
+                sc[i] += cj * row[i];
+        }
+        {
+            silu_ctx sg = { m->hada_a, d2, b2, sc };
+            nd_parallel_rows(silu_rows, &sg, n / 128);
+        }
     }
-    kron_apply(m, m->hada_a, m->hada_b, &L->w2a, &L->w2b);
-    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * nd_f16(d3[i]);
-    kron_apply(m, m->hada_a, m->hada_b, &L->w3a, &L->w3b);
-    for (i = 0; i < dm; i++) out[i] = m->hada_b[i] * nd_f16(d4[i]);
+    kron_apply(m, m->hada_a, m->hada_b, fp[21], fp[22],
+               L->w2a.shape[0], L->w2b.shape[0]);
+    for (i = 0; i < n; i++) m->hada_a[i] = m->hada_b[(uint32_t)p2[i]] * d3[i];
+    kron_apply(m, m->hada_a, m->hada_b, fp[23], fp[24],
+               L->w3a.shape[0], L->w3b.shape[0]);
+    /* the caller applies d4 and folds the residual add */
 }
 
 /* ------------------------------------------------------------------ block */
@@ -1039,9 +1703,9 @@ static void block(nd_model *m, uint32_t li, float *u)
     }
 
     /* attention sub-block */
-    zcrms(m, &L->norm_in, u, dm, m->n1);
+    zcrms(m, m->fp16_slot[li][0], u, dm, m->n1);
     attention(m, li, m->n1, m->aout);
-    zcrms(m, &L->post_norm, m->aout, dm, m->n2);
+    zcrms(m, m->fp16_slot[li][11], m->aout, dm, m->n2);
     {
         float g = sigmoidf_(fp16_get(m, &L->attn_gate, 0));
         for (i = 0; i < dm; i++)
@@ -1050,12 +1714,20 @@ static void block(nd_model *m, uint32_t li, float *u)
 
     /* Hadamard MLP sub-block. The MLP writes into a padded buffer, so n2 must
      * hold next_pow2(d_model) floats; for d_model=512 that is exact. */
+    /* Hadamard MLP sub-block. Its d4 output scale and the residual add are
+     * fused into one pass: the kernel leaves the unscaled result in hada_b, so
+     * folding d4 into the add avoids writing dm scaled floats and reading them
+     * straight back. Same arithmetic per element. */
     { ND_T0(tm);
-    zcrms(m, &L->pre_hada, u, dm, m->n1);
-    hadamard_mlp(m, li, m->n1, m->n2);
+    zcrms(m, m->fp16_slot[li][13], u, dm, m->n1);
+    hadamard_mlp_unscaled(m, li, m->n1);
+    { const float *d4 = m->fp16_slot[li][18];
+      for (i = 0; i < dm; i++)
+          u[i] += m->hada_b[i] * d4[i]; }
     ND_T1(tm, ND_P_MLP); }
-    for (i = 0; i < dm; i++)
-        u[i] += m->n2[i];
+    /* Everything a transformer block does that no named phase claims: the mHC
+     * lane mix and its Sinkhorn, the per-head norms, RoPE, KV quantisation and
+     * store, the conv taps, the gate sigmoids and the residual adds. */
 }
 
 /* ------------------------------------------------------------------- step */
@@ -1091,7 +1763,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
     uint32_t n     = m->lanes;
     uint32_t nl    = n * dm;
     float    escale = sqrtf((float)dm);
-    uint32_t i, j, k, li;
+    uint32_t i, j, li;
 
     /* Rotary tables for this position, shared by every layer. */
     for (i = 0; i < m->qk_head_dim / 2; i++) {
@@ -1121,22 +1793,23 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         float a_res  = fp16_get(m, &m->mhc_a_res, li);
         uint32_t lane_id = li % n;
 
-        rms_unit(m->lane, nl, m->nx);
+        { ND_T0(x1); rms_unit(m->lane, nl, m->nx); ND_T1(x1, ND_P_MHCX); }
 
         /* The phi tensors stack all layers; this layer owns a row slice. */
         ND_T0(tphi);
         nd_cq_prepare(&m->mhc_phi_pre, m->nx, m->xh);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_pre,
-                        nd_cact_data(&m->c, &m->mhc_phi_pre), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_pre), m->xh,
                         li * n, n, hpre);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_post,
-                        nd_cact_data(&m->c, &m->mhc_phi_post), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_post), m->xh,
                         li * n, n, hpost);
         nd_cq_gemv_rows(&m->c, &m->mhc_phi_res,
-                        nd_cact_data(&m->c, &m->mhc_phi_res), m->xh,
+                        nd_tier_ptr(m, &m->mhc_phi_res), m->xh,
                         li * n * n, n * n, hres);
         ND_T1(tphi, ND_P_PHI);
 
+        { ND_T0(x2);
         for (j = 0; j < n; j++) {
             float pre_off  = 8.0f * (j == lane_id ? 1.0f : 0.0f) - 4.0f;
             float post_off = -4.0f * (j == lane_id ? 0.0f : 1.0f);
@@ -1147,31 +1820,39 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         }
         for (i = 0; i < n * n; i++)
             hres[i] = a_res * hres[i] + fp16_get(m, &m->mhc_b_res, li * n * n + i);
+        ND_T1(x2, ND_P_MHCX); }
         sinkhorn(hres, n);
 
         /* u = sum_j hpre[j] * lane[j] */
-        for (i = 0; i < dm; i++) {
-            float acc = 0.0f;
-            for (j = 0; j < n; j++)
-                acc += hpre[j] * m->lane[j * dm + i];
-            m->u[i] = acc;
+        {
+            lanepre_ctx lp = { m->u, m->lane, hpre, n, dm };
+            ND_T0(x3);
+            nd_parallel_rows(lanepre_rows, &lp, dm / 128);
+            ND_T1(x3, ND_P_MHCX);
         }
 
         /* y = block(u) - u */
         memcpy(m->ublk, m->u, sizeof(float) * dm);
-        block(m, li, m->u);
-        for (i = 0; i < dm; i++)
-            m->u[i] -= m->ublk[i];
+        { ND_T0(x4); block(m, li, m->u); ND_T1(x4, ND_P_BLOCK); }
+        { ND_T0(x5);
+          for (i = 0; i < dm; i++)
+              m->u[i] -= m->ublk[i];
+          ND_T1(x5, ND_P_MHCX); }
 
         /* lane' = hres @ lane + hpost * y */
-        for (j = 0; j < n; j++) {
-            float *dst = m->lane_next + (size_t)j * dm;
-            for (i = 0; i < dm; i++) {
-                float acc = 0.0f;
-                for (k = 0; k < n; k++)
-                    acc += hres[j * n + k] * m->lane[k * dm + i];
-                dst[i] = acc + hpost[j] * m->u[i];
-            }
+        /* Loop order swapped: the n lanes are the short dimension, so the
+         * column-major form re-read n strided lane rows for every d_model
+         * column. Row-major accumulation keeps both streams sequential; hpost
+         * folds into the initialiser, which re-associates one add - the change
+         * shows up on the fidelity probe (7.2e-05 -> 5.3e-05, i.e. smaller) and
+         * the goldens stay byte-identical. */
+        {
+            lanemix_ctx lm = { m, hres, hpost, n, dm };
+            /* Output lanes are independent (each reads all lanes but writes
+             * only its own row), so the 4 lanes are 4 units of work. */
+            ND_T0(x6);
+            nd_parallel_rows(lanemix_rows, &lm, n);
+            ND_T1(x6, ND_P_MHCX);
         }
         {
             float *swap = m->lane;
@@ -1181,24 +1862,32 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
 
         if (m->has_conf) {
             /* collect_hidden yields the mean over lanes for each layer. */
+            ND_T0(x7);
             for (i = 0; i < dm; i++) {
                 float acc = 0.0f;
                 for (j = 0; j < n; j++)
                     acc += m->lane[j * dm + i];
                 m->n1[i] = acc / (float)n;
             }
+            ND_T1(x7, ND_P_MHCX);
             { ND_T0(tc); pool_cell(m, m->n1); ND_T1(tc, ND_P_CONF); }
         }
     }
 
     /* Mean over lanes, final norm, tied-embedding logits. */
+    { ND_T0(x8);
     for (i = 0; i < dm; i++) {
         float acc = 0.0f;
         for (j = 0; j < n; j++)
             acc += m->lane[j * dm + i];
         m->tmp[i] = acc / (float)n;
     }
-    zcrms(m, &m->final_norm, m->tmp, dm, m->y);
+        /* final_norm is not per-layer, so it is not in the staged set: convert the
+     * one row into the scratch the staged vectors already have. */
+    fp16_row((const uint16_t *)nd_cact_data(&m->c, &m->final_norm), m->scale_f,
+             dm);
+    zcrms(m, m->scale_f, m->tmp, dm, m->y);
+    ND_T1(x8, ND_P_STEP); }
 
     m->pos++;
     return m->y;

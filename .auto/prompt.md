@@ -36,7 +36,7 @@ Work that is still worth spending a run on, in order:
    changes: it is the only behavioural check of routing, second-pass tool
    execution and timer expiry, which the 14-case byte-exact suite does not
    cover. Last green: run #143 tree, all 7 scenarios; due again shortly.
-2a. **`make capture` is green again (run #157)** on the 4.8817 runtime: 7 real
+2a. **`make capture` is green again (run #169, previous #157)** on the 4.8817 runtime: 7 real
    scenarios, all 9 verification flags true (routes_match, tools_match,
    requests_succeeded, no_external_calls, local_has_two_passes,
    external_stops_at_selection, telemetry_progressed,
@@ -52,6 +52,15 @@ Work that is still worth spending a run on, in order:
    a predicate on the states the real loop sees (a fresh-open grammar state made
    my estimate 3x optimistic), and the paths the boot bench cannot run - sampler,
    per-token emit - are the only territory that was still unexplored.
+2c. **The request-path phase map is now measured on the shipping tree (run #166), and it
+   closes the sampler family on data rather than arithmetic**: `sample` is 8.9 ms of the
+   ~202 ms request token and 5.7 ms of that is the subset-logits projection, so there is
+   ~3 ms of sampler arithmetic left and nothing above it is unaccounted. Reproduce with
+   `AUTO_PROFILE=1` plus a direct `tools/serial_api.py` `Device` drive - and pass
+   `think=False` or send `!think 0` first, or you will measure the 8192-row
+   full-vocabulary path instead (that trap showed `logits4` at 63 ms and looked like a
+   30 % phase).
+
 3. **Sub-1 % candidates, only if a floor is shown to be wrong**: `lsc`-pairing
    the 4-bit loop's activation loads, an asm `kron_apply`, asm around online
    softmax. Each needs a *new* measurement that contradicts the floor before it

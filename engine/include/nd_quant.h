@@ -145,7 +145,16 @@ static inline uint32_t nd_cq_lut_floats(uint32_t in_pad)
  * reads its own slice of weights and writes one output. The engine stays
  * single-threaded and portable by default; a platform can install a splitter
  * (the ESP32 build hands half the rows to the second core) and every matvec
- * picks it up. */
+ * picks it up.
+ *
+ * CONTRACT for an installed fn: it runs on two cores at once, over disjoint row
+ * ranges, with NO barrier between the halves - the caller only waits for both to
+ * finish. So fn may write its output rows and nothing else shared. Scratch
+ * belongs on the stack or in the ctx (see attn_heads' staging arrays); a static
+ * or global buffer is a data race, and one that mixes values silently will not
+ * reliably show up in byte-exact goldens, because the halves are equal-sized and
+ * usually stay in phase. The host splitter is serial, so the host build cannot
+ * catch this at all. */
 typedef void (*nd_row_fn)(void *ctx, uint32_t r0, uint32_t r1);
 extern void (*nd_parallel_rows)(nd_row_fn fn, void *ctx, uint32_t nrows);
 

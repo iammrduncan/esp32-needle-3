@@ -457,7 +457,32 @@ Not a defect, and the fixes (shorter span, fewer sinks) are frozen by the archiv
 
 **Real-request phase map, and how to read it.** The boot bench understates every
 phase by ~28 % and cannot see `sample` at all, so use the request table above for
-sizing work. Note the timers overlap: `whole block` (94 %) contains the GEMVs that
+sizing work.
+
+MEASURED on the current tree (run #166, `AUTO_PROFILE=1` + direct `serial_api`
+drive, tools case `sampling5`, think mode off - `Device()` defaults to think ON,
+which measures the 8192-row vocabulary path instead and showed `logits4` 63 ms):
+
+| phase | ms/token | share |
+|---|---|---|
+| whole block | 187.2 | 92.4 % |
+| proj2bit | 105.7 | 52.2 % |
+| attention heads | 35.5 | 17.5 % |
+| hadamard | 24.5 | 12.1 % |
+| engram | 20.1 | 9.9 % |
+| mHC phi (4-bit) | 13.5 | 6.7 % |
+| **sample (all of it)** | **8.9** | **4.4 %** |
+|  - of which `logits4` (subset projection) | 5.7 | 2.8 % |
+| sinkhorn 4.3 / mhc-mix 4.7 / prep+lut 4.2 / taps 3.3 / norms 0.5 / rope 0.2 / kv 1.1 | 18.3 | 9 % |
+
+Reproducible to two decimals across two identical requests. Two consequences: the
+subset projection is 5.7 ms, not the ~7.2 ms I inferred, so #162's folded gather
+could not have paid and the sampler family is closed on measurement; and the
+sampler's own arithmetic is ~3.2 ms, matching #149's microbench. Note `proj2bit`
+reads 86.5 on the bench and 105.7 here while `whole block` is ~188 in both: that
+is timer attribution (the engram's GEMVs land in both counters), not a speed
+effect - 105.7 ms is already ~66 % of the octal-PSRAM byte peak, so do not read
+19 ms of extra GEMV as addressable work. Note the timers overlap: `whole block` (94 %) contains the GEMVs that
 `proj2bit`, `engram` and `mhc_phi4` also count, so do not sum them; the block plus
 `sample` is the token.
 

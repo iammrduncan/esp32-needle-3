@@ -872,3 +872,30 @@ fails. Screen in **C**, not asm - Experiment 13 measured `asm volatile` costing 
 4. **Decision rule.** Integrate only if it is both faster than `tie1n` *and* passes 14/14 device +
    13/13 host byte-exact, token delta 0, fidelity, top1 10/10. Otherwise write the numbers and move
    to Experiment 15 (GDMA double buffering) - which is a memory-system test, not a schedule test.
+
+## Two rules bought by real failures (runs #230-#231)
+
+**1. Differential-test numeric primitives against the PREVIOUS implementation, verbatim.** The
+exponent-field-insertion change to `nd_expf` passed new-pair-vs-new-scalar on 4,000,000 pairs and
+also would have passed every golden case - and it was *wrong* for `x` near -87.68, disagreeing with
+the shipping kernel by ~1.7x, because `p` in [0.61,1) has unbiased exponent -1, so exactness needs
+`k >= -125`, not `-126`. Copying the old function into the test and diffing bits over a dense sweep
+(80,184,321 comparisons, clamp edges included) found it in one run. **The 14/14 + 13/13 byte-exact
+gate cannot catch a numeric bug in an input range the frozen prompts never reach**, so "goldens are
+exact" is not evidence about a math primitive. Keep `/tmp/expref.c` as the pattern (or re-derive it
+from `git show HEAD:engine/include/nd_quant.h` if it is gone).
+
+**2. Trading an FPU op for integer bit math is not free on this core, and a guard is not free
+either.** Replacing `bits -> memcpy -> FP multiply` with `memcpy -> int add -> memcpy` measured
+**-2.10 % decode** (4.8117 vs 4.9150, three boards, byte-exact), with prefill, think, extended and
+the boot bench all moving the wrong way: float<->int transfers still go through memory, so no move
+disappeared, while the correctness guard added compares and a branch to straight-line code - and in
+`nd_expf_pair` the branch also destroyed the interleaving that Experiment 12's +20 % came from. The
+exp scale construction is now measured and closed; do not try the integer-tail idea again in either
+function.
+
+**Harness:** `pkill -f needle-api` does **not** stop the API - it spawns
+`tools/serial_api.py --serial ...` as a child, which keeps `/dev/needle-pi/console` and makes the
+next `needle-board run 1` fail with "Board 1 is busy" (it cost a control slot in
+`20260921T222845.825872Z`). Kill `serial_api.py` by pid, and confirm no `serial_api` process
+remains before releasing a board after `make capture`.

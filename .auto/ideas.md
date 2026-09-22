@@ -1484,3 +1484,27 @@ not attack (it cannot move the weights). If the owner ever accepts the assertion
 run #294 and internal heap roughly doubles, the phi residency idea - not the asm - is the one to
 re-price, because this measurement says delivery is the only addressable share and residency is the
 only way to buy delivery.
+
+**Harness fact, cost three rebuilds: `NEEDLE_KBENCH=ON` does not build in this tree, in two
+independent ways.** `esp32/main/kbench.c` (the Experiment-2 bench, tracked) includes
+`esp_async_memcpy.h` and `esp_cache.h`, which are not on the main component's include path, and the
+kbench block in `esp32/main/CMakeLists.txt` tries to add them with
+`target_link_libraries(${COMPONENT_LIB} PRIVATE esp_hw_support)` - which emits a bare
+`-lesp_hw_support` and fails at link with `cannot find -lesp_hw_support`, because an IDF component
+dependency belongs in the component's `REQUIRES`, not in a link flag. So the option is broken from
+both sides: with the line, link failure; without it, header failure. Neither affects any measured
+image (the option is OFF everywhere the campaign measured, and shipping images are byte-identical
+either way), and the tree was left exactly as accepted rather than half-fixed. What worked for the
+phi bound above: write the bench so it needs neither header (no async memcpy, no explicit cache
+maintenance), delete that `target_link_libraries` line *locally in the throwaway build*, and build
+with `idf.py -B build_kb -DNEEDLE_KBENCH=ON` from a fresh directory. A real fix, if anyone wants
+the bench usable again, is to move the option above `idf_component_register` and put
+`esp_hw_support esp_mm` in `REQUIRES` conditionally - and then re-verify that a shipping
+(NEEDLE_KBENCH=OFF) image is byte-identical to the accepted one.
+
+**Two more harness facts from the same session.** (1) `pkill -f 'needle-api --serial'` matched the
+invoking shell's own command line and killed the detached `measure.sh` before it started - use a
+bracketed pattern such as `[n]eedle-api`. (2) A kbench image prints `KBENCH_DONE` within seconds of
+boot (it hooks before the model caches warm), so the harvest is: open the console with DTR asserted
+*first*, then reset with `python3 -m esptool --chip esp32s3 -p /dev/ttyACM0 run` and read for ~60 s;
+opening the port after the board has booted captures nothing.

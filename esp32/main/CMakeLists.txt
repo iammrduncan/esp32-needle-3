@@ -33,11 +33,8 @@ option(NEEDLE_KBENCH "Build the CQ2 kernel microbenchmark into the app" OFF)
 if(NEEDLE_KBENCH)
     target_sources(${COMPONENT_LIB} PRIVATE "kbench.c")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
-    # Experiment 15's GDMA bench needed the async memcpy driver and explicit
-    # cache maintenance, and declared it with target_link_libraries(esp_hw_support).
-    # That emits a bare -lesp_hw_support, which the linker cannot resolve for an
-    # IDF component ("cannot find -lesp_hw_support") - a component dependency has
-    # to go in the component's REQUIRES list, not as a link flag. Left out here
-    # because this bench touches neither esp_async_memcpy.h nor esp_cache.h; if a
-    # future bench does, add the component to REQUIRES in this file's top block.
+    # Experiment 15's GDMA double-buffer bench uses the async memcpy driver and
+    # explicit cache maintenance. Scoped to the kbench build so the shipping
+    # component's dependency list - and therefore its image - is untouched.
+    target_link_libraries(${COMPONENT_LIB} PRIVATE esp_hw_support)
 endif()

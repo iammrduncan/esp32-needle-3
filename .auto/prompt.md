@@ -43,19 +43,32 @@ unchanged at **5.0117 decode tok/s**; no board ran the shipping image this exper
 **NEXT -- Experiment 21: make the measured 120 MHz result reliability-testable** (the queue below is
 unchanged; #289 already proved the +3.51 % speed twice, do not re-measure it).
 
-- **Experiment 21 -- make the measured 120 MHz result reliability-testable.** Do not repeat the
-  already-proven +3.51 % speed test. Investigate ESP-IDF's octal-memory temperature tuning, boot-time
-  calibration and recovery support; build the safest supported 120 MHz variant; then perform memory
-  integrity plus hot/cold thermal-soak testing on two boards. Keep 80 MHz as the production default
-  unless the stability campaign passes.
-- **Experiment 22 -- handwritten 4-bit phi TIE728 kernel.** Use the real-capture fixture and a
-  differential test before board time. Preserve the exact accumulator order. Screen the isolated
-  kernel first; the measured ceiling is only about +0.2 to +0.45 % end to end, so reject quickly if
-  it cannot clear the 0.2 % bar.
-- **Experiment 23 -- race-free private 4-bit folded tables under reclaimed RAM.** Revisit run #162
-  only if Experiment 20 establishes safe extra headroom. Give each worker private scratch; no shared
-  mutable static table and no timing-luck correctness. Compare against both the shipping generic
-  path and the earlier safe-but-slow caller-built form.
+**Experiment 21 is MEASURED and CLOSED, blocked by vendor support (runs #331, board 1+2).** The
++3.51 % at octal 120 MHz cannot be made reliability-testable with IDF 5.5.2 on this board: with
+`SPIRAM_SPEED_120M` + `ESPTOOLPY_FLASHFREQ_120M` + `IDF_EXPERIMENTAL_FEATURES` plus IDF's own
+mitigation `SPIRAM_TIMING_TUNING_POINT_VIA_TEMPERATURE_SENSOR`, PSRAM comes up at 120 MHz and then
+the app aborts forever - "The flash model has not been verified support this feature", init function
+failed 0x106 (ESP_ERR_NOT_SUPPORTED), named by addr2line as
+`__esp_system_init_fn_psram_adjust_timing_point_via_temperature`
+(`mspi_timing_by_mspi_delay.c:882`). Reproduced on two boards, so there is no bootable safe-120 MHz
+image to soak. ECC does not fit either (~1.09 MB of parity; `ERR prefix_cache_allocation`), and the
+workload's own die swing is ~5 C against IDF's ~20 C failure axis, so a self-heating soak would have
+measured the wrong axis. 80 MHz stays the production default on measured grounds. Kept, default OFF
+and proven free (two 5.0117 canonical runs with it off): `esp32/main/thermal_diag.c` behind
+`NEEDLE_THERMAL_DIAG` - die temperature plus a CRC32 over a live 256 KiB PSRAM buffer every 5 s.
+
+**NEXT -- Experiment 24 (new): integrate the measured bit-exact 4-bit row kernel and price it end to
+end.** The isolated screen (run #332) says one handwritten row walker per row - no TIE instructions,
+plain `lsi` - is **bit-exact on real archive bytes and +11.6 %** (5.647 vs 6.338 cycles/weight),
+worth ~1.07 ms/token = **+0.53 % decode**, because the shipping build calls `dot_group` once per
+group instead of inlining it. Steps: gate it like `nd_lut2_asm_ok()` (g == 128, ordinary-fp16 norms,
+4-byte alignment), differential-test on the real 4-bit fixture in `.auto/exp22/`, then a three-board
+batch; watch `internal_free` (~200 B of IRAM). Full detail in `.auto/ideas.md`, "Experiment 22".
+Also open, cheaper and separate: determine the register fill order of `ee.ldf.64/128.ip` - the two
+wide-load variants measured +21 %/+25 % but fail the known-answer probe (63.0 against 64.0), so their
+speed is a dropped term, not a win; if the order is fixable there is another ~10 % above the plain
+form. Experiment 23 (race-free private 4-bit folded tables, 16 KiB) still waits on the owner's
+assertion-level decision (#293) for the RAM.
 
 For every iteration, implementation, fixture work, differential testing, disassembly, profiling,
 and off-device screening all count as research progress. The generic instruction to call

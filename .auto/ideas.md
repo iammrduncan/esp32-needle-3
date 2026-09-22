@@ -1159,3 +1159,59 @@ GEMV floor) and by `token_ok`'s byte walk over the ~50 visited ids - the enumera
 itself is no longer a lever. The index is keyed on (tokenizer, vocab) and rebuilt if
 either changes; it covers vocab <= 8,192 (one pass of the bitmap), above which the
 chunked walk remains.
+
+## Experiment 19 - 120 MHz octal memory: MEASURED as a diagnostic, +3.51 % real, NOT shippable (run #289, two boards + two controls)
+
+Question asked: is the remaining CQ2 token limited by the external-memory clock? Answer,
+measured: partly - a 1.5x MSPI clock buys **+3.51 %** end to end, so roughly 3.5 % of the
+token is clock-limited and the rest is at the instruction floor the campaign already
+mapped. This is a *diagnostic*, per the campaign's own rule that anything above the
+documented 240 MHz / 80 MHz octal flash+PSRAM is forbidden as a means of going faster;
+nothing was integrated and the shipping tree is unchanged at 4.9917.
+
+Two configurations were tried, both with `IDF_EXPERIMENTAL_FEATURES=y`:
+* **PSRAM 120 MHz with flash left at 80 MHz: cannot be built.** The concrete blocker is a
+  compile-time one, not a judgement: `static assertion failed: "FLASH and PSRAM Mode
+  configuration are not supported"` from `esp_common/esp_assert.h` in the esp_psram
+  configuration. On ESP32-S3 flash and PSRAM share the MSPI clock tree, so only the
+  combined step exists. Recorded as the exact blocker rather than as an opinion.
+* **Flash and PSRAM both 120 MHz (octal DDR):** built and measured on two boards, with two
+  80 MHz controls in the same concurrent batch (batch `20260922T060142.676310Z`, candidate
+  on the canonical board 1, controls on boards 2 and 3):
+
+| metric | 80 MHz control (both boards, identical) | 120 MHz board 1 | 120 MHz board 3 (earlier batch) |
+|---|---|---|---|
+| decode_tps | **4.9917** | **5.1667** (+3.51 %) | 5.1667 (+3.51 %) |
+| prefill_tps | 5.265 | 5.4517 | - |
+| ext_decode_tps | 4.9129 | 5.0814 | - |
+| think_tps | 3.92 | 4.05 | - |
+| min_case_tps | 4.77 | 4.93 | - |
+| boot bench | 5.039 (198 ms/tok) | 5.213 (192 ms/tok) | - |
+| internal_free | 15,215 | **14,031** (-1,184 B) | - |
+| device byte-exact | 14/14, delta 0 | 14/14, delta 0 | 14/14, delta 0 |
+
+Two independent boards at 120 MHz agree to the last digit (5.1667) and both controls agree
+to the last digit with the accepted runtime, so the delta is the clock, not the board.
+Memory integrity held under the full 14-case suite on both 120 MHz boards (byte-exact,
+token delta 0) - which is the *only* integrity evidence this configuration has, and it is
+not enough: it is one thermal condition.
+
+**Why it is not shippable, stated precisely rather than as a reflex.** IDF's own Kconfig
+help for `SPIRAM_SPEED_120M` in octal mode: "Octal PSRAM 120 MHz is an experimental
+feature, it works when the temperature is stable. Risks: if your chip powers on at a
+certain temperature, then after the temperature increases or decreases by approximately 20
+Celsius degrees (depending on the chip), the accesses to/from PSRAM will crash randomly."
+That failure mode is precisely the axis a 30-minute soak cannot cover, so a soak would buy
+false confidence rather than safety: cold-boot-then-warm and warm-then-cold are different
+cases from warm-then-warm. The campaign rule (documented maxima only) therefore stands.
+What a real stability campaign would need, if the owner ever decides the 3.5 % is worth the
+risk: `SPIRAM_TIMING_TUNING_POINT_VIA_TEMPERATURE_SENSOR` (IDF's real-time timing retune,
+which depends on octal 120 MHz + experimental) plus thermal-cycling integrity tests across
+the whole specified range, not a single-room soak - and the 1,184 B of internal RAM the
+tuning path costs would have to come out of 15,215 B.
+
+**What the number is for.** It bounds the memory-clock share of the token at ~3.5 %, which
+is one more reason the 2-bit GEMV family is closed: even a 50 % wider MSPI clock moves the
+whole token by 3.5 %, while that phase is 43 % of it - i.e. the phase is not waiting on
+bytes, it is waiting on the 2 instructions per weight floor. Any future claim that the
+kernel is bandwidth-bound has to beat that ratio.

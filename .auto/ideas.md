@@ -1307,3 +1307,46 @@ would cost ~10 % of the remaining heap, not an impossible amount. Its measured c
 (`lsc`-pairing the `xh` loads, -12 % of that phase), so it is the only remaining candidate above the
 0.2 % bar - and it is assembly, so it needs the rule-#1 differential test plus the real-capture
 fixture, in a fresh working window. Do not start it without both.
+
+## BANKED, priced on real captured data: skip exp(0) in the attention softmax pairs (+0.6 % predicted)
+
+Run #291 removed the exactly-zero exponential in Sinkhorn and delivered +0.200 % at ~70 % realisation -
+the best realisation of the three exp levers, because deleting a call removes work the scheduler could
+not have hidden. Priced the same mechanism on the *bigger* mass, the attention online softmax, using the
+fixture Experiment 12 captured from the six frozen primary generations (`/tmp/pairs.bin`, 49,152 real
+argument pairs, still on disk):
+
+| pair shape | share | shipped cost | cost if guarded |
+|---|---|---|---|
+| exactly one argument is `0.0f` | **48.5 %** | 198.04 (pair) | 123.71 (one scalar `nd_expf`) |
+| neither argument zero | 51.5 % | 198.04 | 198.04 + guard |
+| both zero | 0.0 % | - | - |
+
+48.5 % - not the 27.5 % quoted in the Experiment 12 note, which counted *elements* in a strided subset.
+The running maximum is a member of the pair that last raised it, so one of the two arguments is exactly
+zero nearly half the time. With the campaign's own measured kernel costs (pair 198.04 cycles, two scalar
+calls 247.42, so 123.71 each), the saving is **+17.2 % of this phase's exp work even charging an 8-cycle
+guard** to the no-zero path; at ~8,500 pairs per decode token that is ~1.2 ms of a ~200 ms token, i.e.
+**+0.6 % predicted**, and at the 25-70 % realisation band measured for this family, +0.15 % to +0.43 %.
+
+Sketch (call site `engine/src/nd_model.c:1352`, one site, inside the head/position loop):
+
+    float d0 = s0 - mx[t], d1 = s1 - mx[t];
+    if (d0 == 0.0f) { w0 = 1.0f; w1 = (d1 == 0.0f) ? 1.0f : nd_expf(d1); }
+    else if (d1 == 0.0f) { w1 = 1.0f; w0 = nd_expf(d0); }
+    else nd_expf_pair(d0, d1, &w0, &w1);
+    denom[t] += w0 + w1;          /* unchanged: the pair already produced both before the add */
+
+Why it is bit-exact if done this way: `nd_expf(+/-0.0f)` is exactly `1.0f` (asserted in
+`.auto/sinkzero/test.c`), `denom` accumulation order does not move, and testing the *subtracted*
+difference means the guard can only fire when two equal finite operands cancel - NaN and inf-inf
+still reach `nd_expf` unchanged.
+
+**The risk that must be measured, not argued.** Runs #230-231 measured a branch added around
+`nd_expf_pair` costing -2.10 %, because it destroyed the interleaving that Experiment 12's +19.96 %
+came from. This version keeps the pair call as the fallthrough, so the common path is the same call,
+but a three-way branch in the hottest loop in the tree can still re-sequence the spills. So: build the
+differential test first (reuse `.auto/sinkzero/test.c`'s pattern - the shipped expression copied
+verbatim, compared bit-for-bit over the captured fixture *and* a dense sweep), then measure on three
+boards. If the guard costs more than it saves, the disposition is a one-line revert and the fixture
+pricing above is the record of why it was worth the build.

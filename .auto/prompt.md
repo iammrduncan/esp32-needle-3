@@ -6,25 +6,17 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #241, authoritative).** Accepted runtime at commit `674b168`:
-**4.9417 decode tok/s (+102.6 % over the 2.44 baseline)**, 4.8614 extended, 3.91 think,
-5.2667 prefill, boot bench 198 ms/token, 14/14 device + 13/13 host byte-exact,
-fidelity 5.341e-05 / top1 10/10, internal_free 15247. Experiment 12 is kept
-(paired attention `nd_expf`, isolated +19.96 %, end to end +0.48 %); Experiment 13 is measured
-and rejected; Experiment 17 is measured and rejected; Experiment 18 is kept (+0.204 % exact KV
-reciprocal); the 100 Hz FreeRTOS tick is kept (+0.34 %) and its behavioural capture is green.
-**Experiment 14 is measured and closed as rejected (run #286); Experiment 15 is measured
-and CLOSED as rejected (run #287, three boards: overlapped -17.9 % to -67.8 %, internal-RAM
-ceiling +0.11 %, one cache invalidate 1.416 M cycles); Experiment 16 is measured and KEPT
-(+1.01 %, 4.9417 -> 4.9917, which is the accepted runtime). Only Experiment 19 remains
-unperformed.** Their evidence and recipes are in `.auto/ideas.md`.
-
-**Operator intervention after run #284.** Runs after the accepted gate fell into a canonical-repeat
-loop: the same `674b168` image returned 4.9417 dozens of times with no hypothesis or code change.
-These readings are not experiments and add no evidence. The exhausted agent session was terminated.
-Never resume that loop, even if the generic recurring runner says to call `run_experiment` at the end
-of an iteration. The next `run_experiment` invocation must contain a real candidate that differs from
-`674b168`; otherwise continue implementing or screening off-device and do not measure.
+**CURRENT STATE (run #289, authoritative).** Accepted runtime at commit `a17484f`:
+**4.9917 decode tok/s (+104.6 % over the 2.44 baseline)**, 4.9129 extended, 3.92 think,
+5.265 prefill, boot bench 198 ms/token, 14/14 device + 13/13 host byte-exact,
+fidelity 5.341e-05 / top1 10/10, internal_free 15215, psram_free 2,052,252, capture green.
+Experiments 12-19 are ALL measured: 12, 16 and 18 kept (paired `nd_expf` +0.48 %, compact
+first-byte grammar index +1.01 %, exact KV reciprocal +0.204 %); 13, 14, 15, 17 measured and
+rejected (dot-product schedules, CQ2 integer path, GDMA double buffering, IRAM placement);
+19 measured as an isolated diagnostic (+3.51 % at 120 MHz octal flash+PSRAM, byte-exact on two
+boards, forbidden as shipping by the documented-maxima rule). The named queue is COMPLETE.
+Any further `run_experiment` must carry a new hypothesis derived from the measured phase map;
+the previous accepted value of 4.9417 at `674b168` is superseded, not the target.
 
 **Superseded state (run #227).** 4.8917 decode, 4.81 extended, 3.87 think, 5.2167 prefill,
 boot bench 201 ms/token, internal_free 15759.

@@ -2123,5 +2123,70 @@ once inside the function), not from call overhead alone - and if lane 1 also lan
 +0.1 %, then the isolated +11.6 % was a microbenchmark warmth artefact of exactly the kind
 #295 recorded for phi, and this whole family closes at ~0.1 %.
 
-### 22A - integrated plain-load GEMV4 asm (board 1, batch 20260922T2110L): pending
-### 22C - wide-load fill-order/correctness probe (board 3, kbench): pending
+### 22A - integrated plain-load GEMV4 asm: MEASURED, KEPT, +0.365 % decode (run #333, 5.0117 -> 5.0300)
+
+Canonical board-1 run at the shipping config: **decode 5.0300**, extended 4.956 (+0.34 %),
+prefill 5.3067 (+0.38 %), think 3.94 (+0.26 %), boot bench 5.076 / 197 ms per token (the
+bench moving is the mechanism check - phi is inside it), min_case 4.80 (best worst case
+seen), 17/17 device + 16/16 host byte-exact with `golden_missing=0` and `DEVICE_GATE_OK`,
+token_delta 0, **fidelity 5.341e-05 identical to the control**, top1 10/10. Cost
+internal_free 15,215 -> 14,903 (-312 B of IRAM text, run #292's coupling). Realisation
+69 % of the isolated +11.6 % (priced +0.53 %), inside the campaign's 25-70 % band.
+
+**Two failed attempts, both recorded because both are findings.**
+
+1. *A null that looked like a candidate.* Saving the inline variant with `git diff` +
+   `git checkout engine/src/nd_quant.c` and not re-applying it left the shipping wiring
+   out while the `.S` still compiled and the CMake define was set. The linker
+   garbage-collected the unreferenced kernel (`nm`: no `nd_gemv4_rows_tie1`), so that run
+   measured the accepted runtime exactly - 5.0117 and internal_free 15,215 to the digit -
+   and **the exit-42 anti-repeat guard did not catch it**, because an extra compiled file
+   changes the shipping signature. Loophole, stated for whoever picks this up: the
+   signature catches config and source drift, not an unreferenced addition; assert the
+   candidate's new symbol is in the ELF before believing a number.
+2. *The first real build diverged, and the device gate is what stopped it:*
+   `device_output_exact=5/17`, `device_token_delta=175`, `DEVICE_OUTPUT_DIVERGED`, exit 1 -
+   while measuring **faster** (5.0283). Cause: the row-range kernel's word loop already
+   consumes a whole row (`a8` +4 B per index word = 64 B per group, `a5` +2 B per group),
+   so both cursors land exactly on the next row when the groups run out; the row epilogue
+   then added `rowbytes` and `normstep` again and skipped every row after the first.
+   Deleted both advances (commented at the site). **Why no primitive test saw it:** the
+   isolation screen called the kernel once per row, where the *caller* did that stepping -
+   a single-row test cannot cover a multi-row cursor. Rule for this repo: a kernel that
+   owns a loop over rows must be differentially tested *over rows*, against N per-row calls
+   of the proven single-row kernel. Banked below.
+
+This is the run where the device byte-exact gate (#298) earned its keep: a fast-but-wrong
+build could not be logged as a win, and the host gates are structurally blind to it (x86
+compiles the C path).
+
+### 22C - wide-load fill order: MEASURED, CLOSED - the +21/+25 % was lost nibble identity
+
+Two hand-computable probes, one group, norm 1.0, on board 3 (kbench):
+
+| probe | construction | expected | `tie0` plain `lsi` | `ee.ldf.128.ip` | `ee.ldf.64.ip` |
+|---|---|---|---|---|---|
+| A | nibble k = k, `xh[j]=2^(j%8)`, `cb[i]=i` | 24608 (= 16 x sum k*2^k) | **24608.0** | 4080.0 | 4080.0 |
+| B | every nibble = 1, `cb[i]=1` (permutation-invariant) | 4080 (= 16 x 255) | **4080.0** | 4080.0 | 4080.0 |
+
+Read the columns: the plain form is exact on both, so its arithmetic is right by
+construction on hand-computable inputs as well as bit-exact on real archive bytes. The two
+wide forms answer A with **exactly B's value**, i.e. with distinct nibbles they behave as
+if every lane used one codebook operand - the nibble identity is lost, not the float
+order. So the register-fill-order question that #332 left open has an answer, and it is
+the negative one: no permutation of the register list fixes them (the decoder in
+`.auto/exp22/fill_decode.py` enumerates all 40,320 permutations and none reproduces
+4080 from probe A), because the defect is upstream of the float loads. The extra ~10 %
+above the plain form is not available by this route, and 22A ships the plain form.
+
+### Banked follow-ups from Experiment 22
+
+- **Multi-row differential for `nd_gemv4_rows_tie1`** (cheap, one kbench build): compare the
+  row-range kernel over 4/12/24 rows against the same number of per-row calls of the proven
+  single-row screen kernel, row-for-row, on real phi bytes. This is the test whose absence
+  cost run #333's first build; it should exist before the kernel is touched again.
+- **Cross-board confirmation of 5.0300 on board 2** (discovery -> confirmed), while board 3
+  keeps screening.
+- The gate `nd_gemv4_asm_ok` walks the norms once per (blob, rows) into a 4-entry cache; a
+  fifth 4-bit tensor per token would re-walk. Currently phi's three tensors are the only
+  4-bit traffic (`nd_cq_gemv_rows` has exactly three call sites), so do not "generalise" it.

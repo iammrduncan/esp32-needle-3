@@ -843,7 +843,85 @@ to skip the later MimiModel experiments tracked in `.auto/mimimodel-experiments.
   already covering every GEMV, there is no independent per-layer work left for a
   second core. Closed.
 
-## Experiment 14 recipe (ready to execute; do not re-derive)
+## Experiment 14 - CQ2 integer path: MEASURED, CLOSED as rejected (run #242, no device run)
+
+Hypothesis tested: a CQ2 dot in integers (int8/int16 activation x the 4-value codebook,
+int32 accumulate, fp16 row norm at dequant) could replace the float pair-table kernel.
+Executed against the real captured fixture, in the recipe's order, and killed at the
+numeric stage - so the recipe's step 3 (device speed screen) never opened and was not run.
+
+**Fixture (real, not synthetic).** `-DND_EXP_CAPTURE` hook extended with `nd_cq2_capture`
+(`host/nd_dump.c` + one `#ifdef` call in `attention()`), capturing layer-0 `q_proj`: prepared
+activation, the pair table the kernel used, the kernel's full output vector, and 32 spread
+rows' packed bytes + fp16 group norms. 4 files x 8 records from the prefill and decode
+phases of two frozen primary prompts (`sampling5`, `timer60`), 1024 scored rows. Real
+geometry is **576x768** (q_proj out = n_heads*qk_head_dim), group 128, 32 packed bytes and
+6 norms per row - the recipe's "768x768" was wrong; directory record 2 confirms 576x768,
+117,504 bytes. Harness validated: replaying the shipping row walker on the captured table
+is **bit-exact on 1024/1024 rows**, so every error below belongs to the integer path.
+
+**Numeric screen (`.auto/exp14_screen.c`, float replay self-checked in the same run).**
+mean|y| over the scored rows is 1.771, so these are relative-scale numbers:
+
+| variant | max_abs | rms |
+|---|---|---|
+| A  int8 activation (tensor scale) x int8 codebook -> int32 | 4.379e-02 | 1.235e-02 |
+| Apg same, per-FWHT-group activation scale | 4.315e-02 | 9.739e-03 |
+| Axc int8 activation, codebook kept exact | 4.310e-02 | 1.192e-02 |
+| A16 int16 activation x int8 codebook | 1.222e-02 | 2.788e-03 |
+| B  boot-time int8 expansion of the rows | = A exactly (asserted) | = A |
+
+Per-group scales buy 21% of the rms and nothing else. Axc ~= A proves the error is the
+**activation**, not the codebook, so no codebook treatment rescues it. B is algebraically
+A (stored byte = round(cb*norm/(|norm|*max|cb|/127)) = the int8 codebook level, dequant
+scale |norm|*max|cb|/127), checked equal in the screen: it differs only in bytes.
+
+**End-to-end consequence (host forward-probe gate, the campaign's own measure).**
+Control on this tree reproduces the accepted 5.341e-05 / top1 10/10. Substituting
+**one** tensor - layer-0 `q_proj`, 117,504 B = 0.73% of the model's CQ2 bytes:
+
+* int8 path: `logit_max_delta = 0.3282` = **164x the 2e-3 gate**, FIDELITY FAILED, top1 still 10/10.
+* int16 activation + exact codebook (best case of the whole family): `0.01818` = **9.1x the gate**, FAILED.
+* host goldens for the int8 substitution: **13/13 byte-exact, token_delta 0** - the golden
+  suite is blind to a representation change that moves logits by 0.33. Rule #1 of #230,
+  now demonstrated on a whole path, not a primitive. The remaining 45 CQ2 tensors are
+  11.84 MB of the 11.96 MB CQ2 stream (74.1% of the 16,143,248 B model), so a full
+  integer model is far outside the gate, not marginally.
+
+**Bytes / staging / capacity (variant b).** CQ2 = 46 tensors, 11,959,296 packed bytes,
+45,023,232 weight elements. Int8 rows = 45,023,232 B = **3.76x** the stream: it does not fit
+16 MB PSRAM, nor the 12 MB tier, and per decode token it would raise the weight stream from
+11.96 MB (59 MB/s at 4.94 tok/s) to 45.0 MB (223 MB/s). Capacity-dead before it is speed-dead.
+**Quantisation cost/token**: 768 activations per reduction axis (q/k/v/gate share one prepared
+activation) + 4 codebook values (6 scales/axis if per-group) - negligible, and irrelevant.
+
+**Byte-exactness, stated as the recipe demanded:** no integer dequant reproduces the float
+multiply-add chain bit-for-bit, so 14/14 device + 13/13 host byte-exact goldens can never be
+met by an integer path at any width. The campaign refuses a model-quality change, therefore
+the path is rejected independently of speed; the fidelity numbers above show it would also
+have failed on its own merits. Not run: kbench `bench_int()` vs `nd_lut2_rows_tie1n`
+(recipe step 3, gated on the numeric screen). `dsps_dp_s8_aes3`: unavailable - esp-dsp is in
+neither the tree nor IDF and adding it is a forbidden new dependency (#230 precedent);
+recorded, not silently skipped. No image was built, so no hashes and no board assignment.
+
+**Reproduce.** Fixture (4 x 8 records, the real activations and the kernel's own outputs) is
+kept gzipped in `.auto/exp14/`, with the capture hook as `.auto/exp14/capture-hook.patch`
+(`git apply` it, then `cmake -S host -B /tmp/hostcap14 -DCMAKE_C_FLAGS=-DND_EXP_CAPTURE`,
+`ND_CQ2CAP=... ND_CQ2SKIP=<prefill length> nd_dump model/needle3.cact genp
+tools/demo-tools.json "<primary prompt>" 128 nothink`), and the screen is
+`.auto/exp14_screen.c` (`cc -O2 -ffp-contract=off -Iengine/include .auto/exp14_screen.c
+host/build/libneedle_engine.a -lm`; exit 0 only if the float replay is bit-exact). The
+integer engine probe itself is NOT kept - it is a dead path, and its only durable content is
+the two fidelity numbers above.
+
+**Harness trap bought by this run (keep).** The first probe reported the control's value
+exactly (5.341e-05) because the call-site edit inserted the integer call *before* the
+shipping `nd_cq_gemv_lut2` line, which then overwrote the result. `nm` showed
+`nd_cq_gemv_i8` present and the build log was clean, so symbol presence proved
+compilation, not execution. Verify an engine probe by differential output, or by deleting
+the original line behind `#ifdef/#else` - never by `nm` or a green build.
+
+## Experiment 14 recipe (executed above; kept as the record of what was specified)
 
 Goal: decide the CQ2 **integer** path on measurement, in this order, and stop as soon as a stage
 fails. Screen in **C**, not asm - Experiment 13 measured `asm volatile` costing 2x on this core.

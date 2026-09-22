@@ -17,12 +17,16 @@
  *   KSUM     min/median/mean cycles per kernel per mode
  *   KB DELTA candidate vs control, and cycles per inner-loop word
  *   KB PROBE measured cost of add.s / dependent add.s / load-then-dependent-add
+ *   KB GDMA  Experiment 15: PSRAM->internal GDMA copy, overlapped pipeline,
+ *            cache/DMA coherency, and the heap the double buffer costs
  *   EVT KBENCH_DONE
  */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_async_memcpy.h"
+#include "esp_cache.h"
 #include "esp_cpu.h"
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
@@ -757,6 +761,360 @@ static void bench_dot(void)
            100.0 * (double)((int)best_k4 - (int)best_kr) / (double)best_k4, bad, sink);
 }
 
+/* ---- Experiment 15: operator-internal GDMA double buffering --------------
+ *
+ * A memory-system question, not a schedule question: can the AHB GDMA pull the
+ * CQ2 index stream PSRAM -> two small internal DMA buffers faster than the row
+ * walker pulls the same bytes through the data cache, and can a 2-deep prefetch
+ * hide the copy behind the compute? Measured, not argued. Six numbers per buffer
+ * size, all from the same image and the same real blob bytes:
+ *
+ *   copy_raw   one block, submit then wait                      (copy cost)
+ *   copy_pipe  two blocks always in flight, no compute          (copy ceiling)
+ *   comp_psram the row walker over the same rows, cached PSRAM   (the shipping path)
+ *   comp_int   the row walker over internal-RAM buffers          (the ceiling)
+ *   overlap    prefetch block b+1 while consuming block b        (the proposal)
+ *   wait       cycles actually blocked on the done semaphore
+ *
+ * Coherency is checked explicitly, because GDMA writes to internal RAM bypass
+ * the data cache: the destination is first dirtied and read by the CPU, then
+ * overwritten by DMA, then read again - with and without an explicit
+ * invalidate - and the byte sum is compared against the source.
+ */
+#define KB_GDMA_BLK   20      /* blocks swept per round, rotated through rows */
+#define KB_GDMA_ROUND  5
+#define KB_GDMA_ROWS   768u   /* the dominant CQ2 shape: 20 x 768x768         */
+
+static SemaphoreHandle_t s_mcp_sem;
+
+static bool mcp_done_cb(async_memcpy_handle_t h, async_memcpy_event_t *e, void *arg)
+{
+    BaseType_t woken = pdFALSE;
+
+    (void)h; (void)e; (void)arg;
+    xSemaphoreGiveFromISR(s_mcp_sem, &woken);
+    return woken == pdTRUE;
+}
+
+static uint32_t byte_sum(const uint8_t *p, size_t n)
+{
+    uint32_t s = 0;
+    size_t   i;
+
+    for (i = 0; i < n; i++)
+        s += p[i];
+    return s;
+}
+
+static void gdma_sum(const char *mode, uint32_t bs, uint32_t *v, uint32_t per_round)
+{
+    uint32_t t[KB_GDMA_ROUND], mn, md, i;
+    double   mean = 0.0;
+
+    for (i = 0; i < KB_GDMA_ROUND; i++)
+        t[i] = v[i] / per_round;
+    qsort(t, KB_GDMA_ROUND, sizeof(t[0]), cmp_u32);
+    mn = t[0];
+    md = t[KB_GDMA_ROUND / 2];
+    for (i = 0; i < KB_GDMA_ROUND; i++)
+        mean += (double)t[i];
+    mean /= (double)KB_GDMA_ROUND;
+    printf("KB GDMA SUM buffer=%u mode=%-11s n=%u min=%u med=%u mean=%.0f "
+           "cyc_per_blk=%.0f MBps=%.2f\n",
+           (unsigned)bs, mode, (unsigned)KB_GDMA_ROUND, (unsigned)mn, (unsigned)md,
+           mean, (double)md / (double)KB_GDMA_BLK,
+           (double)bs * (double)KB_GDMA_BLK * 240.0e6 / (double)md / 1.0e6);
+}
+
+static void bench_gdma(uint32_t bufsize)
+{
+    nd_tensor             t;
+    uint8_t              *srcp = NULL, *win[2];
+    float                *xh = NULL, *lut = NULL, *y = NULL, *y2 = NULL;
+    nd_lut2_ctx           cps, cwin, cdma;
+    async_memcpy_handle   mcp = NULL;
+    async_memcpy_config_t cfg = ASYNC_MEMCPY_DEFAULT_CONFIG();
+    uint32_t              rowbytes, rows_blk, bs, nblk, r, b, i, idx;
+    uint32_t              c_raw[KB_GDMA_ROUND],    c_pipe[KB_GDMA_ROUND];
+    uint32_t              c_psram[KB_GDMA_ROUND],  c_int[KB_GDMA_ROUND];
+    uint32_t              c_over[KB_GDMA_ROUND],   c_ovms[KB_GDMA_ROUND];
+    uint32_t              w_over[KB_GDMA_ROUND],   w_ovms[KB_GDMA_ROUND];
+    uint32_t              coh_dirty = 0, coh_msync = 0, coh_pipe = 0, num_bad = 0;
+    uint32_t              free0, free1, free2;
+    nd_row_fn             fn = nd_lut2_rows_c;
+    const char           *fntag = "c";
+    const uint8_t        *norm_src;
+    int                   k;
+
+    if (find_tensor(KB_GDMA_ROWS, &t) < 0) {
+        printf("KB GDMA SKIP buffer=%u reason=no_tensor\n", (unsigned)bufsize);
+        return;
+    }
+    rowbytes = nd_cq_row_bytes(&t);
+    rows_blk = bufsize / rowbytes;
+    if (rows_blk < 2) {
+        printf("KB GDMA SKIP buffer=%u reason=row_too_big rowbytes=%u\n",
+               (unsigned)bufsize, (unsigned)rowbytes);
+        return;
+    }
+    bs   = rows_blk * rowbytes;              /* a whole number of rows        */
+    nblk = t.shape[0] / rows_blk;
+    for (k = 0; k < s_nkern; k++)            /* the shipping kernel is tie1n   */
+        if (!strcmp(s_kern[k].tag, "tie1n")) {
+            fn = s_kern[k].fn;
+            fntag = s_kern[k].tag;
+        }
+
+    free0 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    srcp  = (uint8_t *)heap_caps_malloc((size_t)t.nbytes, MALLOC_CAP_SPIRAM);
+    xh    = (float *)ND_ALLOC_FAST(sizeof(float) * nd_cq_in_pad(&t));
+    lut   = (float *)ND_ALLOC_FAST(sizeof(float) * nd_cq_lut_floats(nd_cq_in_pad(&t)));
+    y     = (float *)ND_ALLOC_FAST(sizeof(float) * rows_blk);
+    y2    = (float *)ND_ALLOC_FAST(sizeof(float) * rows_blk);
+    win[0] = (uint8_t *)ND_ALLOC_FAST((size_t)bs * KB_GDMA_BLK);
+    win[1] = NULL;
+    free1 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (!srcp || !xh || !lut || !y || !y2 || !win[0]) {
+        printf("KB GDMA SKIP buffer=%u reason=alloc internal_free=%u\n",
+               (unsigned)bufsize, free1);
+        heap_caps_free(srcp); heap_caps_free(xh); heap_caps_free(lut);
+        heap_caps_free(y); heap_caps_free(y2); heap_caps_free(win[0]);
+        return;
+    }
+    memcpy(srcp, nd_cact_data(&s_c, &t), t.nbytes);   /* real bytes, in PSRAM */
+    /* One internal window holding the whole rotation, so the compute-from-
+     * internal control reads exactly the bytes the DMA variant will read. */
+    memcpy(win[0], srcp, (size_t)bs * KB_GDMA_BLK);
+
+    {
+        uint32_t s = 0x5bd1e995u;
+
+        for (i = 0; i < nd_cq_in_pad(&t); i++) {
+            s = s * 1664525u + 1013904223u;
+            xh[i] = ((float)((s >> 8) & 0xFFFFu) / 32768.0f - 1.0f) * 0.25f;
+        }
+    }
+    nd_cq_lut_build(&s_c, xh, nd_cq_in_pad(&t), lut);
+    nd_lut2_fill(&cps, &t, srcp, lut, y);
+    cwin  = cps; cwin.packed = win[0]; cwin.y = y2;
+    cdma  = cps;
+
+    if (!nd_lut2_asm_ok(&cdma, 0, rows_blk) && fntag[0] == 't') {
+        printf("KB GDMA note buffer=%u asm_ok=0 kernel_falls_back_to_c\n", (unsigned)bufsize);
+        fn = nd_lut2_rows_c;
+        fntag = "c";
+    }
+
+    free2 = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    printf("KB GDMA CFG buffer=%u payload=%u rows_blk=%u nblk=%u rowbytes=%u "
+           "ngroup=%u tensor=%u kernel=%s int_free_pre=%u int_free_window=%u "
+           "psram_free=%u\n",
+           (unsigned)bufsize, (unsigned)bs, (unsigned)rows_blk, (unsigned)nblk,
+           (unsigned)rowbytes, (unsigned)cps.ngroup, (unsigned)t.nbytes, fntag,
+           free0, free2, (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    fflush(stdout);
+
+    cfg.backlog = 4;
+    cfg.dma_burst_size = 64;
+    if (!s_mcp_sem)
+        s_mcp_sem = xSemaphoreCreateCounting(8, 0);
+    if (esp_async_memcpy_install_gdma_ahb(&cfg, &mcp) != ESP_OK || !mcp) {
+        printf("KB GDMA SKIP buffer=%u reason=async_memcpy_install\n", (unsigned)bufsize);
+        heap_caps_free(srcp); heap_caps_free(xh); heap_caps_free(lut);
+        heap_caps_free(y); heap_caps_free(y2); heap_caps_free(win[0]);
+        return;
+    }
+    /* A transaction buffer of its own, DMA-capable, same alignment contract. */
+    {
+        uint8_t *d0 = (uint8_t *)heap_caps_aligned_alloc(64, bs, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        uint8_t *d1 = (uint8_t *)heap_caps_aligned_alloc(64, bs, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+        if (!d0 || !d1) {
+            printf("KB GDMA SKIP buffer=%u reason=dma_alloc internal_free=%u\n",
+                   (unsigned)bufsize,
+                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+            esp_async_memcpy_uninstall(mcp);
+            heap_caps_free(d0); heap_caps_free(d1);
+            heap_caps_free(srcp); heap_caps_free(xh); heap_caps_free(lut);
+            heap_caps_free(y); heap_caps_free(y2); heap_caps_free(win[0]);
+            return;
+        }
+        printf("KB GDMA MEM buffer=%u dma_pair=%u internal_free=%u delta=%d\n",
+               (unsigned)bufsize, (unsigned)(2 * bs),
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+               (int)heap_caps_get_free_size(MALLOC_CAP_INTERNAL) - (int)free2);
+
+        /* --- cache/DMA coherency, checked before any timing -------------------- */
+        memset(d0, 0xA5, bs);                 /* dirty the destination in the cache */
+        (void)byte_sum(d0, bs);               /* then read it back: lines now cached */
+        if (esp_async_memcpy(mcp, d0, srcp, bs, mcp_done_cb, NULL) == ESP_OK) {
+            xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+            if (byte_sum(d0, bs) != byte_sum(srcp, bs))
+                coh_dirty = 1;                /* the CPU saw stale lines */
+        }
+        memset(d0, 0xA5, bs);
+        (void)byte_sum(d0, bs);
+        if (esp_async_memcpy(mcp, d0, srcp, bs, mcp_done_cb, NULL) == ESP_OK) {
+            xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+            esp_cache_msync(d0, bs, ESP_CACHE_MSYNC_FLAG_DIR_M2C |
+                              ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+            if (byte_sum(d0, bs) != byte_sum(srcp, bs))
+                coh_msync = 1;
+        }
+        printf("KB GDMA COHERENCY buffer=%u stale_without_invalidate=%u "
+               "stale_with_invalidate=%u\n", (unsigned)bufsize, coh_dirty, coh_msync);
+
+        for (r = 0; r < KB_GDMA_ROUND; r++) {
+            uint32_t base = (uint32_t)((r * 7 + 1) % nblk);
+            uint32_t c0;
+
+            /* copy_raw: one block at a time, submit then wait */
+            c0 = esp_cpu_get_cycle_count();
+            for (b = 0; b < KB_GDMA_BLK; b++) {
+                uint32_t blk = (base + b) % nblk;
+
+                if (esp_async_memcpy(mcp, d0, srcp + (size_t)blk * bs, bs,
+                                     mcp_done_cb, NULL) != ESP_OK)
+                    continue;
+                xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+            }
+            c_raw[r] = esp_cpu_get_cycle_count() - c0;
+
+            /* copy_pipe: keep two copies in flight, no compute at all */
+            c0 = esp_cpu_get_cycle_count();
+            for (b = 0; b < KB_GDMA_BLK; b++) {
+                uint32_t blk = (base + b) % nblk;
+
+                if (b >= 2)
+                    xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+                esp_async_memcpy(mcp, d0, srcp + (size_t)blk * bs, bs, mcp_done_cb, NULL);
+            }
+            xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+            xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+            c_pipe[r] = esp_cpu_get_cycle_count() - c0;
+
+            /* comp_psram: the shipping path, the row walker over cached PSRAM */
+            cps.y = y;
+            c0 = esp_cpu_get_cycle_count();
+            for (b = 0; b < KB_GDMA_BLK; b++) {
+                uint32_t blk = (base + b) % nblk;
+
+                cps.packed = srcp + (size_t)blk * bs;
+                fn(&cps, blk * rows_blk, blk * rows_blk + rows_blk);
+            }
+            c_psram[r] = esp_cpu_get_cycle_count() - c0;
+
+            /* comp_int: the same rows from internal RAM, no DMA in flight */
+            cwin.y = y2;
+            c0 = esp_cpu_get_cycle_count();
+            for (b = 0; b < KB_GDMA_BLK; b++) {
+                uint32_t blk = (base + b) % nblk;
+
+                cwin.packed = win[0] + (size_t)blk * bs;
+                fn(&cwin, blk * rows_blk, blk * rows_blk + rows_blk);
+            }
+            c_int[r] = esp_cpu_get_cycle_count() - c0;
+
+            /* overlap and wait: prefetch the next block while consuming this one.
+             * Norms keep streaming from PSRAM, as they do in the tier. */
+            {
+                uint32_t w = 0;
+
+                esp_async_memcpy(mcp, d0, srcp + (size_t)base * bs, bs, mcp_done_cb, NULL);
+                for (b = 0; b < KB_GDMA_BLK; b++) {
+                    uint32_t blk  = (base + b) % nblk;
+                    uint8_t *cur  = (b & 1) ? d1 : d0;
+                    uint8_t *nxt  = (b & 1) ? d0 : d1;
+                    uint32_t nblk_ = (base + b + 1) % nblk;
+                    uint32_t tw;
+
+                    if (b + 1 < KB_GDMA_BLK)
+                        esp_async_memcpy(mcp, nxt, srcp + (size_t)nblk_ * bs, bs,
+                                         mcp_done_cb, NULL);
+                    tw = esp_cpu_get_cycle_count();
+                    xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+                    w += esp_cpu_get_cycle_count() - tw;
+                    cdma.y      = y;
+                    cdma.packed = cur;
+                    fn(&cdma, blk * rows_blk, blk * rows_blk + rows_blk);
+                }
+                w_over[r] = w;
+                c_over[r] = 0;   /* total measured below in the msync variant */
+            }
+
+            /* overlap (with an explicit invalidate) and its total + wait */
+            {
+                uint32_t tw_all = 0, w = 0, t0 = esp_cpu_get_cycle_count();
+
+                esp_async_memcpy(mcp, d0, srcp + (size_t)base * bs, bs, mcp_done_cb, NULL);
+                for (b = 0; b < KB_GDMA_BLK; b++) {
+                    uint32_t blk  = (base + b) % nblk;
+                    uint8_t *cur  = (b & 1) ? d1 : d0;
+                    uint8_t *nxt  = (b & 1) ? d0 : d1;
+                    uint32_t nblk_ = (base + b + 1) % nblk;
+                    uint32_t tw;
+
+                    if (b + 1 < KB_GDMA_BLK)
+                        esp_async_memcpy(mcp, nxt, srcp + (size_t)nblk_ * bs, bs,
+                                         mcp_done_cb, NULL);
+                    tw = esp_cpu_get_cycle_count();
+                    xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+                    w += esp_cpu_get_cycle_count() - tw;
+                    esp_cache_msync(cur, bs, ESP_CACHE_MSYNC_FLAG_DIR_M2C |
+                                      ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+                    cdma.y      = y;
+                    cdma.packed = cur;
+                    fn(&cdma, blk * rows_blk, blk * rows_blk + rows_blk);
+                }
+                c_ovms[r]  = esp_cpu_get_cycle_count() - t0;
+                w_ovms[r]  = w;
+                (void)tw_all;
+            }
+
+            /* the overlapped path must produce the same y as the PSRAM path */
+            {
+                uint32_t blk = base;
+
+                cps.y = y2; cps.packed = srcp + (size_t)blk * bs;
+                fn(&cps, blk * rows_blk, blk * rows_blk + rows_blk);
+                esp_async_memcpy(mcp, d0, srcp + (size_t)blk * bs, bs, mcp_done_cb, NULL);
+                xSemaphoreTake(s_mcp_sem, portMAX_DELAY);
+                esp_cache_msync(d0, bs, ESP_CACHE_MSYNC_FLAG_DIR_M2C |
+                          ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+                cdma.y = y; cdma.packed = d0;
+                fn(&cdma, blk * rows_blk, blk * rows_blk + rows_blk);
+                for (i = 0; i < rows_blk; i++)
+                    num_bad += (y[i] != y2[i]);
+                if (byte_sum(d0, bs) != byte_sum(srcp + (size_t)blk * bs, bs))
+                    coh_pipe++;
+            }
+            printf("KB GDMA R buffer=%u round=%u copy_raw=%u copy_pipe=%u "
+                   "comp_psram=%u comp_int=%u overlap_msync=%u wait_msync=%u\n",
+                   (unsigned)bufsize, (unsigned)r, (unsigned)c_raw[r],
+                   (unsigned)c_pipe[r], (unsigned)c_psram[r], (unsigned)c_int[r],
+                   (unsigned)c_ovms[r], (unsigned)w_ovms[r]);
+            fflush(stdout);
+        }
+        gdma_sum("copy_raw",  bs, c_raw,  1);
+        gdma_sum("copy_pipe", bs, c_pipe, 1);
+        gdma_sum("comp_psram",bs, c_psram,1);
+        gdma_sum("comp_int",  bs, c_int,  1);
+        gdma_sum("overlap_msync", bs, c_ovms, 1);
+        printf("KB GDMA NUM buffer=%u y_rows_mismatch=%u dma_bytes_mismatch=%u "
+               "coherency_stale_no_invalidate=%u coherency_stale_with_invalidate=%u\n",
+               (unsigned)bufsize, (unsigned)num_bad, (unsigned)coh_pipe,
+               coh_dirty, coh_msync);
+        printf("KB GDMA MEM buffer=%u final_internal_free=%u final_psram_free=%u\n",
+               (unsigned)bufsize,
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        fflush(stdout);
+        esp_async_memcpy_uninstall(mcp);
+        heap_caps_free(d0); heap_caps_free(d1);
+    }
+    heap_caps_free(srcp); heap_caps_free(xh); heap_caps_free(lut);
+    heap_caps_free(y); heap_caps_free(y2); heap_caps_free(win[0]);
+}
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -841,6 +1199,11 @@ int kbench_run(void)
 #endif
     for (i = 0; i < KB_NSHAPES; i++)
         bench_shape(&SHAPES[i]);
+
+    /* Experiment 15: the memory-system test, at the two buffer sizes the
+     * experiment names. Runs last: it installs and uninstalls a DMA driver. */
+    bench_gdma(2048);
+    bench_gdma(4096);
 
     printf("KB MEM internal_free=%u psram_free=%u\n",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),

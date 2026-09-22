@@ -1,0 +1,318 @@
+/* kbench.c - mHC phi (4-bit generic path) operand-placement bound.
+ *
+ * Built into the app only with -DNEEDLE_KBENCH=ON, where it replaces the request
+ * loop in app_main() before the model caches are warmed, so the run starts in
+ * seconds. It never touches the KV state or the tier.
+ *
+ * WHY THIS EXISTS. The phi phase is 13.5 ms of a ~200 ms token, and two claims
+ * in the campaign ledger contradict each other about it:
+ *
+ *   (a) run #141 priced a handwritten TIE728 kernel analytically at -12 % of the
+ *       phase (+0.5 % end to end) from instruction counts: GCC's loop is
+ *       1 l32i + 8 extui + 8 addx4 + 8 lsi(cb) + 8 lsi(xh) + 8 madd.s per eight
+ *       weights, and pairing the contiguous `xh` loads with ee.ldf.64 removes
+ *       four of those forty-one;
+ *   (b) the same run diagnosed phi's residual as "PSRAM line-fill latency on a
+ *       non-resident working set", and the ledger separately records the generic
+ *       path's C row blocking as *neutral* - which is what latency-bound code
+ *       does when you hand it fewer issue slots.
+ *
+ * Only one of those can be true, and the difference decides whether ~150 lines
+ * of handwritten assembly are worth writing. So price it without any assembly:
+ * run the *shipping* kernel (nd_cq_gemv_rows, called exactly as nd_model.c
+ * calls it, on real needle3.cact bytes) with each operand's backing store moved,
+ * and read the prize directly off the deltas.
+ *
+ *   KB PHI mode=psram_xin   weights in cached PSRAM, activation in internal SRAM
+ *                           - the shipping path, and the control
+ *   KB PHI mode=psram_xps   activation moved to PSRAM. The xh span is in_pad
+ *                           floats re-read per row, so this is the ceiling on
+ *                           anything that touches the activation operand: if
+ *                           moving it to PSRAM costs nothing, the loads were
+ *                           already free and no kernel that pairs or shares them
+ *                           can win.
+ *   KB PHI mode=int_xin     weights moved to internal RAM. That is the ceiling
+ *                           on anything that leaves the weight stream alone: if
+ *                           this is a big win, the phase is bound by PSRAM
+ *                           delivery, and the fix is residency (which the tier
+ *                           family already closed), not instruction scheduling.
+ *   KB PHI mode=int_xps     both moved, to expose any interaction.
+ *
+ * Every mode must produce bit-identical y[] - only the memory backing changes -
+ * so `chk_mismatch=0` is the correctness gate and a nonzero value voids the run.
+ *
+ * Line-oriented output for the batch runner:
+ *   KB CFG  build, geometry, split mode, cycles/us
+ *   KB PHI  one line per mode: min/median cycles, cycles per weight, MB/s
+ *   KB MEM  internal and PSRAM free before and after
+ *   EVT KBENCH_DONE
+ *
+ * Note on absolute numbers: the hook runs before app_main creates the row-split
+ * worker, so nd_parallel_rows is still its serial default and every figure here
+ * is one core doing the whole row range. That is the right unit for a ratio
+ * comparison - decode gives each core half the rows - and `IPC` sanity follows
+ * from cycles per weight against the 41-instructions-per-8-weights loop.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "esp_cpu.h"
+#include "esp_heap_caps.h"
+#include "esp_partition.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "nd_cact.h"
+#include "nd_model.h"
+#include "nd_quant.h"
+
+#define KB_ROUNDS   5u
+#define KB_NMODE    4u
+
+static const uint8_t *s_base;
+static nd_cact        s_c;
+static uint32_t       s_mhz_x100;
+
+static uint32_t le32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+/* Same archive-length derivation app_main uses, so the mmap covers exactly the
+ * blob nd_cact_open validates. */
+static size_t model_length(const esp_partition_t *part)
+{
+    uint8_t  hdr[12], last[44];
+    uint32_t count, codebooks, record_at;
+
+    if (esp_partition_read(part, 0, hdr, sizeof(hdr)) != ESP_OK ||
+        le32(hdr) != ND_CACT_TAG)
+        return 0;
+    count     = le32(hdr + 4);
+    codebooks = le32(hdr + 8);
+    if (count == 0 || count > 4096 || codebooks > 256)
+        return 0;
+    record_at = 196 + codebooks * 4 + (count - 1) * 44;
+    if (record_at + sizeof(last) > part->size ||
+        esp_partition_read(part, record_at, last, sizeof(last)) != ESP_OK)
+        return 0;
+    if (le32(last + 24) || le32(last + 32))
+        return 0;
+    {
+        size_t end = (size_t)le32(last + 20) + le32(last + 28);
+        return end <= part->size ? end : 0;
+    }
+}
+
+static int cmp_u32(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+    return x < y ? -1 : (x > y ? 1 : 0);
+}
+
+/* Consume a result through a float register so no variant can be optimised into
+ * a no-op, and so the consumption itself costs no memory traffic (the microbench
+ * rule from run #230). */
+static void fp_sink(float v)
+{
+    asm volatile("" : "+f"(v));
+}
+
+static void *alloc_in(size_t bytes)
+{
+    return heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
+static void *alloc_ps(size_t bytes)
+{
+    return heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
+
+int kbench_run(void)
+{
+    const esp_partition_t       *part;
+    esp_partition_mmap_handle_t  handle;
+    const void                  *mapped = NULL;
+    nd_tensor                    t;
+    uint32_t                     out, in, row_bytes, ngroup, g, bits;
+    size_t                       blob_bytes, xh_floats;
+    uint8_t                     *blob_ps = NULL, *blob_in = NULL;
+    float                       *xh_in = NULL, *xh_ps = NULL, *xsrc = NULL, *y = NULL;
+    uint32_t                     cycles[KB_NMODE][KB_ROUNDS];
+    float                        chk[KB_NMODE];
+    const char                  *mode_name[KB_NMODE] = { "psram_xin", "psram_xps",
+                                                         "int_xin",   "int_xps" };
+    uint32_t                     i, r, m, lanes, nlayers, nrows_slice, mism = 0;
+    int                          tidx = -1;
+
+    printf("KB CFG kbench=1 phi_bound rounds=%u\n", (unsigned)KB_ROUNDS);
+
+    /* CCOUNT has to be real before any of this means anything. */
+    {
+        int64_t  t0 = esp_timer_get_time();
+        uint32_t c0 = esp_cpu_get_cycle_count();
+        while (esp_timer_get_time() - t0 < 50000)
+            ;
+        s_mhz_x100 = (uint32_t)((uint32_t)(esp_cpu_get_cycle_count() - c0) * 100u /
+                               50000u);
+    }
+    printf("KB CFG cycles_per_us_x100=%u (expect ~24000)\n", (unsigned)s_mhz_x100);
+
+    part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "model");
+    if (!part) { printf("KB FAIL reason=no_model_partition\n"); return -1; }
+    {
+        size_t bytes = model_length(part);
+        if (!bytes) { printf("KB FAIL reason=model_header\n"); return -1; }
+        if (esp_partition_mmap(part, 0, bytes, ESP_PARTITION_MMAP_DATA,
+                               &mapped, &handle) != ESP_OK) {
+            printf("KB FAIL reason=mmap size=%u\n", (unsigned)bytes);
+            return -1;
+        }
+        s_base = (const uint8_t *)mapped;
+        if (nd_cact_open(&s_c, s_base, bytes) != 0) {
+            printf("KB FAIL reason=cact_open\n");
+            return -1;
+        }
+    }
+    nlayers = s_c.h.num_layers;
+    lanes   = s_c.h.mhc_lanes;
+    printf("KB CFG tensors=%u d_model=%u layers=%u lanes=%u\n",
+           (unsigned)s_c.n, (unsigned)s_c.h.d_model, (unsigned)nlayers,
+           (unsigned)lanes);
+
+    /* The phi tensors are the 4-bit ones reducing over lanes x d_model. Take the
+     * first (mhc_phi_pre) because it is the one whose whole blob fits in internal
+     * RAM, which is what makes mode int_xin measurable at all. */
+    for (i = 0; i < s_c.n; i++) {
+        nd_tensor cand;
+        if (nd_cact_tensor(&s_c, i, &cand) != 0)
+            continue;
+        if (cand.bits != 4 || cand.shape[1] != lanes * s_c.h.d_model)
+            continue;
+        if (cand.shape[0] % nlayers)               /* must be a per-layer slice */
+            continue;
+        t     = cand;
+        tidx  = (int)i;
+        break;
+    }
+    if (tidx < 0) { printf("KB FAIL reason=no_phi_tensor_found\n"); return -1; }
+
+    out       = t.shape[0];
+    in        = t.shape[1];
+    bits      = t.bits;
+    g         = t.group;
+    ngroup    = nd_cq_groups(&t);
+    row_bytes = nd_cq_row_bytes(&t);
+    blob_bytes = (size_t)out * row_bytes + (size_t)ngroup * out * sizeof(uint16_t);
+    xh_floats  = nd_cq_scratch(&t);
+    nrows_slice = out / nlayers;
+    printf("KB CFG tensor=%d out=%u in=%u bits=%u group=%u ngroup=%u row_bytes=%u "
+           "blob=%u xh_bytes=%u rows_per_layer=%u codebook=%u\n",
+           tidx, (unsigned)out, (unsigned)in, (unsigned)bits, (unsigned)g,
+           (unsigned)ngroup, (unsigned)row_bytes, (unsigned)blob_bytes,
+           (unsigned)(xh_floats * 4u), (unsigned)nrows_slice,
+           (unsigned)s_c.h.codebook_len);
+
+    blob_ps = alloc_ps(blob_bytes);
+    blob_in = alloc_in(blob_bytes);
+    xh_in   = alloc_in(xh_floats * sizeof(float));
+    xh_ps   = alloc_ps(xh_floats * sizeof(float));
+    xsrc    = alloc_in(in * sizeof(float));
+    y       = alloc_in(out * sizeof(float));
+    if (!blob_ps || !blob_in || !xh_in || !xh_ps || !xsrc || !y) {
+        printf("KB FAIL reason=alloc blob=%u xh=%u in_free=%u psram_free=%u\n",
+               (unsigned)blob_bytes, (unsigned)(xh_floats * 4u),
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        return -1;
+    }
+    printf("KB MEM internal_free=%u psram_free=%u\n",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+
+    /* Real bytes, staged the way the tier stages them (one sequential copy), and
+     * a real prepared activation: nd_cq_prepare is the same FWHT the model runs,
+     * so xh has the true value distribution the loads see. */
+    memcpy(blob_ps, nd_cact_data(&s_c, &t), blob_bytes);
+    memcpy(blob_in, nd_cact_data(&s_c, &t), blob_bytes);
+    for (i = 0; i < in; i++)
+        xsrc[i] = (float)((int)i % 257) * 0.0039f - 0.5f;
+    nd_cq_prepare(&t, xsrc, xh_in);
+    memcpy(xh_ps, xh_in, xh_floats * sizeof(float));
+    /* Touch the PSRAM copy so its lines are resident, the way the tier's are
+     * after its own warm-up, rather than paying a cold first-fill in round 0. */
+    {
+        volatile float warm = 0.0f;
+        for (i = 0; i < xh_floats; i += 16)
+            warm += xh_ps[i];
+        fp_sink(warm);
+    }
+
+    memset(cycles, 0, sizeof(cycles));
+    for (m = 0; m < KB_NMODE; m++) {
+        const void *blob = (m == 2 || m == 3) ? blob_in : blob_ps;
+        const float *xh  = (m == 1 || m == 3) ? xh_ps   : xh_in;
+        float        s   = 0.0f;
+
+        for (r = 0; r < KB_ROUNDS; r++) {
+            uint32_t r0 = (r % nlayers) * nrows_slice;   /* rotate over layers */
+            uint32_t c0, c1, k;
+
+            c0 = esp_cpu_get_cycle_count();
+            nd_cq_gemv_rows(&s_c, &t, blob, xh, r0, nrows_slice, y);
+            c1 = esp_cpu_get_cycle_count();
+            for (k = 0; k < nrows_slice; k++)
+                s += y[k];
+            fp_sink(s);
+            cycles[m][r] = c1 - c0;
+        }
+        chk[m] = s;
+    }
+
+    /* Bit-exactness across backing stores: rerun each mode over layer 0 and
+     * compare the produced rows byte for byte against mode 0. */
+    {
+        static float ref[64];
+        if (nrows_slice <= 64) {
+            uint32_t k;
+            nd_cq_gemv_rows(&s_c, &t, blob_ps, xh_in, 0, nrows_slice, ref);
+            for (m = 0; m < KB_NMODE; m++) {
+                const void  *blob = (m == 2 || m == 3) ? blob_in : blob_ps;
+                const float *xh   = (m == 1 || m == 3) ? xh_ps   : xh_in;
+                memset(y, 0xA5, out * sizeof(float));
+                nd_cq_gemv_rows(&s_c, &t, blob, xh, 0, nrows_slice, y);
+                for (k = 0; k < nrows_slice; k++)
+                    if (memcmp(&y[k], &ref[k], sizeof(float))) {
+                        mism++;
+                        break;
+                    }
+            }
+        }
+    }
+
+    for (m = 0; m < KB_NMODE; m++) {
+        uint32_t tmin[KB_ROUNDS], mn, md, k;
+        double   weights = (double)nrows_slice * in;
+        for (k = 0; k < KB_ROUNDS; k++)
+            tmin[k] = cycles[m][k];
+        qsort(tmin, KB_ROUNDS, sizeof(tmin[0]), cmp_u32);
+        mn = tmin[0];
+        md = tmin[KB_ROUNDS / 2];
+        printf("KB PHI mode=%-10s weights=%u min=%u med=%u cyc_per_1k_w=%.1f "
+               "MBps=%.2f chk=%.6f\n",
+               mode_name[m], (unsigned)(nrows_slice * in), (unsigned)mn,
+               (unsigned)md, (double)md * 1000.0 / weights,
+               weights * (double)bits / 8.0 * (double)s_mhz_x100 * 1.0e4 /
+                   (double)md / 1.0e6, (double)chk[m]);
+    }
+    printf("KB PHI control=psram_xin chk_mismatch=%u\n", (unsigned)mism);
+    printf("KB MEM internal_free=%u psram_free=%u\n",
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    printf("EVT KBENCH_DONE\n");
+    fflush(stdout);
+    return 0;
+}

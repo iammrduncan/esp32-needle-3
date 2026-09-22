@@ -1433,3 +1433,54 @@ run #204), the handwritten 4-bit phi kernel's ~1.5 KB (ceiling +0.5 %), and the 
 (8.7 KB, though that one also lost on speed, -17.9 %). If the owner accepts level 0 or level 1,
 re-price those four in this order; the LUT residency is the only one with a measured win above
 1 %. Recorded here rather than kept in the tree so the config decision stays explicit.
+
+## MEASURED, phi (mHC 4-bit) family: the handwritten-asm ceiling is ~9-10 % of the phase, not 12 % (run #295)
+
+The last above-bar candidate was a handwritten TIE728 kernel for the mHC phi GEMV, priced
+analytically in run #141 at -12 % of the phase from instruction counts (GCC's loop is 41
+instructions per 8 weights; `ee.ldf.64` pairing of the contiguous `xh` loads removes four). The
+same run diagnosed phi's residual as PSRAM line-fill latency, and the ledger separately records the
+generic path's C row blocking as neutral - which is what latency-bound code does when you hand it
+fewer issue slots. Both cannot be true, and the difference decides ~150 lines of assembly. Priced
+without writing any: `esp32/main/kbench.c` (kept as `.auto/exp20/kbench.c.phi_bound`, output in
+`.auto/exp20/board1.phi.txt`) calls the *shipping* `nd_cq_gemv_rows` exactly as `nd_model.c` calls
+it, on real `needle3.cact` bytes staged into PSRAM the way the tier stages them, with a real
+`nd_cq_prepare` activation, and changes only which backing store each operand lives in.
+
+Device, board 1, fresh `-B build_kb -DNEEDLE_KBENCH=ON`, CCOUNT calibrated 24000 cycles/us, min of
+5 rounds rotating over 8 layer slices, results consumed through a float-register barrier:
+
+| mode | weights | min cycles | cyc/weight | vs control |
+|---|---|---|---|---|
+| `psram_xin` - the shipping path | 12,288 | 85,844 | 6.98 | control |
+| `int_xin` - weights in internal RAM | 12,288 | 77,869 | 6.34 | **+9.3 %** |
+| `psram_xps` - activation in PSRAM | 12,288 | 77,869 | 6.34 | +9.3 % |
+| `int_xps` - both in internal RAM | 12,288 | 77,869 | 6.34 | +9.3 % |
+
+`chk_mismatch=0`: all four modes produced bit-identical rows, so this is a memory-system
+comparison and not four different computations. Geometry confirmed on device exactly as #141
+derived it from the archive directory: tensor 223, out 32, in 3072, bits 4, group 128, ngroup 24,
+`row_bytes` 1536, 4 rows per layer per token.
+
+**What it decides.** Moving *everything* to internal RAM - the best any kernel can do about operand
+delivery, because a kernel cannot move the weights - buys 9.3 % of the phase. So at least 90.7 % of
+phi's 9.2 ms of GEMV is instruction-and-dependency work, not PSRAM waiting: the phase is **not**
+memory-bound, which retires the "phi is slow because of line fill" half of #141's diagnosis and
+explains why C row blocking was neutral (row blocking only reuses an operand that was never the
+stall). It also puts a *measured* ceiling on the assembly: removing four instructions from a
+forty-one-instruction loop can only recover issue slots, and the residency bound says those slots
+are worth less than ~10 % of the phase, i.e. 0.4-0.9 ms of the 9.2 ms = **+0.2 % to +0.45 %** decode
+- the same number #141 predicted, now bounded from the other side. The three variants that differ
+in backing store all report the *same* cycle count, which is the signature of a warm 32 KB data
+cache absorbing both operands at this working-set size (4 rows x 1,536 B + 12 KB activation): the
+shipping path's 9.3 % penalty is the rotation through five different layer slices overflowing the
+cache, i.e. it is a *cache-capacity* effect, and the fix for cache capacity is residency - 24
+rows/token x 1,536 B = 37 KB against 15,215 B of internal heap, which is the RAM-blocked family
+recorded under run #294, not an instruction-scheduling problem.
+
+**Disposition: phi stays as it is.** The asm would cost ~1.5 KB of a 15,215 B heap, a new ABI
+surface and a rule-#1 differential test, to buy a fraction of a measured 9.3 % ceiling that it does
+not attack (it cannot move the weights). If the owner ever accepts the assertion-level change from
+run #294 and internal heap roughly doubles, the phi residency idea - not the asm - is the one to
+re-price, because this measurement says delivery is the only addressable share and residency is the
+only way to buy delivery.

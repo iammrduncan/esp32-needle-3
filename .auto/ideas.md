@@ -1795,3 +1795,23 @@ was never wired (`AUTO_SAVE`). All four failed in the same direction - **reporti
 verifying nothing** - which is why "can this check fail?" has been the highest-yield question in this
 campaign while every 0.2 % speed candidate ran out. Rule for whoever picks this up: ask it of any
 check before trusting a green run.
+
+## CLOSED BEFORE A BUILD: staged tap/norm table delivery - the last uncompressed fp32 payload (run #302)
+
+Hunted for one more non-GEMV target and found the largest payload in the token still in full IEEE
+fp32: q/k tap tables = 9 taps x 768 cols x 32 B = **221 KB/token**, per-head norm scales ~24 KB/layer,
+against a measured 3.3 ms of tap phase (1.65 %) - and the mechanism class is this campaign's most
+successful (run #2 fp32 staging, +99.9 %), so it earned a look. Dead on code reading, not argument:
+
+* `fp16_slot[li][SLOT[f]] = p` in `nd_model_open` - these tables are **already copied into PSRAM at
+  open**. The 12 MB tier exists to turn *mmap-flash* reads into PSRAM reads, so it cannot help bytes
+  that are already in PSRAM; "put the taps in the tier" is not a lever, it is the current state.
+* Residency independently ruled out: 221 KB of taps against a 64 KB data cache (#296's correction).
+* The backlog's "genuinely untried: hoist `nd_f16()` out of `tap_projection`'s inner loop" is already
+  done - the function reads `m->fp16_slot[li][tap_slot]` and its own comment records that converting
+  in the loop used to cost `taps*dim` conversions per projection.
+
+So the phase is at the non-resident scattered-PSRAM-read floor already measured for other payloads of
+this shape, and a build would have measured the control. Recorded as the fourth off-device closure of
+the session (logf skip, software prefetch, cache-config maxima, this) - the cheap kind of negative
+result that keeps 13-minute board runs for questions that can still change a decision.

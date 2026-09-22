@@ -1508,3 +1508,40 @@ bracketed pattern such as `[n]eedle-api`. (2) A kbench image prints `KBENCH_DONE
 boot (it hooks before the model caches warm), so the harvest is: open the console with DTR asserted
 *first*, then reset with `python3 -m esptool --chip esp32s3 -p /dev/ttyACM0 run` and read for ~60 s;
 opening the port after the board has booted captures nothing.
+
+## THE PHI RECONCILIATION GAP (run #295 measurement): the field says 30 cycles/weight, one core warm says 6.98
+
+Put the two numbers side by side, because the campaign has never done it:
+
+* measured here, one core, warm cache, `min` of 5 rounds, real archive bytes, real prepared
+  activation, the shipping `nd_cq_gemv_rows`: **85,844 cycles for 4 rows x 3072 weights = 6.98
+  cycles/weight**, and 77,869 (6.34) with the weights in internal RAM.
+* attributed in run #141 from `ND_PROFILE`: `mhc_phi4` = 13.5 ms/token of which the generic-path
+  GEMVs are 9.2 ms, for 24 rows x 3072 = 73,728 weights -> **9.2 ms x 240 MHz / 73,728 = 30
+  cycles/weight**.
+
+**The field cost is 4.3x the warm-kernel cost.** Three candidate explanations, and the bench
+already kills two: operand placement (the whole point of the four modes - worth only 9.3 %, so it
+cannot be 4.3x), and instruction scheduling (the kernel is the *same* kernel in both measurements).
+What is left is the working set: decode sweeps 24 rows x 1,536 B = 37 KB of phi weights per token,
+which does not fit the 32 KB data cache, so every token pays cold PSRAM line fill, while my
+microbenchmark re-sweeps a 6 KB slice and is warm from round 1. That is exactly the mechanism #141
+diagnosed, and it also explains two nulls that looked contradictory: C row blocking was neutral
+(it reuses `xh`, which was never the stall) and residency bought only 9.3 % here (at 6 KB the
+cache already provides residency, so the bench cannot see the benefit that a 37 KB sweep needs).
+
+**Consequence for the last open candidate.** The handwritten-asm idea was priced at -12 % of the
+phase from instruction counts. Against the *warm* kernel that ceiling is real but small (the
+measured delivery bound is 9.3 %, and the asm cannot move the weights either). Against the *field*
+number the phase is 4.3x above the kernel's own warm cost, so the addressable share is delivery,
+not issue - and delivery is fixed by residency, which needs ~37 KB of internal RAM against 15,215
+B free. So: do not write the phi assembly. If the owner ever accepts the assertion-level change
+(run #293, +8,248 B) the phi re-price should be a *residency* experiment - stage the layer's 24
+rows, or shrink the per-token phi footprint - and the target is the 4.3x gap, not 12 %.
+
+Caveats on the record: the field figure comes from a profiled image (timers included, `mhc_phi4`
+also bracketing pointer math) and the bench figure is a `min` over rounds on a deliberately warm
+slice, so the ratio is an upper bound on the gap, not a clean measurement of it. The honest next
+measurement is the same four modes at the *real* 24-row x 3-tensor sweep, warm versus cold, which
+needs a kbench build (see the harness fact above on why `NEEDLE_KBENCH=ON` does not currently
+build).

@@ -1,0 +1,23 @@
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 01e32b0..22b34e4 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -61,7 +61,17 @@ static float sigmoidf_(float x)
+  * two divisions keep their scalar form, and `nd_expf_pair` itself falls back to two
+  * scalar calls outside the range where its interleaved chain is exact.
+  */
+-static inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)
++/* Experiment 22D: forced inline, and the reason is run #333's finding rather than a
++ * hunch. `static inline` here was a request, not a decision: GCC kept sigmoidf_pair as
++ * a real function at 0x4200ceb4 - in FLASH, while its two hot callers silu_rows and
++ * agate_rows are in IRAM - so the MLP's gated stage and the attention output gate paid
++ * an IRAM-to-flash call for every pair of elements, ~3,600 times per token. That is the
++ * same category of cost that made the handwritten 4-bit phi kernel worth +0.365 %: a
++ * call inside a hot streaming loop, removed without changing one arithmetic operation.
++ * Inlining is semantically transparent, so bit-exactness is by construction (and the
++ * pair's branch conditions and each element's exponential argument are unchanged). */
++__attribute__((always_inline)) static inline void
++sigmoidf_pair(float x0, float x1, float *y0, float *y1)
+ {
+     if ((x0 >= 0.0f) == (x1 >= 0.0f)) {
+         float e0, e1;

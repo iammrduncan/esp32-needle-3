@@ -1,0 +1,93 @@
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 01e32b0..c411b40 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -240,6 +240,42 @@ static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
+     }
+ }
+ 
++
++/* ---- temporary screen (run #299): how much logf work is actually skippable? ----
++ * Two candidate mechanisms, both bit-exact by construction: (a) the banked
++ * `sum == 1.0f` skip, and (b) a memo keyed on the EXACT bits of `sum` - logf is a
++ * pure function, so identical input bits guarantee identical output bits. This
++ * block is a measurement, not a design: it is reverted, not shipped. */
++#ifdef ND_SINK_STATS
++#include <stdio.h>
++#include <string.h>
++static struct { unsigned key; int used; } g_memo[8];
++static unsigned long g_calls, g_one, g_memo_hit, g_exp_tot, g_exp_zero;
++static unsigned g_dist[8192]; static unsigned g_dist_n;
++static void sink_stat(float sum, int zero_exps)
++{
++    unsigned k;
++    memcpy(&k, &sum, 4);
++    g_calls++;
++    g_exp_tot += 4; g_exp_zero += (unsigned)zero_exps;
++    if (sum == 1.0f) g_one++;
++    { unsigned slot = (unsigned)(((unsigned long)k * 2654435761UL) >> 29) & 7U;
++      if (g_memo[slot].used && g_memo[slot].key == k) g_memo_hit++;
++      else { g_memo[slot].key = k; g_memo[slot].used = 1; } }
++    { unsigned i; for (i = 0; i < g_dist_n; i++) if (g_dist[i] == k) break;
++      if (i == g_dist_n && g_dist_n < 8192) g_dist[g_dist_n++] = k; }
++}
++__attribute__((destructor)) static void sink_stat_dump(void)
++{
++    fprintf(stderr, "SINKSTAT calls=%lu sum_eq_1=%lu memo_hit=%lu distinct=%u "
++                    "exp_terms=%lu exp_d_zero=%lu\n",
++            g_calls, g_one, g_memo_hit, g_dist_n, g_exp_tot, g_exp_zero);
++}
++#define SINK_STAT(sum, z) sink_stat((sum), (z))
++#else
++#define SINK_STAT(sum, z) ((void)0)
++#endif
++
+ /* Doubly-stochastic normalisation of a lanes x lanes matrix, in log space. */
+ static void sinkhorn(float *a, uint32_t n)
+ {
+@@ -249,6 +285,9 @@ static void sinkhorn(float *a, uint32_t n)
+     for (it = 0; it < ND_SINKHORN; it++) {
+         for (i = 0; i < n; i++) {           /* rows */
+             float mx = a[i * n];
++#ifdef ND_SINK_STATS
++            int nz = 0;
++#endif
+             float sum = 0.0f;
+             for (j = 1; j < n; j++)
+                 if (a[i * n + j] > mx) mx = a[i * n + j];
+@@ -264,9 +303,13 @@ static void sinkhorn(float *a, uint32_t n)
+                  * move. Verified bit-identical to the shipped loop over 3.2 M
+                  * elements in `.auto/sinkzero/test.c`. */
+                 float d = a[i * n + j] - mx;
++#ifdef ND_SINK_STATS
++                nz += (d == 0.0f);
++#endif
+                 sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+             }
+             {
++                SINK_STAT(sum, nz);
+                 float lse = mx + logf(sum);
+                 for (j = 0; j < n; j++)
+                     a[i * n + j] -= lse;
+@@ -274,14 +317,21 @@ static void sinkhorn(float *a, uint32_t n)
+         }
+         for (j = 0; j < n; j++) {           /* columns */
+             float mx = a[j];
++#ifdef ND_SINK_STATS
++            int nz = 0;
++#endif
+             float sum = 0.0f;
+             for (i = 1; i < n; i++)
+                 if (a[i * n + j] > mx) mx = a[i * n + j];
+             for (i = 0; i < n; i++) {
+                 float d = a[i * n + j] - mx;   /* same exact-zero shortcut */
++#ifdef ND_SINK_STATS
++                nz += (d == 0.0f);
++#endif
+                 sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+             }
+             {
++                SINK_STAT(sum, nz);
+                 float lse = mx + logf(sum);
+                 for (i = 0; i < n; i++)
+                     a[i * n + j] -= lse;

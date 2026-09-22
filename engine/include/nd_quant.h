@@ -252,6 +252,27 @@ void nd_lut2_rows_tie1m(void *vc, uint32_t r0, uint32_t r1);
  * touch nd_f16_slow's subnormal/inf path. */
 int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1);
 
+/* Context for the handwritten 4-bit row walker in engine/src/gemv4_tie728.S,
+ * which hard-codes these offsets. C resolves every cursor - packed0/norms0/y0 are
+ * already stepped to the first row of the split and rowbytes/normstep step them
+ * on - so the kernel body needs no integer multiply, only adds. */
+typedef struct {
+    const uint8_t  *packed0;
+    const uint16_t *norms0;
+    const float    *xh, *cb;
+    float          *y0;
+    uint32_t        ngroup, g, rowbytes, normstep, nrows;
+} nd_gemv4_ctx;
+
+void nd_gemv4_rows_tie1(void *vc);
+
+/* The 4-bit kernel is specialised to group 128 (16 index words and a 512-byte xh
+ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
+ * range may touch nd_f16_slow's path - the same restriction nd_lut2_asm_ok()
+ * applies. bits must be 4: this body reads two nibbles per 32-bit word. */
+int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
+                    const uint16_t *norms);
+
 /* A quad table (one byte -> one lookup -> four weights) was tried and removed:
  * it issues fewer instructions but forces group-outer iteration, which uses
  * only 32 bytes of every 64-byte cache line and measured 38% slower on the

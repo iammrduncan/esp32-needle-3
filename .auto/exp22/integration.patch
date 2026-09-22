@@ -1,0 +1,216 @@
+diff --git a/.auto/exp22/kbench_phi22.c b/.auto/exp22/kbench_phi22.c
+index eec942b..b3d1d58 100644
+--- a/.auto/exp22/kbench_phi22.c
++++ b/.auto/exp22/kbench_phi22.c
+@@ -124,7 +124,7 @@ int kbench_run(void)
+     nd_tensor              t;
+     uint32_t               out, in, g, ngroup, rowbytes, nrows_slice, nlayers;
+     uint8_t               *blob_ps = NULL;
+-    float                 *xh = NULL, *xsrc = NULL, *yref = NULL, *yas = NULL;
++    float                 *xh = NULL, *xsrc = NULL, *yref = NULL, *yas = NULL, *ycref = NULL;
+     const float           *cb;
+     const uint16_t        *norms;
+     int                    tidx[4], nt = 0, i, m, r, k;
+@@ -223,7 +223,8 @@ int kbench_run(void)
+         xsrc       = alloc_in((size_t)in * sizeof(float));
+         yref       = alloc_in((size_t)out * sizeof(float));
+         yas        = alloc_in((size_t)out * sizeof(float));
+-        if (!blob_ps || !xh || !xsrc || !yref || !yas) {
++        ycref      = alloc_in((size_t)out * sizeof(float));
++        if (!blob_ps || !xh || !xsrc || !yref || !yas || !ycref) {
+             printf("KB FAIL reason=alloc tensor=%d blob=%u internal_free=%u\n",
+                    tidx[i], (unsigned)(out * rowbytes),
+                    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+@@ -250,6 +251,23 @@ int kbench_run(void)
+         /* Reference rows from the SHIPPING kernel, layer-0 slice. */
+         nd_cq_gemv_rows(&s_c, &t, blob_ps, xh, 0, nrows_slice, yref);
+ 
++        /* The integrated kernel vs the C walker it replaces, same operands. */
++        kb_c_ref(blob_ps, norms, xh, cb, ycref, nrows_slice, ngroup, g, rowbytes);
++        {
++            uint32_t rr; int mm = 0; float ma = 0.0f, fr = 0.0f, fc = 0.0f;
++            for (rr = 0; rr < nrows_slice; rr++) {
++                float d = yref[rr] - ycref[rr];
++                if (d < 0.0f) d = -d;
++                if (d > ma) ma = d;
++                if (memcmp(&yref[rr], &ycref[rr], sizeof(float))) {
++                    if (!mm) { fr = yref[rr]; fc = ycref[rr]; }
++                    mm++;
++                }
++            }
++            printf("KB phi22 int%d asm_vs_c_mism=%u maxabs=%.3e first %.7g vs %.7g\n",
++                   i, (unsigned)mm, (double)ma, (double)fr, (double)fc);
++        }
++
+         /* Bit-exactness first, for all three asm variants. On a mismatch print
+          * the FIRST pair of values, not just a count: whether the answer is off
+          * by 1 ULP (fma vs mul-then-add) or by 30 % (wrong operand) decides what
+diff --git a/engine/include/nd_quant.h b/engine/include/nd_quant.h
+index 4c9cf85..e07aca3 100644
+--- a/engine/include/nd_quant.h
++++ b/engine/include/nd_quant.h
+@@ -252,6 +252,27 @@ void nd_lut2_rows_tie1m(void *vc, uint32_t r0, uint32_t r1);
+  * touch nd_f16_slow's subnormal/inf path. */
+ int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1);
+ 
++/* Context for the handwritten 4-bit row walker in engine/src/gemv4_tie728.S,
++ * which hard-codes these offsets. C resolves every cursor - packed0/norms0/y0 are
++ * already stepped to the first row of the split and rowbytes/normstep step them
++ * on - so the kernel body needs no integer multiply, only adds. */
++typedef struct {
++    const uint8_t  *packed0;
++    const uint16_t *norms0;
++    const float    *xh, *cb;
++    float          *y0;
++    uint32_t        ngroup, g, rowbytes, normstep, nrows;
++} nd_gemv4_ctx;
++
++void nd_gemv4_rows_tie1(void *vc);
++
++/* The 4-bit kernel is specialised to group 128 (16 index words and a 512-byte xh
++ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
++ * range may touch nd_f16_slow's path - the same restriction nd_lut2_asm_ok()
++ * applies. bits must be 4: this body reads two nibbles per 32-bit word. */
++int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
++                    const uint16_t *norms);
++
+ /* A quad table (one byte -> one lookup -> four weights) was tried and removed:
+  * it issues fewer instructions but forces group-outer iteration, which uses
+  * only 32 bytes of every 64-byte cache line and measured 38% slower on the
+diff --git a/engine/src/nd_quant.c b/engine/src/nd_quant.c
+index 2c2918c..967c780 100644
+--- a/engine/src/nd_quant.c
++++ b/engine/src/nd_quant.c
+@@ -222,6 +222,87 @@ static ND_HOT void gemv_rows_offset(void *vc, uint32_t i0, uint32_t i1)
+     }
+ }
+ 
++#if ND_GEMV4_ASM
++/* The 4-bit kernel is specialised to group 128 (16 index words, 512-byte xh
++ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
++ * range may touch nd_f16_slow's subnormal/inf path - the same restriction
++ * nd_lut2_asm_ok() applies. bits must be 4: the body reads two nibbles per word. */
++int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
++                    const uint16_t *norms)
++{
++    uint32_t i, n = ngroup * rows;
++
++    if (bits != 4u || g != 128u || ngroup == 0u || rows == 0u)
++        return 0;
++    for (i = 0; i < n; i++) {
++        uint32_t e = ((const uint16_t *)norms)[i] >> 10 & 0x1fu;
++        if (e == 0u || e == 31u)
++            return 0;
++    }
++    return 1;
++}
++
++/* One split of a 4-bit projection through the handwritten row walker. All the
++ * cursor arithmetic the C walker does per row is resolved here once, which is why
++ * the kernel body itself only adds. */
++static void gemv_rows_offset_asm(void *vc, uint32_t i0, uint32_t i1)
++{
++    const gemv_ctx *c = (const gemv_ctx *)vc;
++    nd_gemv4_ctx    a;
++    uint32_t        r0 = c->base + i0;
++
++    a.packed0  = c->packed + (size_t)r0 * c->rowbytes;
++    a.norms0   = c->norms + (size_t)r0 * c->ngroup;
++    a.xh       = c->xh;
++    a.cb       = c->cb;
++    a.y0       = c->y + i0;
++    a.ngroup   = c->ngroup;
++    a.g        = c->g;
++    a.rowbytes = c->rowbytes;
++    a.normstep = c->ngroup * 2u;
++    a.nrows    = i1 - i0;
++    nd_gemv4_rows_tie1(&a);
++}
++
++/* nd_gemv4_asm_ok() walks the tensor's norms and a projection runs once per token,
++ * so the answer is remembered per (blob, rows) like the 2-bit kernel's. Four
++ * entries, because the mHC phi stage sweeps three tensors back to back and a
++ * single-entry cache would re-walk all three every token. A 2-bit tensor's answer
++ * is not cached - it is rejected on the spot and costs three compares. */
++static struct { const void *blob; uint32_t rows; int ok; } s_g4[4];
++static uint32_t s_g4_next;
++
++static int gemv4_asm_usable(const gemv_ctx *c, const void *blob, uint32_t rows)
++{
++    uint32_t i;
++    int      ok;
++
++    for (i = 0; i < 4; i++)
++        if (s_g4[i].blob == blob && s_g4[i].rows == rows)
++            return s_g4[i].ok;
++    if (c->bits != 4u)
++        return 0;
++    ok = nd_gemv4_asm_ok(c->bits, c->g, c->ngroup, rows, c->norms);
++    s_g4[s_g4_next].blob = blob;
++    s_g4[s_g4_next].rows = rows;
++    s_g4[s_g4_next].ok   = ok;
++    s_g4_next            = (s_g4_next + 1u) & 3u;
++    return ok;
++}
++
++static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
++{
++    return gemv4_asm_usable(c, blob, rows) ? gemv_rows_offset_asm
++                                          : gemv_rows_offset;
++}
++#else
++static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
++{
++    (void)c; (void)blob; (void)rows;
++    return gemv_rows_offset;
++}
++#endif
++
+ ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *blob,
+                      const float *xh, uint32_t r0, uint32_t nrows, float *y)
+ {
+@@ -242,11 +323,12 @@ ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *bl
+     ctx.rowbytes = rowbytes;
+     ctx.base     = r0;
+ 
+-    nd_parallel_rows(gemv_rows_offset, &ctx, nrows);
++    nd_parallel_rows(gemv4_pick(&ctx, blob, nrows), &ctx, nrows);
+ }
+ 
+ 
+ 
++
+ static ND_HOT void gemv_rows_generic(void *vc, uint32_t r0, uint32_t r1)
+ {
+     const gemv_ctx *c = (const gemv_ctx *)vc;
+diff --git a/esp32/components/needle/CMakeLists.txt b/esp32/components/needle/CMakeLists.txt
+index 24c9e65..be991be 100644
+--- a/esp32/components/needle/CMakeLists.txt
++++ b/esp32/components/needle/CMakeLists.txt
+@@ -27,6 +27,13 @@ endif()
+ # it is the default. The microbenchmark still turns it on for its own A/B.
+ option(NEEDLE_LUT2_ASM "Use the handwritten TIE728 CQ2 row walker" ON)
+ 
++# Experiment 22: the handwritten CQ 4-bit row walker (the mHC phi projections).
++# Measured on device against the C walker on the three real phi tensors, min of 25
++# rounds: 5.647 vs 6.338 cycles per weight (+11.6 %) and bit-exact row for row. The
++# win is call structure, not instruction count - dot_group is a call per group in
++# the C path - so read the header of engine/src/gemv4_tie728.S before touching it.
++option(NEEDLE_GEMV4_ASM "Use the handwritten CQ 4-bit row walker" ON)
++
+ option(NEEDLE_KBENCH_ASM "Assemble the handwritten TIE728 CQ2 kernels for the bench" OFF)
+ if(NEEDLE_LUT2_ASM OR NEEDLE_KBENCH_ASM)
+     target_sources(${COMPONENT_LIB} PRIVATE "../../../engine/src/lut2_tie728.S")
+@@ -34,6 +41,12 @@ endif()
+ if(NEEDLE_LUT2_ASM)
+     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_LUT2_ASM=1)
+ endif()
++if(NEEDLE_GEMV4_ASM OR NEEDLE_KBENCH_ASM)
++    target_sources(${COMPONENT_LIB} PRIVATE "../../../engine/src/gemv4_tie728.S")
++endif()
++if(NEEDLE_GEMV4_ASM)
++    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_GEMV4_ASM=1)
++endif()
+ if(NEEDLE_KBENCH_ASM)
+     target_compile_definitions(${COMPONENT_LIB} PUBLIC ND_KBENCH_ASM=1)
+ endif()

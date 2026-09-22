@@ -8,6 +8,37 @@ repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
 ## OPERATOR REDIRECT -- 2026-09-22 -- overrides every later `NEXT`, `closed`, and stop note
 
+## THREE INDEPENDENT BOARD LANES -- OPERATOR DIRECTIVE 2026-09-22
+
+The owner supplied two additional boards to triple experimental throughput. The
+normal discovery topology is therefore **three different experiments at once**:
+
+- board 1 = candidate/experiment A;
+- board 2 = candidate/experiment B;
+- board 3 = candidate/experiment C.
+
+Do **not** routinely spend board 1 on an unchanged live control, and do not put
+the same candidate on boards 2 and 3 during discovery. Each board already has a
+pinned accepted-image baseline and the campaign has established negligible
+board drift. Compare a discovery result with that board's pinned baseline first.
+Only after a candidate clears the keep bar should a later batch cross over or
+repeat the winner on another board. While that confirmation runs, the remaining
+board(s) must continue screening new candidates whenever independent work is
+ready.
+
+A contemporaneous control or duplicate candidate is an exception reserved for
+a result whose interpretation genuinely depends on temperature, board identity,
+or observed noise; record that reason before taking the board. It is not the
+default batch shape. Log every distinct candidate and A/B result separately,
+even when several belong to one broad research theme. Verify launched jobs by
+checking live processes and non-empty logs within 10 seconds; a printed PID is
+not evidence that a board is working.
+
+Immediate three-lane assignment for the current 4-bit work: integrated plain-
+load GEMV4 assembly, forced-inline C `dot_group`, and the wide-load register-
+fill-order/correctness probe or corrected wide-load kernel. Do not allocate an
+unchanged-control lane for this discovery batch.
+
 The accepted shipping image is **5.0117 decode tok/s** on the frozen workload, with 17/17 device
 and 16/16 host byte-exact output, token delta 0, fidelity 5.341e-05, top1 10/10, extended 4.9390,
 think 3.93, prefill 5.2867, min case 4.79, and 15,215 bytes internal free. The speed crossing came
@@ -153,10 +184,12 @@ are hypotheses, not substitutes for these concrete screens.
    disposition in `.auto/ideas.md` and `.auto/log.jsonl`: hypothesis, implementation/variant,
    image hashes and board assignments, isolated timing where requested, full-model delta, quality,
    memory, and accept/reject reason. Then immediately advance to the next experiment.
-3. Use all three boards concurrently whenever images are ready: board 1 control, boards 2 and 3
-   two candidate variants or duplicate candidates. For a plausible winner, repeat with assignments
-   swapped. Fresh-configure every compile-time variant and verify `compile_commands.json` plus
-   image hashes before flashing.
+3. Use all three boards concurrently whenever images are ready: boards 1, 2, and 3 run three
+   distinct candidate experiments during discovery. Compare against the pinned per-board accepted
+   baselines; do not consume a routine lane on an unchanged control or duplicate candidate. For a
+   plausible winner, confirm later with an assignment swap/crossover while unused lanes continue
+   new experiments. Fresh-configure every compile-time variant and verify `compile_commands.json`
+   plus image hashes before flashing.
 4. Screen cheaply with real captured inputs and a device microbenchmark. Run the full device suite
    only for a correct, plausibly faster screen. A shipping candidate must retain 14/14 device and
    13/13 host byte-exact output, token delta 0, the existing fidelity threshold, top1 10/10, and all

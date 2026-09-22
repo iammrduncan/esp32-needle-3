@@ -222,6 +222,87 @@ static ND_HOT void gemv_rows_offset(void *vc, uint32_t i0, uint32_t i1)
     }
 }
 
+#if ND_GEMV4_ASM
+/* The 4-bit kernel is specialised to group 128 (16 index words, 512-byte xh
+ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
+ * range may touch nd_f16_slow's subnormal/inf path - the same restriction
+ * nd_lut2_asm_ok() applies. bits must be 4: the body reads two nibbles per word. */
+int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
+                    const uint16_t *norms)
+{
+    uint32_t i, n = ngroup * rows;
+
+    if (bits != 4u || g != 128u || ngroup == 0u || rows == 0u)
+        return 0;
+    for (i = 0; i < n; i++) {
+        uint32_t e = ((const uint16_t *)norms)[i] >> 10 & 0x1fu;
+        if (e == 0u || e == 31u)
+            return 0;
+    }
+    return 1;
+}
+
+/* One split of a 4-bit projection through the handwritten row walker. All the
+ * cursor arithmetic the C walker does per row is resolved here once, which is why
+ * the kernel body itself only adds. */
+static void gemv_rows_offset_asm(void *vc, uint32_t i0, uint32_t i1)
+{
+    const gemv_ctx *c = (const gemv_ctx *)vc;
+    nd_gemv4_ctx    a;
+    uint32_t        r0 = c->base + i0;
+
+    a.packed0  = c->packed + (size_t)r0 * c->rowbytes;
+    a.norms0   = c->norms + (size_t)r0 * c->ngroup;
+    a.xh       = c->xh;
+    a.cb       = c->cb;
+    a.y0       = c->y + i0;
+    a.ngroup   = c->ngroup;
+    a.g        = c->g;
+    a.rowbytes = c->rowbytes;
+    a.normstep = c->ngroup * 2u;
+    a.nrows    = i1 - i0;
+    nd_gemv4_rows_tie1(&a);
+}
+
+/* nd_gemv4_asm_ok() walks the tensor's norms and a projection runs once per token,
+ * so the answer is remembered per (blob, rows) like the 2-bit kernel's. Four
+ * entries, because the mHC phi stage sweeps three tensors back to back and a
+ * single-entry cache would re-walk all three every token. A 2-bit tensor's answer
+ * is not cached - it is rejected on the spot and costs three compares. */
+static struct { const void *blob; uint32_t rows; int ok; } s_g4[4];
+static uint32_t s_g4_next;
+
+static int gemv4_asm_usable(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    uint32_t i;
+    int      ok;
+
+    for (i = 0; i < 4; i++)
+        if (s_g4[i].blob == blob && s_g4[i].rows == rows)
+            return s_g4[i].ok;
+    if (c->bits != 4u)
+        return 0;
+    ok = nd_gemv4_asm_ok(c->bits, c->g, c->ngroup, rows, c->norms);
+    s_g4[s_g4_next].blob = blob;
+    s_g4[s_g4_next].rows = rows;
+    s_g4[s_g4_next].ok   = ok;
+    s_g4_next            = (s_g4_next + 1u) & 3u;
+    return ok;
+}
+
+static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    return gemv4_asm_usable(c, blob, rows) ? gemv_rows_offset_asm
+                                          : gemv_rows_offset;
+}
+#else
+static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    (void)c; (void)blob; (void)rows;
+    return gemv_rows_offset;
+}
+#endif
+
 ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *blob,
                      const float *xh, uint32_t r0, uint32_t nrows, float *y)
 {
@@ -242,8 +323,9 @@ ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *bl
     ctx.rowbytes = rowbytes;
     ctx.base     = r0;
 
-    nd_parallel_rows(gemv_rows_offset, &ctx, nrows);
+    nd_parallel_rows(gemv4_pick(&ctx, blob, nrows), &ctx, nrows);
 }
+
 
 
 

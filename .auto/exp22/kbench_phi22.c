@@ -116,6 +116,99 @@ static void *alloc_ps(size_t bytes)
                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 }
 
+/* rule #1 for the INTEGRATED kernel: it is reachable only through
+ * nd_cq_gemv_rows, which routes 4-bit tensors to engine/src/gemv4_tie728.S, so the
+ * "shipping" rows below are the asm's answer. Compare them against the C row
+ * walker copied verbatim from engine/src/nd_quant.c (gemv_rows_offset +
+ * dot_group, bits 4) over the same real rows, norms, codebook and activation:
+ * bit-exact or the candidate is dead. */
+static float kb_dot_group(const uint8_t *row, size_t bitpos, uint32_t bits,
+                          uint32_t g, const float *cb, const float *x)
+{
+    float s0 = 0.f, s1 = 0.f, s2 = 0.f, s3 = 0.f, acc;
+    uint32_t j;
+
+    (void)x;
+    for (j = 0; j < g; j += 4) {
+        size_t   b  = bitpos + (size_t)j * bits;
+        uint32_t i  = (uint32_t)(b >> 3);
+        uint32_t sh = (uint32_t)(b & 7u);
+        uint32_t w  = (uint32_t)row[i] >> sh;
+        if (sh + bits > 8u) w |= (uint32_t)row[i + 1] << (8u - sh);
+        s0 += cb[w & 15u];
+        s1 += cb[(w >> bits) & 15u];
+        s2 += cb[(w >> (2u * bits)) & 15u];
+        s3 += cb[(w >> (3u * bits)) & 15u];
+    }
+    acc = (s0 + s1) + (s2 + s3);
+    return acc;
+}
+
+static void kb_c_ref(const uint8_t *packed, const uint16_t *norms,
+                     const float *xh, const float *cb, float *y, uint32_t rows,
+                     uint32_t ngroup, uint32_t g, uint32_t rowbytes)
+{
+    uint32_t r, gi;
+
+    for (r = 0; r < rows; r++) {
+        const uint8_t  *row = packed + (size_t)r * rowbytes;
+        const uint16_t *nrm = norms + (size_t)r * ngroup;
+        float           acc = 0.0f;
+
+        for (gi = 0; gi < ngroup; gi++)
+            acc += nd_f16(nrm[gi]) *
+                   kb_dot_group(row, (size_t)gi * g * 4u, 4u, g, cb,
+                                xh + (size_t)gi * g);
+        y[r] = acc;
+    }
+}
+
+/* Fill-order probe for the TIE wide loads (owner lane C, 2026-09-22).
+ *
+ * Run #332 measured ee.ldf.128.ip and ee.ldf.64.ip at +25 % / +21 % but BOTH
+ * failed the known-answer probe (63.0 against exactly 64.0): one contribution per
+ * eight-float word goes missing. A sum cannot tell a DROPPED lane from a
+ * PERMUTED one, so probe twice on hand-computable inputs, one group, norm 1.0:
+ *
+ *   A  nibble k of each index word = k (row bytes 10 32 54 76), xh[j] = 2^(j%8),
+ *      cb[i] = i.  C pairs nibble k with xh[k], so each index word is
+ *      sum k*2^k (k=0..7) = 1534 and a group is 16 words = 24608 - exactly, every
+ *      intermediate being a small integer. A permuted register list gives a
+ *      different total that identifies the permutation.
+ *   B  every nibble = 1, xh[j] = 2^(j%8), cb[i] = 1. Each word is then
+ *      sum 2^j = 255 and a group is 4080, INDEPENDENT of any permutation, so a
+ *      shortfall of exactly 16*2^k names the dropped lane.
+ *
+ * A as expected => the wide form is correct and its speed is real.
+ * A off, B as expected => permutation only (fixable by reordering the register
+ * list). B off => a lane is dropped, so that speed was never real.
+ */
+static void kb_fill_probe(void)
+{
+    static uint8_t  urow[64] __attribute__((aligned(16)));
+    static float    uxh[128] __attribute__((aligned(16)));
+    static float    ucb[16];
+    static uint16_t unrm[1];
+    int i, m;
+
+    for (i = 0; i < 128; i++) uxh[i] = (float)(1u << (i & 7));
+    for (i = 0; i < 16; i++) ucb[i] = (float)i;
+    for (i = 0; i < 16; i++) {
+        urow[i * 4 + 0] = 0x10; urow[i * 4 + 1] = 0x32;
+        urow[i * 4 + 2] = 0x54; urow[i * 4 + 3] = 0x76;
+    }
+    unrm[0] = 0x3C00u;                       /* fp16 1.0 */
+    for (m = 1; m <= 3; m++) {
+        float a = run_asm(m, urow, ucb, uxh, unrm, 1u, 128u);
+        float b;
+        for (i = 0; i < 16; i++) ucb[i] = 1.0f;
+        for (i = 0; i < 64; i++) urow[i] = 0x11;
+        b = run_asm(m, urow, ucb, uxh, unrm, 1u, 128u);
+        printf("KB phi22 fill mode=%d A=%.1f/exp24608 dA=%.1f B=%.1f/exp4080 dB=%.1f\n",
+               m, (double)a, (double)(24608.0f - a), (double)b, (double)(4080.0f - b));
+    }
+}
+
 int kbench_run(void)
 {
     const esp_partition_t *part;
@@ -124,7 +217,7 @@ int kbench_run(void)
     nd_tensor              t;
     uint32_t               out, in, g, ngroup, rowbytes, nrows_slice, nlayers;
     uint8_t               *blob_ps = NULL;
-    float                 *xh = NULL, *xsrc = NULL, *yref = NULL, *yas = NULL;
+    float                 *xh = NULL, *xsrc = NULL, *yref = NULL, *yas = NULL, *ycref = NULL;
     const float           *cb;
     const uint16_t        *norms;
     int                    tidx[4], nt = 0, i, m, r, k;
@@ -223,7 +316,8 @@ int kbench_run(void)
         xsrc       = alloc_in((size_t)in * sizeof(float));
         yref       = alloc_in((size_t)out * sizeof(float));
         yas        = alloc_in((size_t)out * sizeof(float));
-        if (!blob_ps || !xh || !xsrc || !yref || !yas) {
+        ycref      = alloc_in((size_t)out * sizeof(float));
+        if (!blob_ps || !xh || !xsrc || !yref || !yas || !ycref) {
             printf("KB FAIL reason=alloc tensor=%d blob=%u internal_free=%u\n",
                    tidx[i], (unsigned)(out * rowbytes),
                    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -249,6 +343,23 @@ int kbench_run(void)
 
         /* Reference rows from the SHIPPING kernel, layer-0 slice. */
         nd_cq_gemv_rows(&s_c, &t, blob_ps, xh, 0, nrows_slice, yref);
+
+        /* The integrated kernel vs the C walker it replaces, same operands. */
+        kb_c_ref(blob_ps, norms, xh, cb, ycref, nrows_slice, ngroup, g, rowbytes);
+        {
+            uint32_t rr; int mm = 0; float ma = 0.0f, fr = 0.0f, fc = 0.0f;
+            for (rr = 0; rr < nrows_slice; rr++) {
+                float d = yref[rr] - ycref[rr];
+                if (d < 0.0f) d = -d;
+                if (d > ma) ma = d;
+                if (memcmp(&yref[rr], &ycref[rr], sizeof(float))) {
+                    if (!mm) { fr = yref[rr]; fc = ycref[rr]; }
+                    mm++;
+                }
+            }
+            printf("KB phi22 int%d asm_vs_c_mism=%u maxabs=%.3e first %.7g vs %.7g\n",
+                   i, (unsigned)mm, (double)ma, (double)fr, (double)fc);
+        }
 
         /* Bit-exactness first, for all three asm variants. On a mismatch print
          * the FIRST pair of values, not just a count: whether the answer is off
@@ -337,6 +448,7 @@ int kbench_run(void)
         blob_ps = NULL; xh = NULL; xsrc = NULL; yref = NULL; yas = NULL;
     }
 
+    kb_fill_probe();
     printf("KB P22 SUMMARY exact_mismatch=%u rows_checked=%u slow_norm=%u\n",
            (unsigned)mism, (unsigned)rows_checked, (unsigned)slow_norm);
     printf("KB MEM internal_free=%u psram_free=%u\n",

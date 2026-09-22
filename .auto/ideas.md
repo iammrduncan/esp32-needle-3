@@ -2190,3 +2190,47 @@ above the plain form is not available by this route, and 22A ships the plain for
 - The gate `nd_gemv4_asm_ok` walks the norms once per (blob, rows) into a 4-entry cache; a
   fifth 4-bit tensor per token would re-walk. Currently phi's three tensors are the only
   4-bit traffic (`nd_cq_gemv_rows` has exactly three call sites), so do not "generalise" it.
+
+## Experiment 23 CLOSED: there is no `div.s` on this core, and it does not matter (run #338)
+
+The audit in run #337 found a fact that looked like several percent: the accepted
+image contains ZERO `div.s` instructions, so every one of the ~8-10k single-precision
+divisions per decode token (two per sigmoid pair alone) is a call to the ROM
+software divider `__divsf3` at 0x40002274. Division is also the one arithmetic
+transformation that is *admissible* under a byte-exact gate, because IEEE-754
+specifies correct rounding - there is exactly one right answer, so a faster
+correctly-rounded divider returns identical bits.
+
+Built exactly that (`.auto/divf3/nd_div.h`, kept): magic-subtract inverse, three
+Newton refinements in hardware fma, one quotient multiply, exact residual,
+Markstein correction, behind an integer-only guard (both operands normal, quotient
+exponent inside the normal range) with everything else falling through to `a / b`
+so subnormals/zeros/infinities/NaN payloads keep the current implementation
+bit-for-bit. Verified against the host's correctly-rounded hardware divider over
+**1,572,864 pairs in six classes with 0 mismatches** - and the test `#include`s the
+shipping header rather than a copy, which is the only reason that number means
+anything. All 15 engine division sites converted: host 16/16 byte-exact, fidelity
+5.341e-05 unchanged, device 17/17 byte-exact. Pure speed verdict, and it lost:
+**decode 5.0017 vs 5.0300 = -0.56 %**, boot bench down too.
+
+Why, measured in the same kbench run (board 2, min of 25 rounds, 256 rotated
+real-shaped operand pairs, float-register barrier, both variants behind a noinline
+function so call overhead cancels): **rom_divsf3 = 7.95 cycles/divide,
+newton_markstein = 30.92, a bare multiply as the loop floor = 2.92, bit_mismatch =
+0.** The prediction from those numbers (-0.49 %) matched the measurement (-0.56 %).
+
+Read the floor column, not the candidate column: 7.95 - 2.92 = ~5 net cycles for a
+software divide is FMA-chain territory, which means Espressif's ROM divider is
+almost certainly hand-written TIE reciprocal-refinement - the same algorithm I
+wrote, without the float<->integer memory round trips (`nd_f2u`/`nd_u2f`) that runs
+#230/#292 already proved are expensive on this core. Ceiling for any future
+handwritten divider: ~5 cycles x 10k divides = 0.2 ms = **+0.1 %, below the keep bar
+before risk is even priced**. Division is closed.
+
+Method worth keeping: this closure cost one host test and one kbench image. The
+audit that produced the hypothesis was `objdump` plus IDF's own
+`esp_rom/esp32s3/*.pro` symbol maps (memcpy = 0x400011e8, __divsf3 = 0x40002274),
+which took minutes and produced a number the campaign had never had. An unusual
+instruction-count observation is worth one cheap measurement before it is worth a
+design - here the premise ("software divide must be ~150-400 cycles") died
+immediately, and the campaign's remaining time stays on candidates.

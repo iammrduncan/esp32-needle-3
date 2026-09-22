@@ -1599,3 +1599,60 @@ route-phase gap) turned out to be a comparison between two things measuring diff
 core-cycles against wall-cycles, and the phase map's overlapping timers were already documented as
 not summable. A 4.3x discrepancy in a firmware whose every other phase agrees to 9 % is far more
 likely to be my arithmetic than the model's.
+
+## MEASURED, KEPT: the +105 % generalises to unseen prompts, and the golden gate had four silent-pass holes (run #296)
+
+Two questions, both answered with measurement, no engine change (git diff over `engine/ esp32/
+host/ tools/ model/` = 0 lines, so `decode_tps` stays 5.0117 by construction).
+
+**1. Is the `extended` set still held-out?** It has been watched for 200+ runs, which is exactly how a
+"held-out" set becomes in-distribution. Added three shapes the suite had never measured - no-tool
+free text, a short translation route, a three-field batch - all short (the firmware request reader
+truncates silently at `ND_LINE_MAX-1` = 271 bytes, run #155, and `request_timeout` is 600 s, so
+#155's timeout failure mode cannot recur at these lengths). `primary`, `think` and `probe_ids`
+verified identical to git before and after; the `prompts.json` diff is additions-only.
+
+| unseen prompt | device tps | what it exercised |
+|---|---|---|
+| "Tell me a joke about caching" | 5.080 | first no-tool free-text path |
+| "Translate good morning into German" | 4.790 | first *short* route case |
+| 3-field batch (heap+sampling+timer+status) | 5.020 | first multi-call case (5 calls, 67 tokens) |
+
+Primary is 5.0117 and its own worst case 4.79, so the unseen prompts land **inside the frozen band**:
+the speed work is not prompt-specific and there is no overfitting signature. `ext_decode_tps` is now
+4.9390 over 10 held-out cases (was 4.9286 over 7) - a monitor widening, not a regression. Product
+observation for the owner, not a benchmark change: the chit-chat prompt makes the model emit
+`set_sampling_interval(seconds=120)` - a hallucinated call that is grammar-legal only because the
+schema has no no-op escape. Widening coverage is how that becomes visible at all.
+
+**2. Does the byte-exact gate check what it claims?** No - five findings, all in my own harness, all
+now fixed and tested (`.auto/test_bench_guards.py`):
+* `compare()` treats a case with **no golden entry as byte-exact** (`if ref is None: exact += 1`), so
+  a typo'd case id passes forever. It is what makes adding a case non-breaking, so it stays - but
+  `host_golden_missing`/`device_golden_missing` now report it, and it caught itself immediately
+  (missing=3 on the first widened run).
+* The "refuse to save a partial golden" guard only ran when the golden was **empty**, so
+  `AUTO_GROUPS=primary AUTO_SAVE=1` would have overwritten the 14-case baseline with 6 cases and the
+  other 8 would then have compared against nothing - silently destroying the quality baseline. The
+  full-groups requirement now gates *every* save.
+* That guard also called `measured_groups_full()` with **no argument** (TypeError if it ever fired).
+* `CASES` was built with `isinstance(v, list)`, which also swallowed **`probe_ids`**, so the
+  full-groups predicate could never be true and **every golden save was being refused**.
+* `AUTO_SAVE=1` was documented in `measure.sh`'s own header but **never read**: the save was gated on
+  `log.jsonl` having <= 1 line, so the device golden could not be updated after iteration 1.
+
+Re-baselined with the full group set: 13/13 host and 14/14 **pre-existing** golden entries carried
+over **byte-identical**, additions only; final state 17/17 device + 16/16 host byte-exact with
+`golden_missing=0`, `token_delta` 0, fidelity 5.341e-05, top1 10/10, RAM unchanged.
+
+**3. A config idea closed before it cost a build:** the instruction cache cannot be widened. The S3
+Kconfig offers 16 B instruction lines only with a 16 KB cache, and 32 B otherwise; I-cache maximum is
+32 KB (current), 8-way. Data cache is already 64 KB / 8-way / 64 B line. So the cache-config family
+that produced #238's +11.9 % is closed *by the Kconfig*, not by assumption - and several closure
+notes here were carrying a stale "32 KB data cache" claim, corrected above.
+
+**Next lens this suggests, and it is cheap:** a gate that cannot fail is worthless, and I have now
+proved one silently passes. Falsify the rest by mutation - break each guarded input deliberately in a
+scratch copy (edit one primary prompt, flip one constant in a hot kernel, reorder `probe_ids`) and
+confirm `checks.sh` / the fidelity gate / the frozen-input guard actually go red. Host-side only,
+~40 s each, no flash. Any gate that stays green is a bigger find than another 0.2 %.

@@ -25,8 +25,12 @@ from io import StringIO
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# Only the *case* groups. `isinstance(v, list)` alone also swallows `probe_ids`
+# (a list of ints), which made measured_groups_full() compare
+# {primary,extended,think} against a set that includes probe_ids - i.e. never true -
+# so every --save-golden was refused and the device golden could not be updated.
 CASES = {k: v for k, v in json.loads((ROOT / '.auto/prompts.json').read_text()).items()
-         if isinstance(v, list)}
+         if isinstance(v, list) and v and isinstance(v[0], dict) and 'id' in v[0]}
 TOOLS = str(ROOT / 'tools/demo-tools.json')
 ROUTES = str(ROOT / 'tools/model-routes.json')
 ND_DUMP = os.environ.get('ND_DUMP', str(ROOT / 'host/build/nd_dump'))

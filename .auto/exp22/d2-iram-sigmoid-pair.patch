@@ -1,0 +1,10 @@
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@
+-static inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)
++/* Experiment 22D-sibling (lane B): keep the call, stop it crossing into flash.
++ * GCC kept sigmoidf_pair out of line at 0x4200ceb4 (flash-mapped) while its hot
++ * callers silu_rows/agate_rows live in IRAM, so every pair of elements paid an
++ * IRAM->flash call. This variant leaves the schedule alone and only moves the
++ * callee into IRAM, which is the cheap half of lane A's forced-inline change. */
++ND_HOT static inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)

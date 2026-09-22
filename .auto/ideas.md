@@ -1561,6 +1561,17 @@ so it measures *one core doing all the rows*. Normalising to core-cycles:
     bench:  6.41 warm, 7.00 cold  ->  agreement to within 9 %
 
 There was never a gap. The phase map's phi entry and the kernel's measured cost have always agreed;
+
+Two scope corrections found while checking this, both recorded because they change how the
+closure should read. The shipping data cache is **64 KB with a 64 B line**, not the 32 KB earlier
+notes assumed - run #238 widened it - so phi's 37 KB per-token working set *does* fit, and the
+measured 9.2 % cold penalty is precisely what "fits, but shares the cache with the rest of the
+token" costs. And the instruction cache is already at its ESP32-S3 maxima too (32 KB, 8-way, 32 B
+line), where the Kconfig offers no 64 B instruction line at all: the choice block lists 16 Bytes
+(gated on a 16 KB cache) and 32 Bytes only. So the cache-configuration family is closed by the
+Kconfig itself rather than by assumption, and there is no untested instruction-side knob - which is
+worth stating plainly, because #238's +11.9 % made the cache the most productive config family this
+campaign had and it is now provably exhausted.
 I had divided a one-core number by a two-core number and then compared it to an inferred "GEMV
 share" rather than to the measured phase.
 

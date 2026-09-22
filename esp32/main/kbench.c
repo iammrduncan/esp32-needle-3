@@ -21,12 +21,25 @@
  *            cache/DMA coherency, and the heap the double buffer costs
  *   EVT KBENCH_DONE
  */
+/* Experiment 15's GDMA double-buffer bench needs esp_cache.h and
+ * esp_async_memcpy.h, which the main component does not (and must not) require:
+ * an IDF component dependency belongs in idf_component_register's REQUIRES, and
+ * adding one for a closed diagnostic would move the shipping image. So the GDMA
+ * bench is compiled out by default; .auto/exp15/kbench.c.with_gdma_bench is the
+ * copy that ran it, and reproducing those numbers needs esp_mm esp_hw_support in
+ * PRIV_REQUIRES of a throwaway checkout. */
+#ifndef ND_KBENCH_GDMA
+#define ND_KBENCH_GDMA 0
+#endif
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#if ND_KBENCH_GDMA
 #include "esp_async_memcpy.h"
 #include "esp_cache.h"
+#endif
 #include "esp_cpu.h"
 #include "esp_heap_caps.h"
 #include "esp_partition.h"
@@ -82,8 +95,35 @@ static const kb_shape SHAPES[] = {
 #define IPC_TIE1  36.4f
 #define IPC_TIE2  36.6f
 
-typedef enum { KB_ISO = 0, KB_SPLIT, KB_FASTBLOB, KB_NMODES } kb_mode;
-static const char MODE_NAME[KB_NMODES][14] = { "isolated", "split", "blob_int" };
+/* Experiment 20 adds the cold modes. The warm modes answer "can the loop go
+ * faster if its operands are already in the cache"; the cold modes answer the
+ * question decode actually asks, because a decode token sweeps 3.59 MB of 2-bit
+ * weights through a 32 KiB cache and nothing is warm when it is read. Each cold
+ * round evicts the data cache with a 96 KiB PSRAM sweep before the timed pass,
+ * outside the cycle bracket.
+ *   cold_psram     blob in PSRAM, pair table in internal RAM  = shipping
+ *   cold_blob_int  the same blob copied to internal RAM       = weight residency
+ *   cold_tab_ps    the shipping blob, but the pair table in PSRAM = the ablation
+ *                  that prices the table residency the shipping build already
+ *                  gets for free (m->lut is ND_ALLOC_FAST = internal). */
+typedef enum { KB_ISO = 0, KB_SPLIT, KB_FASTBLOB, KB_COLD_PSRAM,
+               KB_COLD_INT, KB_COLD_TAB, KB_NMODES } kb_mode;
+static const char MODE_NAME[KB_NMODES][14] = {
+    "isolated", "split", "blob_int", "cold_psram", "cold_blob_int", "cold_tab_ps" };
+
+/* 96 KiB > 3x the 32 KiB data cache, so one sweep cannot leave anything useful
+ * behind. Summed into a volatile sink so the loads are real. */
+#define KB_THRASH_FLOATS 24576u
+static float *s_thrash;
+
+static void kb_thrash(void)
+{
+    volatile float sink = 0.0f;
+    uint32_t       i;
+
+    for (i = 0; i < KB_THRASH_FLOATS; i++)
+        sink += s_thrash[i];
+}
 
 typedef struct {
     const char *tag;
@@ -315,8 +355,8 @@ static void bench_shape(const kb_shape *sh)
     nd_tensor   t;
     const void *blob;
     uint8_t    *blob_p = NULL, *blob_i = NULL;
-    float      *xh, *lut, *yref, *ytmp;
-    nd_lut2_ctx cx, cxi;
+    float      *xh, *lut, *yref, *ytmp, *lut_p = NULL;
+    nd_lut2_ctx cx, cxi, cxt;
     uint32_t    in_pad, lutn, words, i, k, m;
     static uint32_t res[KB_NMODES][6][KB_ROUNDS];
     int         idx, fast_ok;
@@ -358,6 +398,12 @@ static void bench_shape(const kb_shape *sh)
         }
     }
 
+    /* The ablation side: the same table bytes in PSRAM, so the delta is the
+     * table's placement and nothing else. Skipped if PSRAM cannot spare it. */
+    if (s_thrash == NULL)
+        s_thrash = (float *)ND_ALLOC(sizeof(float) * KB_THRASH_FLOATS);
+    lut_p = (float *)ND_ALLOC(sizeof(float) * lutn);
+
     {                                   /* a prepared activation, no denormals */
         uint32_t s = 0x1234abcdu;
         uint32_t j;
@@ -368,9 +414,14 @@ static void bench_shape(const kb_shape *sh)
         }
     }
     nd_cq_lut_build(&s_c, xh, in_pad, lut);
+    if (lut_p)
+        memcpy(lut_p, lut, sizeof(float) * lutn);   /* after the build, or the
+                                                     * copy is uninitialised */
 
     nd_lut2_fill(&cx, &t, blob_p, lut, yref);
     nd_lut2_fill(&cxi, &t, fast_ok ? blob_i : blob_p, lut, yref);
+    if (lut_p)
+        nd_lut2_fill(&cxt, &t, blob_p, lut_p, yref);
 
     printf("KB CFG shape=%s idx=%d rows=%u in_pad=%u g=%u ngroup=%u "
            "rowbytes=%u blob=%u table=%u words=%u blob_int=%d asm_ok=%d "
@@ -385,6 +436,22 @@ static void bench_shape(const kb_shape *sh)
     nd_lut2_rows_c(&cx, 0, t.shape[0]);        /* cx.y == yref */
     for (k = 1; k < (uint32_t)s_nkern; k++)
         num_check(sh->tag, &s_kern[k], &cx, t.shape[0], yref, ytmp);
+
+    /* Experiment 20 step 1: residency must be transparent. yref is now the C
+     * walker over the PSRAM blob and the internal pair table; every registered
+     * kernel (the shipping nd_lut2_rows_tie1n among them) has to reproduce it
+     * bit-exactly from the *internal* blob copy, and the C walker has to
+     * reproduce it from a *PSRAM* copy of the table. A mismatch means the copy
+     * is not the same operand, and the residency number below would be void. */
+    if (fast_ok) {
+        char itag[32];
+
+        snprintf(itag, sizeof(itag), "%s/blob_int", sh->tag);
+        for (k = 1; k < (uint32_t)s_nkern; k++)
+            num_check(itag, &s_kern[k], &cxi, t.shape[0], yref, ytmp);
+    }
+    if (lut_p)
+        num_check("pair_table_in_psram", &s_kern[0], &cxt, t.shape[0], yref, ytmp);
 
 #if ND_KBENCH_ASM
     if (sh == &SHAPES[0]) {
@@ -429,17 +496,29 @@ static void bench_shape(const kb_shape *sh)
 #endif
 
     for (m = 0; m < KB_NMODES; m++) {
-        nd_lut2_ctx *use = (m == KB_FASTBLOB) ? &cxi : &cx;
+        nd_lut2_ctx *use;
         float        refc = 0.0f;
 
-        if (m == KB_FASTBLOB && !fast_ok)
+        if ((m == KB_FASTBLOB || m == KB_COLD_INT) && !fast_ok)
             continue;
+        if (m == KB_COLD_TAB && (!lut_p || s_thrash == NULL))
+            continue;
+        if (m >= KB_COLD_PSRAM && s_thrash == NULL)
+            continue;
+        use = (m == KB_FASTBLOB || m == KB_COLD_INT) ? &cxi
+              : (m == KB_COLD_TAB) ? &cxt : &cx;
         for (k = 0; k < (uint32_t)s_nkern; k++)
-            for (i = 0; i < KB_WARMUP; i++)
+            for (i = 0; i < KB_WARMUP; i++) {
+                if (m >= KB_COLD_PSRAM)
+                    kb_thrash();
                 time_one(s_kern[k].fn, use, t.shape[0], (kb_mode)m);
+            }
         for (i = 0; i < KB_ROUNDS; i++) {
-            for (k = 0; k < (uint32_t)s_nkern; k++)
+            for (k = 0; k < (uint32_t)s_nkern; k++) {
+                if (m >= KB_COLD_PSRAM)
+                    kb_thrash();
                 res[m][k][i] = time_one(s_kern[k].fn, use, t.shape[0], (kb_mode)m);
+            }
             printf("KB R shape=%s mode=%s round=%u", sh->tag, MODE_NAME[m], (unsigned)i);
             for (k = 0; k < (uint32_t)s_nkern; k++)
                 printf(" %s=%u", s_kern[k].tag, (unsigned)res[m][k][i]);
@@ -479,6 +558,7 @@ static void bench_shape(const kb_shape *sh)
 
     heap_caps_free(blob_p);
     heap_caps_free(blob_i);
+    heap_caps_free(lut_p);
     heap_caps_free(xh);
     heap_caps_free(lut);
     heap_caps_free(yref);
@@ -781,6 +861,7 @@ static void bench_dot(void)
  * overwritten by DMA, then read again - with and without an explicit
  * invalidate - and the byte sum is compared against the source.
  */
+#if ND_KBENCH_GDMA
 #define KB_GDMA_BLK   20      /* blocks swept per round, rotated through rows */
 #define KB_GDMA_ROUND  5
 #define KB_GDMA_ROWS   768u   /* the dominant CQ2 shape: 20 x 768x768         */
@@ -1114,6 +1195,7 @@ static void bench_gdma(uint32_t bufsize)
     heap_caps_free(srcp); heap_caps_free(xh); heap_caps_free(lut);
     heap_caps_free(y); heap_caps_free(y2); heap_caps_free(win[0]);
 }
+#endif /* ND_KBENCH_GDMA */
 
 int kbench_run(void)
 {
@@ -1202,8 +1284,10 @@ int kbench_run(void)
 
     /* Experiment 15: the memory-system test, at the two buffer sizes the
      * experiment names. Runs last: it installs and uninstalls a DMA driver. */
+#if ND_KBENCH_GDMA
     bench_gdma(2048);
     bench_gdma(4096);
+#endif
 
     printf("KB MEM internal_free=%u psram_free=%u\n",
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),

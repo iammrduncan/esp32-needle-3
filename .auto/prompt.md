@@ -23,26 +23,25 @@ A genuinely new candidate gets one explicit confirmation only with `AUTO_ALLOW_R
 non-empty `AUTO_REPEAT_REASON`; the accepted image's repeat budget is already exhausted. Do not
 delete or bypass the signature history. Controls run only inside concurrent candidate batches.
 
-**NEXT -- Experiment 20: use assertion-reclaimed internal RAM for CQ2 residency.** Run #293 already
-proved assertion level 1 (silent assertions) keeps every check/failure detection, is speed-neutral,
-and frees 6,200 bytes; level 0 frees 8,248 bytes but removes diagnostics. That changes the premise
-of the RAM-blocked 4-row CQ2 LUT-residency candidate, previously measured at +3.8 % in kbench and
-priced at about 10.4 KiB. Implement the real end-to-end candidate now:
+**Experiment 20 is MEASURED and CLOSED with no candidate (runs #330-#331).** Step 1 retired the
+premise: run #204 is the `-DNEEDLE_LUT2_ASM=OFF` ablation, no `+3.8 %` / 10.4 KiB residency variant
+exists anywhere in git history, and the 24,576 B pair table has always been internal RAM
+(`nd_model.c:642` + `ND_ALLOC_FAST`). The kbench residency construction that does exist
+(`blob_int`) was rebuilt, made buildable again (the bench's GDMA half is now behind
+`ND_KBENCH_GDMA`; the broken `-lesp_hw_support` line is gone, so a shipping configure never sees it),
+and verified: internal- and PSRAM-backed operands are **bit-exact** row-for-row on both boards, and
+the real-capture fixture still replays 256/256 bit-exact on the host. Cold-state kbench, two boards,
+min of 25 rounds, shipping `tie1n`: every cold PSRAM pass costs **42.93-42.94 cycles/word** whatever
+its shape, internal-RAM operands cost **37.70** whatever its shape - i.e. a flat **13.90 % delivery
+tax on every 2-bit pass**, worth **+6.0 % decode**, not +3.8 %; and taking the pair table *out* of
+internal RAM costs +14.3 % to +31.9 %, which prices the residency the build already has. None of it
+is collectable: 3.59 MB/token of 2-bit weights against 6,200 B (level 1) or 8,248 B (level 0), and
+the only per-token form - copy into a window - is #287's measured -17.9 %, because the copy shares
+the octal bus with its consumer. Full ledger: `.auto/ideas.md`, "Experiment 20". Accepted runtime is
+unchanged at **5.0117 decode tok/s**; no board ran the shipping image this experiment.
 
-1. Recover the exact kbench residency construction and reproduce its row/table equality against the
-   shipping TIE728 path on real captured inputs. Do not rely on the old summary alone.
-2. Board 1 is the accepted level-2 control. Board 2 is assertion level 1 plus the residency
-   candidate. Board 3 is level 0 plus the same residency candidate if level 1 cannot safely fit;
-   otherwise duplicate the level-1 candidate. Build all variants fresh, sync workers from the local
-   checkout (origin is stale), and launch them concurrently.
-3. Track minimum internal headroom and allocation failure. Residency must be an optional
-   optimisation with an exact fallback, never a boot dependency. Preserve row order, arithmetic,
-   and the complete 17/17 + 16/16 quality gates.
-4. If it wins, separate the assertion-level tradeoff from the residency delta using the already
-   measured neutral assertion controls, perform one swapped-board confirmation, then run behavioural
-   capture. Prefer level 1 unless level 0 is materially faster or uniquely required to fit.
-
-After Experiment 20, continue with novel experiments rather than verification:
+**NEXT -- Experiment 21: make the measured 120 MHz result reliability-testable** (the queue below is
+unchanged; #289 already proved the +3.51 % speed twice, do not re-measure it).
 
 - **Experiment 21 -- make the measured 120 MHz result reliability-testable.** Do not repeat the
   already-proven +3.51 % speed test. Investigate ESP-IDF's octal-memory temperature tuning, boot-time
@@ -63,7 +62,8 @@ and off-device screening all count as research progress. The generic instruction
 `run_experiment` does not permit a control-only run. If a candidate is not ready, keep working on it;
 the executable guard is intentionally the final authority.
 
-**CURRENT STATE (run #293, authoritative).** Two candidates have been measured and rejected
+**CURRENT STATE (run #331, authoritative).** Experiment 20 closed with the measured 13.90 % CQ2
+delivery tax and no candidate; the kbench harness builds again. Earlier: Two candidates have been measured and rejected
 since #291, and both closures are load-bearing for what to try next. #292: skipping the
 exactly-zero exponential inside the ATTENTION softmax pairs was proven bit-exact on the whole
 real 49,152-pair capture (357,792 elements, 0 mismatches) and still measured **-0.43 %** with a

@@ -1843,3 +1843,84 @@ Operator-side chores this loop cannot do: `git push` (no credentials in this con
 ~22 commits behind - sync workers by local path only), and the product defects already reported and
 still open (silent 271-byte request truncation; the schema's lack of a no-op escape, which turns
 chit-chat into a hallucinated `set_sampling_interval`).
+
+## Experiment 20 - CQ2 residency under reclaimed assertion RAM: premise retired, the real ceiling measured at +13.90 % of every CQ2 pass (runs #330-#331, boards 2+3, no shipping change)
+
+**Hypothesis as redirected.** Assertion level 1 frees 6,200 B of internal heap (#293) and that was
+said to unblock "the 4-row CQ2 LUT residency (10.4 KB, kbench **+3.8 %**, run #204)". Step 1 of the
+redirect said to recover that construction and re-verify it rather than trust the summary, so that is
+what happened first - and the summary did not survive it.
+
+**1. The citation does not describe a residency measurement.** `run #204` in `.auto/log.jsonl` is the
+`-DNEEDLE_LUT2_ASM=OFF` ablation (4.3117 vs 4.8917, "the TIE728 kernel is worth +13.45 %"), with a
+deliberately *slower* control; it contains no residency variant, no 10.4 KiB and no +3.8 %. A
+pickaxe over every commit in the repository for `residency`/`lut_int`/`LUT_RESID` returns the phi
+bounds (#294/#295), the GDMA batch (#287) and this queue's own text - nothing else. And the "LUT"
+half of the name is already shipped: `m->lut = ND_ALLOC_FAST(...)` (`nd_model.c:642`) with
+`ND_ALLOC_FAST` = `MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT` (`nd_model.h:50`), so the 24,576 B pair
+table has lived in internal SRAM since before this campaign's first run. There was no candidate to
+build, so no three-board batch was run: the batch would have measured the control, which the redirect
+(forbids) and the harness (now enforces, exit 42) both say not to do.
+
+**2. The residency construction that does exist was rebuilt, fixed, and made honest.** `kbench.c`
+already had `blob_int` - the whole CQ2 weight blob memcpy'd into internal RAM - but it was (a) only
+timed, never compared row-for-row, and (b) unbuildable: `esp32/main/CMakeLists.txt` "fixed" the
+missing component dependency with `target_link_libraries(... PRIVATE esp_hw_support)`, which emits a
+bare `-lesp_hw_support`, while `esp_cache.h`/`esp_async_memcpy.h` still fail as `main` requirements.
+Both were needed for the *closed* Experiment 15 bench only, so that bench is now behind
+`ND_KBENCH_GDMA` (default 0) and the broken link line is gone: the option branch is not even evaluated
+in a shipping configure, so the accepted image cannot move, and the bench builds again. Two real
+harness facts came out of the rebuild. (i) The old warm `blob_int` numbers are worthless on their own:
+isolated and blob_int agree to the cycle (96x768 min 173,713 both; 128x768 231,612/233,032 both)
+because a 19-26 KB blob is already warm in a 32 KiB cache that the bench re-sweeps 25 times - exactly
+the trap #295 recorded for phi. (ii) The residency-equality check caught two ordering bugs in the new
+code on the first two runs (`yref` not yet filled; table memcpy before `nd_cq_lut_build`), which is the
+differential test doing its job rather than a bench reporting nonsense.
+
+**3. Measured ceiling, cold, bit-exact, two boards, min of 25 rounds, shipping `nd_lut2_rows_tie1n`,
+real archive bytes, batch `20260922T164243.*-kb` (boards 2 and 3, images differing only in the
+embedded build id and the MD5 footer; board 1 idle by design).** Cycles per 32-bit packed word:
+
+| shape (rows x 768) | blob B | warm PSRAM | cold PSRAM = the field | cold, blob internal | cold, table in PSRAM |
+|---|---|---|---|---|---|
+| 768 | 156,672 | 42.93 | **42.93** | - | 49.06 |
+| 576 | 117,504 | 42.93 | **42.94** | - | 49.21 |
+| 128 | 26,112 | 37.70 | **42.92** | **37.69** | 53.21 |
+| 96 | 19,584 | 37.70 | **42.94** | **37.70** | 56.64 |
+
+Read the columns, not the rows. *Warm-equals-cold for every blob larger than the cache*, and every
+cold PSRAM run - small blob or large - lands on the **same 42.93-42.94 cycles/word**, while operands
+in internal RAM run at **37.69-37.70** regardless of shape. So the PSRAM penalty is not a
+cache-capacity accident on a 37 KB working set (the framing this family has carried since #141): it is
+a flat **13.90 % delivery tax on every 2-bit pass** (42.94/37.70 - 1), and a blob that fits the cache
+only escapes it while nothing else is streaming through it. Moving the blob to internal RAM bought
++13.87 % (128 rows) and +13.90 % (96 rows) cold and was **bit-exact 128/128 and 96/96** against the
+PSRAM-backed rows for all five kernels including the shipping one; the pair table's backing store is
+equally transparent (`exact=768/768`, `576/576`, `128/128` for the C walker over a PSRAM copy of the
+table), which is what licenses the ablation in the last column: taking the table *out* of internal RAM
+costs +14.3 % on the dominant shape and +31.9 % on the small one. That is the first number this
+campaign has ever put on the residency the shipping build already has - and it is much larger than the
++3.8 % the queue was going to re-buy.
+
+**4. Why none of it is collectable with the reclaimed RAM, stated as arithmetic.** The 2-bit phase is
+86.5 ms of a ~200 ms token; 13.90 % of it is 12.0 ms = **+6.0 % decode**, which is the honest prize,
+not +3.8 %. Collecting it needs all 3.59 MB of per-token 2-bit weights in internal RAM, or a
+per-token copy of them into a small window. The first needs 172x what level 1 frees (6,200 B) and 58x
+what level 0 frees (8,248 B). The second was measured in #287 and lost: the copy shares the octal bus
+with its consumer, 4 KiB blocks -17.9 %, 2 KiB -67.8 %, and `esp_cache_msync` costs a fixed 1.42 M
+cycles per invalidate (76 times per token). 120 MHz buys 3.51 % of the same 6 % (#289), which is
+consistent: this is external bandwidth, and the two mechanisms that could buy it are the owner's clock
+decision and a quantisation change that is frozen. **Disposition: Experiment 20 is closed with no
+candidate and no shipping change - the accepted runtime stays 5.0117.** The reclaimed RAM buys no CQ2
+win; its only above-bar use remains Experiment 23's 16 KiB private folded tables, which additionally
+requires the owner to accept assertion level 1 over the diagnostics it costs.
+
+**Harness notes for whoever runs next.** (a) ESP-IDF images are not byte-comparable across
+checkouts in this pool: a rebuilt shipping image differs from the accepted one at header offsets
+48-121, a 32-byte build id at 176, and the MD5 footer - because assert strings carry `__FILE__` and
+`/workspace/esp32-needle-3` and `/root/board-pool/boardN` have different lengths. Two same-length
+checkouts differ *only* in the build id + footer (65 bytes). Hash-compare within one checkout, or
+compare after masking those regions. (b) `.auto/kbench_build.sh` writes its build log to
+`/tmp/kb-<variant>-<board>.log` now, so two boards can build at once. (c) The `measure.sh` shipping
+signature covers `esp32/main/kbench.c`, so a bench-only edit changes the signature while the shipping
+image cannot; that is a loophole in the anti-repeat guard, deliberately left untested here.

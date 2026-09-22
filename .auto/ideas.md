@@ -1370,3 +1370,66 @@ differential test first (reuse `.auto/sinkzero/test.c`'s pattern - the shipped e
 verbatim, compared bit-for-bit over the captured fixture *and* a dense sweep), then measure on three
 boards. If the guard costs more than it saves, the disposition is a one-line revert and the fixture
 pricing above is the record of why it was worth the build.
+
+## BANKED (must be measured on real data before any build): skip `logf(1.0f)` in Sinkhorn
+
+Run #292 established the rule: removing a redundant transcendental call pays where the loop is
+otherwise empty (#291, +0.200 %) and costs where the loop is the scheduler's best block (-0.43 %).
+Sinkhorn qualifies for the winning side, and it still contains ~1,280 `logf` calls per decode token
+(`lse = mx + logf(sum)`, 8 per iteration x 20 x 8 layers) - the last unremoved transcendental in the
+model, because libm owns it and it cannot be substituted bit-exactly.
+
+But it may not need substitution, only skipping. `nd_expf` clamps to exactly `0.0f` below -88, and the
+Sinkhorn iterates to convergence, so once a row/column has collapsed - the maximum at 0 and every
+other entry below the clamp - the accumulation is `1.0f + 0.0f + 0.0f + 0.0f`, i.e. **exactly 1.0f**,
+and `logf(1.0f)` is exactly `0.0f` (libm guarantees the signed-zero-free exact case; assert it as a
+precondition the way `.auto/sinkzero/test.c` does for `nd_expf(+-0)`). `mx + 0.0f == mx` for finite
+`mx`, and for `mx = -inf` the shipped code produced `-inf + 0.0f = -inf` anyway, so writing
+`sum == 1.0f ? 0.0f : logf(sum)` cannot move a bit.
+
+**Gate before any board time:** instrument the *host* engine (same code, runs the same model) with a
+counter for `sum == 1.0f` versus total `logf` calls, over all six frozen primary prompts, and report
+the real frequency - do not assume it. If the hit rate is high (say > 50 %), the prize is most of
+1,280 logf calls: at 150-250 cycles each that is 0.2-0.4 ms of a ~200 ms token, +0.1-0.2 %, which is
+at or under the keep bar, so a low hit rate kills it off-device for the cost of one host build. Note
+the guard is another branch, but this one sits in the loop where the branch-cost/skip trade already
+measured favourable (#291), and the ratio of guard work to saved work is better here because `logf`
+is far more expensive than the compare.
+
+## MEASURED, NOT SHIPPED: assertion level is an 8 KB internal-RAM lever (run #294)
+
+`esp32/sdkconfig.defaults` sets `CONFIG_COMPILER_OPTIMIZATION_PERF=y` but never sets the assertion
+level, so the firmware has been shipping at IDF's default **level 2 (full `assert()` +
+`configASSERT`)**. Three-board batch, board 1 pristine control, each worker's `sdkconfig` deleted
+so it regenerated from its own defaults, all three byte-exact 14/14 with `token_delta 0`:
+
+| level | decode | extended | prefill | boot bench | internal_free |
+|---|---|---|---|---|---|
+| 2 enable (control) | 5.0117 | 4.9286 | 5.2867 | 5.057 | 15,215 |
+| 1 silent | 5.0100 | 4.9257 | 5.2850 | 5.055 | **21,415** |
+| 0 disable | 5.0200 | 4.9357 | 5.2950 | 5.066 | **23,463** |
+
+Canonical confirmation of level 0 on the original board at the shipping configuration:
+**decode 5.0100** (i.e. -0.03 %, inside the 0.071 % three-identical-image spread - *neutral*),
+extended 4.9286, prefill 5.285, think 3.93, min_case 4.78, boot bench 5.056, and the firmware's
+own `STATE` line reporting `free_internal_bytes 22571` against the accepted 15,215. So the speed
+effect is noise (+0.16 % on one batch board, -0.03 % on the canonical board) and the **RAM effect
+is the finding: +8,248 B (level 0) / +6,200 B (level 1) of internal heap**, because assert strings
+and their check code are removed from `.flash.text`/`.rodata`, and IRAM/rodata text is subtracted
+from the internal heap on this build (the same coupling #292 exposed from the other side).
+
+**Not shipped, for two reasons.** The primary metric is unchanged, which the campaign's own
+keep rule settles; and disabling assertions removes runtime failure *diagnostics* from a product
+firmware - a defect would surface as a silent reboot instead of an `abort()` with a reason. That
+is the owner's tradeoff to make, not an autonomous optimiser's. `ASSERTIONS_SILENT` (level 1) is
+the strictly safer middle: it keeps every check and therefore all failure *detection*, drops only
+the messages, and still returns 6,200 B.
+
+**Why it is worth more than a null run: it unblocks the family the ledger calls RAM-blocked.**
+Every rejected-because-it-doesn't-fit residency idea was priced against 15,215 B free, and the
+level-0 figure changes four of them: the 4-bit per-core codebook tables (16 KB, rejected against
+8.3 KB free in the run #162 follow-up), the 4-row CQ2 LUT residency (10.4 KB, kbench **+3.8 %**,
+run #204), the handwritten 4-bit phi kernel's ~1.5 KB (ceiling +0.5 %), and the 2x4 KiB GDMA pair
+(8.7 KB, though that one also lost on speed, -17.9 %). If the owner accepts level 0 or level 1,
+re-price those four in this order; the LUT residency is the only one with a measured win above
+1 %. Recorded here rather than kept in the tree so the config decision stays explicit.

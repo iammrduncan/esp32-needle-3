@@ -51,7 +51,13 @@ def calls_match(actual, expect):
 
 
 def compare(results, golden, tag):
-    """Exactness against the frozen baseline: (exact_count, token_delta)."""
+    """Exactness against the frozen baseline: (exact_count, token_delta).
+
+    A case with no golden entry is counted exact - that is what makes adding a
+    held-out case non-breaking - but it is also a blind spot: a renamed or
+    typo'd case id would compare against nothing and report a pass forever. The
+    caller reports `golden_missing` so the number cannot hide.
+    """
     exact, delta = 0, 0
     for cid, res in results.items():
         ref = golden.get(cid)
@@ -65,6 +71,12 @@ def compare(results, golden, tag):
         print(f'DIVERGE[{tag}] {cid}: golden {ref["tokens"]}tok {ref["raw"][:70]!r}')
         print(f'DIVERGE[{tag}] {cid}: now    {res["tokens"]}tok {res["raw"][:70]!r}')
     return exact, delta
+
+
+def missing_golden(results, golden):
+    """How many measured cases were compared against nothing."""
+    return sum(1 for cid in results if golden.get(cid) is None)
+
 
 
 def save_golden(path, results):
@@ -147,17 +159,21 @@ def device_mode(args):
 
     path = GOLDEN['device']
     golden = json.loads(path.read_text())['cases'] if path.is_file() else {}
-    if not golden:
-        # The baseline may only be frozen by a run that covers the whole set.
-        args.save_golden = args.save_golden and measured_groups_full()
-        if not args.save_golden:
-            print('REFUSING to save a partial golden; run all groups')
+    # The baseline may only be frozen by a run that covers the whole set. This has
+    # to gate EVERY save, not just the first one: with the guard only on the empty
+    # path, `AUTO_GROUPS=primary AUTO_SAVE=1` would overwrite a 14-case golden with
+    # 6 cases, and the 8 dropped cases would then compare against nothing and pass
+    # forever - silently destroying the campaign's quality baseline.
+    if args.save_golden and not measured_groups_full(args.groups):
+        print('REFUSING to save a partial golden; run all groups')
+        args.save_golden = False
     if args.save_golden or not golden:
         save_golden(path, results)
         golden = results
     exact, delta = compare(results, golden, 'device')
     metric('device_output_exact', exact)
     metric('device_cases', len(results))
+    metric('device_golden_missing', missing_golden(results, golden))
     # Reference is the 12-case golden; a short AUTO_GROUPS run only covers some
     # of it, so scale the pass criterion by the fraction actually measured.
     measured_cases = sum(len(CASES[g]) for g in args.groups.split(','))
@@ -215,6 +231,7 @@ def host_mode(args):
     metric('host_output_exact', exact)
     metric('host_cases', len(results))
     metric('host_token_delta', delta)
+    metric('host_golden_missing', missing_golden(results, golden))
     # Second, looser reading of the same run: does the model still pick the same
     # tokens? An accumulation-order change is allowed to break exact text at the
     # last mantissa bit, but it must not change a decision.

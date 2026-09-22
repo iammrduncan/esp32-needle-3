@@ -172,6 +172,24 @@
    "phase": "tools",
    "input": "Sample telemetry every 40000 seconds",
    "expect": null
+  },
+  {
+   "id": "heldout_free_text",
+   "phase": "tools",
+   "input": "Tell me a joke about caching",
+   "expect": null
+  },
+  {
+   "id": "heldout_route_translate_short",
+   "phase": "route",
+   "input": "Translate good morning into German",
+   "expect": null
+  },
+  {
+   "id": "heldout_batch_three_field",
+   "phase": "tools",
+   "input": "Sample heap every 3 seconds, start a 25 second timer, then tell me if a timer is running",
+   "expect": null
   }
  ],
  "think": [

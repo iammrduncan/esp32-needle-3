@@ -50,6 +50,37 @@ static float sigmoidf_(float x)
     }
 }
 
+/* Two sigmoids at once. The MLP gate's SiLU and the attention output gate run
+ * ~14,400 of these per decode token, all of them independent, and each one is a
+ * degree-5 `nd_expf` whose dependency chain is far longer than its work - the
+ * exact shape Experiment 12's interleaved pair measured 19.96 % faster on.
+ *
+ * Bit-exactness is by construction, not by tolerance: the pair is used only when
+ * both elements take the SAME branch, so each element's exponential argument is
+ * the one the scalar path would have passed (`-x` for x >= 0, `x` otherwise), the
+ * two divisions keep their scalar form, and `nd_expf_pair` itself falls back to two
+ * scalar calls outside the range where its interleaved chain is exact.
+ */
+static inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)
+{
+    if ((x0 >= 0.0f) == (x1 >= 0.0f)) {
+        float e0, e1;
+
+        nd_expf_pair(x0 >= 0.0f ? -x0 : x0,
+                     x1 >= 0.0f ? -x1 : x1, &e0, &e1);
+        if (x0 >= 0.0f) {
+            *y0 = 1.0f / (1.0f + e0);
+            *y1 = 1.0f / (1.0f + e1);
+        } else {
+            *y0 = e0 / (1.0f + e0);
+            *y1 = e1 / (1.0f + e1);
+        }
+    } else {
+        *y0 = sigmoidf_(x0);
+        *y1 = sigmoidf_(x1);
+    }
+}
+
 /* FP16 tensors are read element-wise; they are small (norm scales, gates). */
 static float fp16_get(const nd_model *m, const nd_tensor *t, size_t i)
 {
@@ -1083,8 +1114,15 @@ static ND_HOT void agate_rows(void *vc, uint32_t b0, uint32_t b1)
 {
     const agate_ctx *c = (const agate_ctx *)vc;
     uint32_t i, lo = b0 * 128, hi = b1 * 128;
-    for (i = lo; i < hi; i++)
-        c->attn[i] *= sigmoidf_(c->gate[i]);
+
+    /* Chunks are 128 wide, so a pair never straddles the two cores. */
+    for (i = lo; i < hi; i += 2) {
+        float g0, g1;
+
+        sigmoidf_pair(c->gate[i], c->gate[i + 1u], &g0, &g1);
+        c->attn[i]        *= g0;
+        c->attn[i + 1u]   *= g1;
+    }
 }
 
 typedef struct { float *proj, *hist; const float *w;
@@ -1634,9 +1672,17 @@ static ND_HOT void silu_rows(void *vc, uint32_t b0, uint32_t b1)
 {
     const silu_ctx *c = (const silu_ctx *)vc;
     uint32_t i, lo = b0 * 128, hi = b1 * 128;
-    for (i = lo; i < hi; i++) {
-        float z = c->d2[i] * c->sc[i] * c->a[i] + c->b2[i];
-        c->a[i] = z * sigmoidf_(z);
+
+    /* Both operands of a pair are read before either output is written: `a` is
+     * read-modify-written here, so the loads have to be hoisted out of the pair. */
+    for (i = lo; i < hi; i += 2) {
+        float z0 = c->d2[i] * c->sc[i] * c->a[i] + c->b2[i];
+        float z1 = c->d2[i + 1u] * c->sc[i + 1u] * c->a[i + 1u] + c->b2[i + 1u];
+        float s0, s1;
+
+        sigmoidf_pair(z0, z1, &s0, &s1);
+        c->a[i]        = z0 * s0;
+        c->a[i + 1u]   = z1 * s1;
     }
 }
 

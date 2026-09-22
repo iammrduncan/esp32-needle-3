@@ -13,8 +13,8 @@ fidelity 5.341e-05 / top1 10/10, internal_free 15247. Experiment 12 is kept
 (paired attention `nd_expf`, isolated +19.96 %, end to end +0.48 %); Experiment 13 is measured
 and rejected; Experiment 17 is measured and rejected; Experiment 18 is kept (+0.204 % exact KV
 reciprocal); the 100 Hz FreeRTOS tick is kept (+0.34 %) and its behavioural capture is green.
-Experiments **14, 15, 16 and 19 remain unperformed**. Their evidence and recipes are in
-`.auto/ideas.md`.
+**Experiment 14 is measured and closed as rejected (run #286).** Experiments **15, 16 and 19
+remain unperformed**. Their evidence and recipes are in `.auto/ideas.md`.
 
 **Operator intervention after run #284.** Runs after the accepted gate fell into a canonical-repeat
 loop: the same `674b168` image returned 4.9417 dozens of times with no hypothesis or code change.
@@ -38,11 +38,13 @@ re-run with no code change adds cost and no information), couple three-board con
 candidates instead of running periodic baseline-only batches, and treat any candidate below the
 0.2 % keep bar as not worth a build.
 
-**NEXT: Experiment 14, using the ready recipe in `.auto/ideas.md`.** Do not re-derive it and do not
-skip ahead. Capture the real layer-0 `q_proj` fixture, run the two required integer numeric screens,
-and advance to a device candidate only if the screen passes. A failed numeric screen is a legitimate
-measured disposition and should advance immediately to Experiment 15. After 15, perform 16 and then
-the isolated/non-shipping 19 diagnostic. The accepted control is **4.9417 decode tok/s**. Reaching
+**NEXT: Experiment 15 (operator-internal GDMA double buffering), recipe in `.auto/ideas.md`.**
+Experiment 14 is measured and CLOSED as rejected (run #286): the real layer-0 `q_proj` fixture
+replayed bit-exact 1024/1024, int8 CQ2 on ONE tensor moved `logit_max_delta` to 0.3282 (164x the
+2e-3 gate) and the best case of the whole integer family - int16 activation with an exact codebook
+- still hit 0.01818 (9.1x), while the 13/13 byte-exact host goldens stayed green. Numbers, the
+kept fixture and the harness trap are in `.auto/ideas.md`. Proceed 15, then 16, then the
+isolated/non-shipping 19 diagnostic. The accepted control is **4.9417 decode tok/s**. Reaching
 5.00 requires saving about 2.36 ms from the ~202.36 ms request token. Earlier analytical closures
 are hypotheses, not substitutes for these concrete screens.
 

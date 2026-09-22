@@ -1308,7 +1308,27 @@ would cost ~10 % of the remaining heap, not an impossible amount. Its measured c
 0.2 % bar - and it is assembly, so it needs the rule-#1 differential test plus the real-capture
 fixture, in a fresh working window. Do not start it without both.
 
-## BANKED, priced on real captured data: skip exp(0) in the attention softmax pairs (+0.6 % predicted)
+## CLOSED ON MEASUREMENT: skip exp(0) in the attention softmax pairs - REJECTED, -0.43 % (run #292)
+
+Priced at ~+0.6 % off the real 49,152-pair capture (48.5 % of pairs carry one exactly-zero
+argument) and proven bit-exact before any board time (357,792 elements, 0 mismatches, plus
+host gates green). The device said no: canonical 4.9900 vs the accepted 5.0117, every monitor
+down together (extended -0.47 %, prefill -0.44 %, boot bench -0.53 %), and it cost 1,024 B of
+internal RAM because the extra inlined `nd_expf` expansions grew IRAM text - which is subtracted
+from the internal heap, the coupling recorded below. Cause: a 48.5 %-hit branch in the hottest
+straight-line block in the firmware is nearly maximally unpredictable, and it destroys the
+interleaving Experiment 12's +19.96 % comes from. This is the SECOND independent confirmation of
+runs #230-231 (-2.10 % for a guard around the same call). The `nd_expf_pair()` call must remain
+the only statement in that block.
+
+**The contrast that makes this a finding rather than a loss:** the *identical* trick won +0.200 %
+in Sinkhorn (run #291), where the guard sits in a 4x4 loop and the exponential is the only thing
+happening. So the rule for this codebase is now measured on both sides: removing a redundant
+transcendental call pays where the loop is otherwise empty, and costs where the loop is the
+scheduler's best interleaved block. Do not price an exp removal by cycle count alone again -
+ask first what the surrounding block is doing. Remaining unpaired/unskipped transcendental mass:
+the ~1,280 `logf` per token inside Sinkhorn, which belongs to libm and cannot be replaced
+bit-exactly, so this family is finished.
 
 Run #291 removed the exactly-zero exponential in Sinkhorn and delivered +0.200 % at ~70 % realisation -
 the best realisation of the three exp levers, because deleting a call removes work the scheduler could

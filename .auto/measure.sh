@@ -65,8 +65,13 @@ fi
 ARGS=(device --port "$SERIAL_PORT")
 [ -n "${AUTO_GROUPS:-}" ] && ARGS+=(--groups "$AUTO_GROUPS")
 # The baseline run (iteration 1) freezes the device goldens; later runs compare
-# against them and must stay byte-exact.
-SAVE=$( [ "$(wc -l < .auto/log.jsonl 2>/dev/null || echo 0)" -le 1 ] && echo 1 || echo 0 )
+# against them and must stay byte-exact. AUTO_SAVE=1 is the documented re-baseline
+# escape hatch and has to actually reach bench.py - it used to be read by the header
+# comment only, which left the device golden un-updateable forever and any added
+# held-out case comparing against nothing. bench.py still refuses a partial save.
+SAVE=0
+[ "$(wc -l < .auto/log.jsonl 2>/dev/null || echo 0)" -le 1 ] && SAVE=1
+[ -n "${AUTO_SAVE:-}" ] && SAVE=1
 cd "$ROOT"
 if [ "$SAVE" = 1 ]; then
     .venv/bin/python .auto/bench.py "${ARGS[@]}" --save-golden

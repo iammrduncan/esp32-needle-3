@@ -2234,3 +2234,47 @@ which took minutes and produced a number the campaign had never had. An unusual
 instruction-count observation is worth one cheap measurement before it is worth a
 design - here the premise ("software divide must be ~150-400 cycles") died
 immediately, and the campaign's remaining time stays on candidates.
+
+## MEASURED, CORRECTION: the subset-logits projection is ~7 rows per token, not 512 (run #341)
+
+Runs #340 (asm gather) and #341 (tier pointer) both came in at +0.03 % against a screen that
+priced +7.68 % of a 5.7 ms phase. The arithmetic only fits one variable nobody had measured:
+the real candidate count `n` per decode step. Counted on the host engine (same code, same
+greedy decode, byte-identical outputs) over three real prompts, 25-35 sampled steps each:
+
+| bucket | share of steps |
+|---|---|
+| n == 1 | 3/25, 3/25 |
+| n in 2..3 | 11/25, 10/25 |
+| n in 4..7 | 8/25, 9/25 |
+| n in 8..15 | 2/25, 2/25 |
+| n in 16..63 | 0 |
+| n in 64..512 | 1/25 (the first constrained step, max_n = 68) |
+| n > 512 (full-vocabulary fallback) | 0 |
+
+**mean_n = 6.8 rows per token.** So `nd_model_logits_subset` projects about seven 4-bit rows
+per decode step - ~20k cycles two-core = **0.08 ms**, not the 5.7 ms attributed to it in run
+#166's request-path map. That closes the loop on #340/#341 quantitatively: +7.68 % of 0.08 ms
+is +0.003 %, and the observed +0.03 % is one quantisation tick of noise on top.
+
+Consequences, all measured rather than argued:
+* The sampler family is closed at a *smaller* scale than the ledger believed. `ND_P_LOGITS`'s
+  5.7 ms in run #166 cannot be candidate rows at n~7; treat that entry as unattributed
+  overhead around the call (prepare, timer placement) rather than as a projection budget.
+* The singleton shortcut I was about to build (return `cand[0]` when n==1, bit-exact because
+  the argmax of a singleton is its element) is worth ~one row = ~0.01 ms even at the measured
+  12 % hit rate. Not built, deliberately: the n-distribution killed it for one host build.
+* Anything in the sampler that scales with `n` (piece lookups, the `token_ok` byte walk, the
+  candidate projection) is bounded by n~7 and therefore irrelevant; what the sampler costs per
+  token is what scales with the *vocabulary* - and run #288's first-byte index already reduced
+  that to a median of ~51 visited ids.
+
+Method, again the campaign's own: **measure the free variable before pricing the lever.** Three
+runs (#340, #341, and the not-built singleton) were priced off a phase estimate inherited from a
+profile that could not have separated prepare from rows.
+
+Harness fact (cost two silent probes, and it is the vacuous-pass family again): both counters
+printed on a 250-step cadence, and a single `nd_dump genp` run is 23-35 steps - so "no output"
+looked like "the code never ran" while it was a threshold no real process reaches. Also
+`bench.py` captures the generator's stdout, so engine-side `printf` diagnostics never appear in
+its log; run `host/build/nd_dump` directly to see them.

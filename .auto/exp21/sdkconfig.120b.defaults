@@ -1,0 +1,8 @@
+# Experiment 21 variant B: 120 MHz with the flash in the mode IDF calls STABLE
+# (120 MHz SDR), PSRAM in 120 MHz DDR. No temperature retune: measured on this
+# board, IDF's retune init aborts the boot because the flash vendor (0xC2
+# Macronix) is not in its verified allowlist ({0xC8, 0x20}).
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+CONFIG_ESPTOOLPY_FLASH_SAMPLE_MODE_STR=y
+CONFIG_ESPTOOLPY_FLASHFREQ_120M=y
+CONFIG_SPIRAM_SPEED_120M=y

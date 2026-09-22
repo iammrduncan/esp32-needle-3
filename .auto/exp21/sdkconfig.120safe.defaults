@@ -1,0 +1,15 @@
+# Experiment 21: the safest *supported* 120 MHz octal-memory variant.
+# Diagnostic only - never a shipping default. Rationale, from IDF 5.5.2 itself:
+#  - PSRAM 120 MHz DDR needs MSPI core clock 240, which forces flash 120 too
+#    (mspi_timing_tuning_configs.h asserts FLASH_EXPECTED == PSRAM_EXPECTED).
+#  - IDF calls flash 120 MHz SDR "stable" and flash 120 MHz DDR "experimental",
+#    so take the flash through SDR (STR sample mode) and leave only PSRAM in the
+#    experimental DDR mode.
+#  - the PSRAM timing point is then retuned from the on-chip temperature sensor.
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+CONFIG_ESPTOOLPY_FLASH_SAMPLE_MODE_STR=y
+CONFIG_ESPTOOLPY_FLASHFREQ_120M=y
+CONFIG_SPIRAM_SPEED_120M=y
+CONFIG_SPIRAM_TIMING_TUNING_POINT_VIA_TEMPERATURE_SENSOR=y
+CONFIG_SPIRAM_TIMING_MEASURE_TEMPERATURE_INTERVAL_SECOND=1
+CONFIG_LOG_DEFAULT_LEVEL_DEBUG=y

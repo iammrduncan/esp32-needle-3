@@ -105,6 +105,9 @@ static int s_show_think = 1;   /* toggled from the host with "!think" */
 #ifdef ND_KBENCH
 int kbench_run(void);           /* esp32/main/kbench.c */
 #endif
+#ifdef ND_THERMAL_DIAG
+void nd_thermal_diag_start(void);   /* esp32/main/thermal_diag.c */
+#endif
 
 /* Prefill the constant part of the prompt once and snapshot it. Every request
  * then resumes from here, so only the query and the assistant header are
@@ -394,6 +397,9 @@ void app_main(void)
         printf("ERR model_open\n");
         return;
     }
+#ifdef ND_THERMAL_DIAG
+    nd_thermal_diag_start();   /* Experiment 21 soak witness, diagnostic only */
+#endif
     if (nd_grammar_compile(&s_grammars[0], TOOLS_JSON, strlen(TOOLS_JSON), &gerr) != 0) {
         printf("ERR grammar %s\n", gerr ? gerr : "?");
         return;

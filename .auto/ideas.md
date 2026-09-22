@@ -1264,7 +1264,18 @@ half inside a row/column sum is bit-exact *if* the partials are added back one a
 shipped order, which the loop already does. Expected well under 0.2 %, so screen it off-device
 before any board time.
 
-## FINAL EVIDENCE TABLE - campaign closed at 5.0017 decode tok/s (+105.0 % over the 2.44 baseline)
+## FINAL EVIDENCE TABLE - campaign closed at 5.0117 decode tok/s (+105.3 % over the 2.44 baseline)
+
+Updated after runs #291-#301. Two independent bounds (clock, instruction floor) plus three measured
+closures added since: the Sinkhorn `logf` skip (13.58 % hit rate, 787-cycle break-even), the software
+prefetch family (no `pref`/`dpref` opcode, `__builtin_prefetch` emits nothing), and the cache-config
+family (closed by the S3 Kconfig itself - 32 KB I-cache and 32 B instruction line are the maxima).
+Run #296 measured no overfitting signature on three unseen prompts (5.080 / 5.020 / 4.790 tok/s
+against a 5.0117 primary and a 4.79 worst case), and runs #296-#301 closed five ways in which the
+campaign's own harness could report success while verifying nothing. The accepted runtime's own
+quality evidence is unchanged: 17/17 device + 16/16 host byte-exact, token_delta 0, fidelity
+5.341e-05 against a 2e-3 gate, top1 10/10, `golden_missing=0` on both sides, six gates each with a
+demonstrated way to fail.
 
 Accepted commit `e6f2e0d`. Quality frozen and verified at every step: 14/14 device + 13/13 host
 byte-exact generations, token_delta 0, fidelity 5.341e-05 against a 2e-3 gate, top1 10/10, prefix

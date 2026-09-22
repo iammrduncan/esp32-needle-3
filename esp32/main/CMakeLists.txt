@@ -21,9 +21,37 @@ foreach(SCHEMA tools routes)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ND_SCHEMA_PATH}")
 endforeach()
 
+# Experiment 21's thermal/integrity logger needs the temperature-sensor driver.
+# Declared above the registration because a component dependency has to be in
+# idf_component_register's REQUIRES - not bolted on with target_link_libraries,
+# which emits a bare `-l<component>` and fails at link (the mistake that left
+# NEEDLE_KBENCH unbuildable). With the option OFF the requirement list is the
+# same four components, so the shipping image cannot move.
+option(NEEDLE_THERMAL_DIAG "Log die temperature and PSRAM integrity" OFF)
+set(MAIN_REQUIRES needle esp_partition esp_timer json)
+if(NEEDLE_THERMAL_DIAG)
+    list(APPEND MAIN_REQUIRES esp_driver_tsens)
+endif()
+
 idf_component_register(SRCS "main.c" "router.c"
                        INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/generated"
-                       REQUIRES needle esp_partition esp_timer json)
+                       REQUIRES ${MAIN_REQUIRES})
+
+if(NEEDLE_THERMAL_DIAG)
+    target_sources(${COMPONENT_LIB} PRIVATE "thermal_diag.c")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_THERMAL_DIAG=1)
+    # Measured harness fact: with `main` declaring REQUIRES explicitly, adding
+    # esp_driver_tsens there did NOT put its include dir on main's compile line
+    # (verified twice from the failing ninja command). The component's library is
+    # already on the link line because IDF links every component, so the only
+    # thing missing is the header path. Diagnostic build only - never ON for a
+    # measured or shipping image.
+    get_property(ND_TSENS_DIR TARGET idf::esp_driver_tsens PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+    if(NOT ND_TSENS_DIR)
+        set(ND_TSENS_DIR "${IDF_PATH}/components/esp_driver_tsens/include")
+    endif()
+    target_include_directories(${COMPONENT_LIB} PRIVATE ${ND_TSENS_DIR})
+endif()
 
 # Experiment 2 (MimiModel queue): the device-side kernel microbenchmark. Off by
 # default; with it on, app_main measures the row walkers and idles instead of

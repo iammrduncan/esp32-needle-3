@@ -1872,7 +1872,7 @@ Both were needed for the *closed* Experiment 15 bench only, so that bench is now
 in a shipping configure, so the accepted image cannot move, and the bench builds again. Two real
 harness facts came out of the rebuild. (i) The old warm `blob_int` numbers are worthless on their own:
 isolated and blob_int agree to the cycle (96x768 min 173,713 both; 128x768 231,612/233,032 both)
-because a 19-26 KB blob is already warm in a 32 KiB cache that the bench re-sweeps 25 times - exactly
+because a 19-26 KB blob is already warm in the 64 KiB data cache (`CONFIG_ESP32S3_DATA_CACHE_64KB`) that the bench re-sweeps 25 times - exactly
 the trap #295 recorded for phi. (ii) The residency-equality check caught two ordering bugs in the new
 code on the first two runs (`yref` not yet filled; table memcpy before `nd_cq_lut_build`), which is the
 differential test doing its job rather than a bench reporting nonsense.
@@ -1924,3 +1924,77 @@ compare after masking those regions. (b) `.auto/kbench_build.sh` writes its buil
 `/tmp/kb-<variant>-<board>.log` now, so two boards can build at once. (c) The `measure.sh` shipping
 signature covers `esp32/main/kbench.c`, so a bench-only edit changes the signature while the shipping
 image cannot; that is a loophole in the anti-repeat guard, deliberately left untested here.
+
+## Experiment 21 - make the 120 MHz result reliability-testable: CLOSED, BLOCKED BY VENDOR SUPPORT (runs #332-#333, boards 1+2, no shipping change)
+
+**Hypothesis as redirected.** The +3.51 % at octal 120 MHz (#289) is real but ships only behind
+IDF's ~20 C random-crash caveat, and the documented mitigation is the temperature-based MSPI
+timing retune. Build that variant, then run memory-integrity and hot/cold soaks on two boards.
+
+**What was built first (kept, default OFF).** `esp32/main/thermal_diag.c` + `NEEDLE_THERMAL_DIAG`
++ a one-line hook in `app_main` before `nd_model_open`: every 5 s it prints die temperature
+(`driver/temperature_sensor.h`: install/enable/get_celsius), a CRC32 (`esp_rom_crc32_le`, no new
+dependency) over a live 256 KiB PSRAM buffer, and both heaps - i.e. silent PSRAM corruption and the
+temperature axis in one line. `.auto/exp21/` holds the drivers (boot capture, heat curve, soak).
+Proof it is free when OFF: two canonical device runs of a tree carrying it read exactly the accepted
+**5.0117** (17/17 device, 16/16 host byte-exact, golden_missing=0, internal_free 15,215).
+
+**Measured, and it is a hard blocker rather than a risk.** With `CONFIG_SPIRAM_SPEED_120M=y`,
+`ESPTOOLPY_FLASHFREQ_120M=y`, `FLASHMODE_QDO=y`, `IDF_EXPERIMENTAL_FEATURES=y` and IDF's mitigation
+`CONFIG_SPIRAM_TIMING_TUNING_POINT_VIA_TEMPERATURE_SENSOR=y` (+`MEASURE_A_REALISTIC_POINT`), a fresh
+configure does enable the scheme, and PSRAM comes up normally:
+
+```
+I esp_psram: Found 16MB PSRAM device
+I esp_psram: Speed: 120MHz
+I esp_psram: SPI SRAM memory test OK
+I esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+E MSPI Timing: The flash model has not been verified support this feature, please contact espressif business support
+E cpu_start: init function 0x4037e958 has failed (0x106), aborting
+abort() was called at PC 0x42002620 on core 0   -> Rebooting... (forever)
+```
+`0x106` is `ESP_ERR_NOT_SUPPORTED`, and addr2line names the failing init function:
+`__esp_system_init_fn_psram_adjust_timing_point_via_temperature`,
+`esp_hw_support/mspi_timing_tuning/port/esp32s3/mspi_timing_by_mspi_delay.c:882`, called from
+`do_system_init_fn` (`esp_system/startup.c:135`). So **IDF itself refuses to run the temperature
+retune on this board's flash model, and a refused init aborts the boot.** Reproduced on two boards:
+board 2 (build_r120) looped with that backtrace, board 1 (build_safe, md5 a4b713ca) never reached
+`EVT READY` either - 16 lines of corrupt/rebooting output in 120 s and zero bytes over a 10-minute
+load attempt. There is no bootable "safe 120 MHz" image to soak.
+
+**ECC, the other safety lever, does not fit either.** Enabling `SPIRAM_ECC_ENABLE` on octal PSRAM
+costs ~1.09 MB of the model's heap: the ECC image reported `psram_free=697,476` where the same
+diagnostic build without ECC reported `1,789,984` at the same boot stage, and with ECC the firmware
+itself printed `ERR prefix_cache_allocation` after priming. The shipping model has no room for ECC
+at this context size.
+
+**Why a soak could not have settled the risk anyway.** The sensor works (die read 24.3-31.0 C; the
+~40 s prefix priming lifts it ~5 C) but that is the whole self-heating this workload produces, and
+IDF's stated failure axis is a ~20 C swing in either direction from the power-on temperature -
+four times larger than anything the board does to itself. A self-heating soak would have measured
+the wrong axis.
+
+**Disposition: 80 MHz stays the production default, now on measured grounds.** The route is blocked
+by Espressif's flash-model verification gate, not by missing effort; what would reopen it is a
+verified timing model for this flash part (the error text names exactly that gate), not a longer
+soak. The 120 MHz number remains a forbidden +3.51 % diagnostic.
+
+**Harness facts bought by this experiment (all four cost real time).**
+1. `idf.py -DCONFIG_X=y` does **not** change a Kconfig value when `esp32/sdkconfig` already exists;
+   the first "ECC build" and the first "120 MHz build" in this cycle were both silently still 80 MHz
+   with ECC off (the boot banner's "Boot SPI Speed : 80MHz" was the tell). The supported route is
+   `sdkconfig.defaults` + delete `sdkconfig` + fresh `-B`, then verify the value in the generated
+   `sdkconfig`.
+2. `/dev/ttyACM0`//`dev/ttyACM1` are **board 1's** aliases. Three concurrent "board" runs using them
+   all drove one chip and two reported the port busy. The pool exposes per-board nodes through the
+   wrapper's `$FLASH_PORT`/`$SERIAL_PORT`; the scripts in `.auto/exp21/` now refuse to run unless
+   those variables name the board they were asked to drive.
+3. Reset with the console port **closed**: holding it open while esptool resets leaves the strap
+   sampled wrong and the chip sits in `boot:0x0 DOWNLOAD(USB/UART0)` forever.
+4. A board that booted minutes earlier delivers **nothing** to a console attached later unless DTR is
+   asserted, and `serial_api.Device`'s attach (which waits for a `!think` ack) is the only reliable
+   way to drive it. A hand-rolled `!status` gate on a warm board never got an answer.
+
+**Reusable finding:** the temperature sensor and the PSRAM CRC line are cheap and stay in the tree.
+Any future memory-clock or PSRAM-integrity work starts from `TDIAG` output instead of rebuilding this
+instrument.

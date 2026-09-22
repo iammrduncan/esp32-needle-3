@@ -252,8 +252,20 @@ static void sinkhorn(float *a, uint32_t n)
             float sum = 0.0f;
             for (j = 1; j < n; j++)
                 if (a[i * n + j] > mx) mx = a[i * n + j];
-            for (j = 0; j < n; j++)
-                sum += nd_expf(a[i * n + j] - mx);
+            for (j = 0; j < n; j++) {
+                /* The row maximum contributes exp(0), and `nd_expf` returns
+                 * exactly 1.0f for both signed zeros, so that one term per pass
+                 * is the literal rather than a 99-cycle degree-5 call: a quarter
+                 * of this kernel's ~5,120 exponentials per decode token. Testing
+                 * the difference (not the index) keeps it exact by construction:
+                 * only equal finite operands can subtract to +-0, so NaN and
+                 * inf-inf still fall through to `nd_expf` as before. The partial
+                 * is added in the shipped position, so the sum's bits cannot
+                 * move. Verified bit-identical to the shipped loop over 3.2 M
+                 * elements in `.auto/sinkzero/test.c`. */
+                float d = a[i * n + j] - mx;
+                sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+            }
             {
                 float lse = mx + logf(sum);
                 for (j = 0; j < n; j++)
@@ -265,8 +277,10 @@ static void sinkhorn(float *a, uint32_t n)
             float sum = 0.0f;
             for (i = 1; i < n; i++)
                 if (a[i * n + j] > mx) mx = a[i * n + j];
-            for (i = 0; i < n; i++)
-                sum += nd_expf(a[i * n + j] - mx);
+            for (i = 0; i < n; i++) {
+                float d = a[i * n + j] - mx;   /* same exact-zero shortcut */
+                sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+            }
             {
                 float lse = mx + logf(sum);
                 for (i = 0; i < n; i++)

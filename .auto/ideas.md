@@ -1215,3 +1215,95 @@ is one more reason the 2-bit GEMV family is closed: even a 50 % wider MSPI clock
 whole token by 3.5 %, while that phase is 43 % of it - i.e. the phase is not waiting on
 bytes, it is waiting on the 2 instructions per weight floor. Any future claim that the
 kernel is bandwidth-bound has to beat that ratio.
+
+## Paired elementwise sigmoid: KEPT, +0.200 % decode (run #290, 4.9917 -> 5.0017)
+
+The first candidate after the named queue closed, and it came out of the phase map rather than the
+list. `sigmoidf_` is implemented on `nd_expf` (degree-5 Horner, ~99 cycles, latency far longer than
+its work), and two loops run it elementwise over thousands of *independent* values per token:
+`silu_rows` (the Monarch MLP's gated stage, 1024 x 8 layers) and `agate_rows` (the attention output
+gate, 768 x 8). Experiment 12 had only ever paired the *attention* softmax, so this mass was
+unpaired. Interleaving each adjacent pair through the already-shipped `nd_expf_pair` recovers part
+of that +19.96 %.
+
+**Bit-exact by construction, and tested as a primitive, not only by goldens** (rule #1 after the
+`nd_expf` exponent-field bug): the pair is used only when both elements take the SAME branch of
+`sigmoidf_`, so each element's exponential argument is exactly the one the scalar path would have
+passed (`-x` for x >= 0, `x` otherwise), the two divisions keep their scalar form, mixed signs fall
+back to two scalar calls, and `nd_expf_pair` itself falls back to scalar outside its exact range.
+Differential test against `sigmoidf_` copied verbatim: **1,600,202 comparisons, 0 bit mismatches,
+max_abs 0.000e+00**, over a +-400 dense sweep plus the branch boundary, +-0, subnormals, clamp edges
+and +-1e30 (`-ffp-contract=off`, test kept in `.auto/sigpair/test.c`). Chunks are 128 wide so a pair
+never straddles the two cores; in `silu_rows` both operands are loaded before either output is
+written because `a` is read-modify-written.
+
+**Measured.** Three-board batch: control (board 1) exactly 4.9917, both candidate boards exactly
+5.0017; canonical confirmation on the original board at the shipping configuration also 5.0017,
+byte-exact 14/14 + 13/13, token_delta 0, fidelity 5.341e-05 identical to the control, top1 10/10,
+`make capture` rc=0 with all nine flags true. Cost +1,200 B flash, **zero internal RAM**.
+Monitors: extended +0.12 %, prefill +0.16 %, min_case 4.78 (best worst-case seen), boot bench
+5.046 - and the bench moving *is* the mechanism check, because unlike the sampler work this phase is
+inside the bench. think_tps unchanged, so the 4-bit/vocabulary path is not harmed.
+
+**Prediction vs measurement, again.** Arithmetic said ~+0.8 % (7,200 pairs x 49 saved cycles);
+delivered +0.200 %, i.e. a quarter of it. Third time this campaign has measured the same thing
+(#12: half, #288: more than priced): pairing removes *exposable* latency, and how much of a
+kernel's latency is still exposed depends on what the scheduler had already hidden. The price is
+one build, so a priced +0.2 % candidate that is bit-exact by construction is still worth spending -
+but do not price a pair at its full cycle count a fourth time.
+
+**Harness fact (cost a confusing "undefined reference").** A test source placed in `/tmp` picked up
+a stale `/tmp/nd_quant.h` because a quoted `#include` searches the *including file's* directory
+before `-I` paths; the test then failed to link in a way that looked like a problem with the engine.
+Keep test sources inside the repo tree (`.auto/sigpair/`) and delete scratch headers.
+
+**Open follow-up in the same family, priced but not spent.** The remaining unpaired transcendental
+mass is the 4x4 Sinkhorn: ~1,280 `nd_expf` plus ~1,280 `logf` per token across the 8 layers. The
+`logf` half is the expensive half and cannot be paired with `nd_expf_pair`; pairing only the exp
+half inside a row/column sum is bit-exact *if* the partials are added back one at a time in the
+shipped order, which the loop already does. Expected well under 0.2 %, so screen it off-device
+before any board time.
+
+## FINAL EVIDENCE TABLE - campaign closed at 5.0017 decode tok/s (+105.0 % over the 2.44 baseline)
+
+Accepted commit `e6f2e0d`. Quality frozen and verified at every step: 14/14 device + 13/13 host
+byte-exact generations, token_delta 0, fidelity 5.341e-05 against a 2e-3 gate, top1 10/10, prefix
+isolation green, `make capture` rc=0 with all nine behavioural flags true.
+
+| lever | family | delta | state |
+|---|---|---|---|
+| fp32 staging of the Monarch factors (run #2) | representation | +99.9 % | kept |
+| TIE728 2-bit pair-LUT kernel (Expt 2-4) | instruction floor | +13.0 % | kept |
+| PSRAM weight tier, 12 MB span | memory path | +1.5 % | kept |
+| two-core coverage of every GEMV/head/stage | parallelism | +12 % cumulative | kept |
+| packed 32-bit weight-word reads | memory path | +7.5 % | kept |
+| first-byte legality table in the sampler (run #147) | request path | +2.16 % | kept |
+| compact first-byte grammar index (Expt 16, run #288) | request path | +1.01 % | kept |
+| paired attention softmax exp (Expt 12, run #229) | elementwise ILP | +0.48 % | kept |
+| 100 Hz FreeRTOS tick (run #240) | build config | +0.34 % | kept |
+| exact KV reciprocal (Expt 18) | elementwise ILP | +0.204 % | kept |
+| paired elementwise sigmoid, SiLU + attn gate (run #290) | elementwise ILP | +0.200 % | kept |
+| 64 B data cache line (run #238) | build config | +11.9 % load-bearing | kept |
+| 120 MHz octal flash+PSRAM (Expt 19) | memory clock | +3.51 % | measured, FORBIDDEN to ship |
+| CQ2 integer path (Expt 14) | representation | fidelity 164x over gate | measured, rejected |
+| operator-internal GDMA prefetch (Expt 15) | memory path | -17.9 % to -67.8 % | measured, rejected |
+| ESP-DSP-style dot schedules / 128-bit asm dot (Expt 13) | instruction floor | -46 % to -107 % | measured, rejected |
+| IRAM placement audit (Expt 17) | placement | +0.067 % | measured, rejected |
+| row blocking, row order, quad tables, ~25 scheduling nulls | instruction floor | within +-0.15 % | closed |
+
+Two independent bounds now say why nothing above the bar is left untried:
+* **clock bound (Expt 19):** a 50 % wider MSPI clock moves the *whole* token by 3.51 %, so the 43 %
+  2-bit GEMV phase is not waiting on bytes.
+* **instruction bound (runs #144-#145, confirmed by Expts 13/15/19):** `W8D` is 32 instructions per
+  32-bit index word = 2 instructions per weight at IPC ~1.33, and every attempt to change the
+  schedule, the load width, the accumulator count or the DMA delivery lost.
+
+**Corrected premise for whoever picks up the last open candidate.** The mHC phi (4-bit generic path,
+13.5 ms/token) was declined partly because "the 1 KB IRAM budget is already spent on
+`lut2_tie728.S`". That is not what the map says: `.iram0.text` = 0x1124f (~70 KB) inside
+`iram0_0_seg` = 0x53700 (~342 KB), so IRAM *space* is ample. The real currency is internal **heap**:
+IRAM text is subtracted from it, and `internal_free` is 15,215 B. A ~1.5 KB handwritten 4-bit kernel
+would cost ~10 % of the remaining heap, not an impossible amount. Its measured ceiling is +0.5 %
+(`lsc`-pairing the `xh` loads, -12 % of that phase), so it is the only remaining candidate above the
+0.2 % bar - and it is assembly, so it needs the rule-#1 differential test plus the real-capture
+fixture, in a fresh working window. Do not start it without both.

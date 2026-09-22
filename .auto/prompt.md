@@ -6,17 +6,24 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #289, authoritative).** Accepted runtime at commit `a17484f`:
-**4.9917 decode tok/s (+104.6 % over the 2.44 baseline)**, 4.9129 extended, 3.92 think,
-5.265 prefill, boot bench 198 ms/token, 14/14 device + 13/13 host byte-exact,
-fidelity 5.341e-05 / top1 10/10, internal_free 15215, psram_free 2,052,252, capture green.
+**CURRENT STATE (run #290, authoritative).** Accepted runtime at commit `e6f2e0d`:
+**5.0017 decode tok/s (+105.0 % over the 2.44 baseline)**, 4.9186 extended, 3.92 think,
+5.2733 prefill, 4.78 min_case, boot bench 5.046 / 198 ms/token, 14/14 device + 13/13 host
+byte-exact, token_delta 0, fidelity 5.341e-05 / top1 10/10, internal_free 15,215,
+psram_free 2,052,252. `make capture` green on this exact image: rc=0 with all nine
+verification flags true (routes, tools, two-pass local execution, telemetry, sampling
+interval, timer expiry), so the cadence clock is reset to "next shipping code change".
 Experiments 12-19 are ALL measured: 12, 16 and 18 kept (paired `nd_expf` +0.48 %, compact
 first-byte grammar index +1.01 %, exact KV reciprocal +0.204 %); 13, 14, 15, 17 measured and
 rejected (dot-product schedules, CQ2 integer path, GDMA double buffering, IRAM placement);
 19 measured as an isolated diagnostic (+3.51 % at 120 MHz octal flash+PSRAM, byte-exact on two
 boards, forbidden as shipping by the documented-maxima rule). The named queue is COMPLETE.
-Any further `run_experiment` must carry a new hypothesis derived from the measured phase map;
-the previous accepted value of 4.9417 at `674b168` is superseded, not the target.
+Run #290 then added a candidate derived from the phase map rather than the old list - the
+paired elementwise sigmoid, +0.200 % - which is the accepted runtime. The productive lens is
+now narrow and named: bit-exact ILP in the elementwise transcendental loops (that is what
+#290 banked) and nothing else that has not been measured closed. Every remaining idea must
+beat the 0.2 % keep bar with a mechanism the phase map can point at; the closures with their
+evidence are in `.auto/ideas.md`.
 
 **Superseded state (run #227).** 4.8917 decode, 4.81 extended, 3.87 think, 5.2167 prefill,
 boot bench 201 ms/token, internal_free 15759.

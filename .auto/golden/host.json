@@ -1,5 +1,5 @@
 {
- "saved_at": "2026-09-21T07:07:25",
+ "saved_at": "2026-09-22T09:26:55",
  "cases": {
   "sampling5": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
@@ -64,6 +64,21 @@
   "heldout_interval_over_max": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":400}}]</tool_call>",
    "tokens": 23,
+   "calls": null
+  },
+  "heldout_free_text": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+   "tokens": 23,
+   "calls": null
+  },
+  "heldout_route_translate_short": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "heldout_batch_three_field": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}}]</tool_call>",
+   "tokens": 71,
    "calls": null
   }
  }

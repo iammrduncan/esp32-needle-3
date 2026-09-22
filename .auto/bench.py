@@ -15,6 +15,7 @@ Golden file: {"cases": {id: {"raw": str, "tokens": int, "calls": [...]}}}
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,7 +29,7 @@ CASES = {k: v for k, v in json.loads((ROOT / '.auto/prompts.json').read_text()).
          if isinstance(v, list)}
 TOOLS = str(ROOT / 'tools/demo-tools.json')
 ROUTES = str(ROOT / 'tools/model-routes.json')
-ND_DUMP = str(ROOT / 'host/build/nd_dump')
+ND_DUMP = os.environ.get('ND_DUMP', str(ROOT / 'host/build/nd_dump'))
 MODEL = str(ROOT / 'model/needle3.cact')
 GOLDEN = {'device': ROOT / '.auto/golden/device.json',
           'host': ROOT / '.auto/golden/host.json'}

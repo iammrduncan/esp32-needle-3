@@ -1,0 +1,98 @@
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 16e6c50..0cee676 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -8,6 +8,8 @@
+ 
+ #ifdef ND_EXP_CAPTURE
+ void nd_exp_capture(float a, float b);   /* host tool sink, capture builds only */
++void nd_cq2_capture(const nd_cact *c, const nd_tensor *t, const float *xh,
++                    const float *lut, const void *packed, const float *y);
+ #endif
+ 
+ uint64_t nd_prof[ND_P_COUNT];
+@@ -1418,6 +1420,13 @@ static void attention(nd_model *m, uint32_t li, const float *xin, float *out)
+       nd_cq_gemv_lut2(&L->v_proj,    nd_tier_ptr(m, &L->v_proj),    m->lut, m->vbuf);
+       nd_cq_gemv_lut2(&L->gate_proj, nd_tier_ptr(m, &L->gate_proj), m->lut, m->gate);
+       ND_T1(tg, ND_P_PROJ); }
++#ifdef ND_EXP_CAPTURE
++    /* Experiment 14 fixture: the real prepared activation, pair table, packed
++     * rows, group norms and float-kernel output for one CQ2 projection. */
++    if (li == 0)
++        nd_cq2_capture(&m->c, &L->q_proj, m->xh, m->lut,
++                       nd_tier_ptr(m, &L->q_proj), m->q);
++#endif
+ 
+     { ND_T0(tt);
+     tap_projection(m, 4, m->q, m->q_hist, li, nh * qk_hd);
+diff --git a/host/nd_dump.c b/host/nd_dump.c
+index 93fba45..09886c6 100644
+--- a/host/nd_dump.c
++++ b/host/nd_dump.c
+@@ -41,6 +41,66 @@ __attribute__((destructor)) static void nd_exp_cap_dtor(void)
+ {
+     if (s_capf) { fwrite(s_cap, sizeof(float), s_capn, s_capf); fclose(s_capf); s_capf = NULL; }
+ }
++
++/* Experiment 14 fixture: layer-0 q_proj, as the shipping float kernel saw it.
++ * One record per call (first ND_CQ2_MAX per process) to $ND_CQ2CAP: header,
++ * prepared activation, pair table, the kernel's full output vector, then a
++ * spread of rows' packed bytes and fp16 group norms. */
++#include "nd_cact.h"
++
++typedef struct {
++    uint32_t magic, seq, out, in_pad, group, ngroup, rowbytes, nsel;
++    float    cb[4];
++} nd_cq2_rec;
++
++#define ND_CQ2_MAGIC 0x43513246u   /* 'F2QC' */
++#define ND_CQ2_MAX   8
++#define ND_CQ2_ROWS  32
++static FILE    *s_cq2f;
++static uint32_t s_cq2n;
++static uint32_t s_cq2call;
++static uint32_t s_cq2skip = ~(uint32_t)0;
++
++void nd_cq2_capture(const nd_cact *c, const nd_tensor *t, const float *xh,
++                    const float *lut, const void *packed, const float *y)
++{
++    nd_cq2_rec r;
++    uint32_t    i;
++
++    if (s_cq2skip == ~(uint32_t)0)
++        s_cq2skip = (uint32_t)atoi(getenv("ND_CQ2SKIP") ?: "0");
++    if (s_cq2call++ < s_cq2skip) return;
++    if (!s_cq2f) {
++        const char *p = getenv("ND_CQ2CAP");
++        if (!p || !*p || s_cq2n >= ND_CQ2_MAX) return;
++        s_cq2f = fopen(p, "wb");
++        if (!s_cq2f) return;
++    }
++    if (s_cq2n >= ND_CQ2_MAX) return;
++
++    r.magic    = ND_CQ2_MAGIC;
++    r.seq      = s_cq2n++;
++    r.out      = t->shape[0];
++    r.in_pad   = nd_cq_in_pad(t);
++    r.group    = t->group;
++    r.ngroup   = nd_cq_groups(t);
++    r.rowbytes = nd_cq_row_bytes(t);
++    r.nsel     = ND_CQ2_ROWS;
++    memcpy(r.cb, nd_cact_codebook(c, 2), sizeof r.cb);
++
++    fwrite(&r, sizeof r, 1, s_cq2f);
++    fwrite(xh, sizeof(float), r.in_pad, s_cq2f);
++    fwrite(lut, sizeof(float), (size_t)r.in_pad / 2 * 16, s_cq2f);
++    fwrite(y, sizeof(float), r.out, s_cq2f);
++    for (i = 0; i < r.nsel; i++) {
++        uint32_t row = (uint32_t)((uint64_t)i * r.out / r.nsel);
++        fwrite((const uint8_t *)packed + (size_t)row * r.rowbytes, r.rowbytes, 1, s_cq2f);
++        fwrite((const uint16_t *)((const uint8_t *)packed +
++                 (size_t)r.out * r.rowbytes) + (size_t)row * r.ngroup,
++               sizeof(uint16_t), r.ngroup, s_cq2f);
++    }
++    fflush(s_cq2f);
++}
+ #endif
+ 
+ 

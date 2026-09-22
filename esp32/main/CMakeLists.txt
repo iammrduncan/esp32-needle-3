@@ -33,8 +33,4 @@ option(NEEDLE_KBENCH "Build the CQ2 kernel microbenchmark into the app" OFF)
 if(NEEDLE_KBENCH)
     target_sources(${COMPONENT_LIB} PRIVATE "kbench.c")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
-    # Experiment 15's GDMA double-buffer bench uses the async memcpy driver and
-    # explicit cache maintenance. Scoped to the kbench build so the shipping
-    # component's dependency list - and therefore its image - is untouched.
-    target_link_libraries(${COMPONENT_LIB} PRIVATE esp_hw_support)
 endif()

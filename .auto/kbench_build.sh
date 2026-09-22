@@ -21,6 +21,7 @@ case "$V" in
 esac
 
 BD=build-kb-$V
+LOG=/tmp/kb-$V-${NEEDLE_BOARD:-local}.log
 . /opt/esp/idf/export.sh >/dev/null 2>&1
 
 cd "$(dirname "$0")/.."           # board checkout root
@@ -28,13 +29,13 @@ cd esp32
 rm -rf "$BD"
 idf.py -B "$BD" \
      -DNEEDLE_KBENCH=ON -DNEEDLE_KBENCH_ASM="$ASM" -DNEEDLE_PROFILE=OFF \
-     build > "/tmp/kb-$V.log" 2>&1 || { tail -40 "/tmp/kb-$V.log"; exit 1; }
+     build > "$LOG" 2>&1 || { tail -40 "$LOG"; exit 1; }
 
 NCC=$(grep -o 'DND_KBENCH=1' "$BD/compile_commands.json" | wc -l)
 NSRC=$(grep -o 'lut2_tie728\.S' "$BD/compile_commands.json" | wc -l)
 BIN="$BD/needle_demo.bin"
 
-echo "variant=$V build_dir=$BD log=/tmp/kb-$V.log"
+echo "variant=$V build_dir=$BD log=$LOG"
 echo "kbench_compile_lines=$NCC asm_sources=$NSRC"
 if [ "$NCC" -lt 1 ]; then echo "FAIL: ND_KBENCH never reached the compile line"; exit 1; fi
 if [ "$ASM" = ON ] && [ "$NSRC" -lt 1 ]; then echo "FAIL: lut2_tie728.S not compiled"; exit 1; fi

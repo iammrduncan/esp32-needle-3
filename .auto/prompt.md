@@ -6,7 +6,19 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #291, authoritative).** Accepted runtime at commit `4aeb436`:
+**CURRENT STATE (run #293, authoritative).** Two candidates have been measured and rejected
+since #291, and both closures are load-bearing for what to try next. #292: skipping the
+exactly-zero exponential inside the ATTENTION softmax pairs was proven bit-exact on the whole
+real 49,152-pair capture (357,792 elements, 0 mismatches) and still measured **-0.43 %** with a
+1,024 B internal-RAM cost - a 48.5 %-hit branch is nearly maximally unpredictable and it destroys
+Experiment 12's interleaving, so `nd_expf_pair()` must stay the only statement in that block.
+#293: dropping IDF's default assertion level 2 to 0 measured **neutral** speed (5.0100 vs 5.0117)
+but returned **+8,248 B of internal heap** (15,215 -> 23,463, reproduced on two boards); it is not
+shipped because the metric is unchanged and removing runtime failure diagnostics is the owner's
+call - see the re-priced RAM-blocked ideas in `.auto/ideas.md` if that decision ever changes.
+`make capture` is green on the accepted image (rc=0, all nine behavioural flags true), so the
+capture clock is reset as of this commit.
+Earlier: **run #291.** Accepted runtime at commit `4aeb436`:
 **5.0117 decode tok/s (+105.4 % over the 2.44 baseline)**, 4.9286 extended, 3.93 think,
 5.2867 prefill, 4.79 min_case, boot bench 5.057 / 198 ms/token, 14/14 device + 13/13 host
 byte-exact, token_delta 0, fidelity 5.341e-05 / top1 10/10, internal_free 15,215,

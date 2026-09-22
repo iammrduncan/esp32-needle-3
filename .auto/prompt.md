@@ -6,12 +6,22 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-**CURRENT STATE (run #229, authoritative).** Accepted runtime: **4.9150 decode tok/s (+101.3 %
-over the 2.44 baseline)**, 4.8357 extended, 3.88 think, 5.2433 prefill, boot bench 199 ms/token,
-14/14 device + 13/13 host byte-exact, fidelity 5.341e-05 / top1 10/10, internal_free 15503.
-Experiment 12 is measured, integrated and kept (paired attention `nd_expf`, isolated kernel
-+19.96 %, end to end +0.48 %); its evidence and the reusable capture/bench path are in
+**CURRENT STATE (run #241, authoritative).** Accepted runtime at commit `674b168`:
+**4.9417 decode tok/s (+102.6 % over the 2.44 baseline)**, 4.8614 extended, 3.91 think,
+5.2667 prefill, boot bench 198 ms/token, 14/14 device + 13/13 host byte-exact,
+fidelity 5.341e-05 / top1 10/10, internal_free 15247. Experiment 12 is kept
+(paired attention `nd_expf`, isolated +19.96 %, end to end +0.48 %); Experiment 13 is measured
+and rejected; Experiment 17 is measured and rejected; Experiment 18 is kept (+0.204 % exact KV
+reciprocal); the 100 Hz FreeRTOS tick is kept (+0.34 %) and its behavioural capture is green.
+Experiments **14, 15, 16 and 19 remain unperformed**. Their evidence and recipes are in
 `.auto/ideas.md`.
+
+**Operator intervention after run #284.** Runs after the accepted gate fell into a canonical-repeat
+loop: the same `674b168` image returned 4.9417 dozens of times with no hypothesis or code change.
+These readings are not experiments and add no evidence. The exhausted agent session was terminated.
+Never resume that loop, even if the generic recurring runner says to call `run_experiment` at the end
+of an iteration. The next `run_experiment` invocation must contain a real candidate that differs from
+`674b168`; otherwise continue implementing or screening off-device and do not measure.
 
 **Superseded state (run #227).** 4.8917 decode, 4.81 extended, 3.87 think, 5.2167 prefill,
 boot bench 201 ms/token, internal_free 15759.
@@ -28,20 +38,20 @@ re-run with no code change adds cost and no information), couple three-board con
 candidates instead of running periodic baseline-only batches, and treat any candidate below the
 0.2 % keep bar as not worth a build.
 
-**NEXT: Experiment 13 (ESP-DSP S3 dot-product audit).** Experiment 12 is closed as kept.
-`make capture` was re-run at #229 on the new shipping code and is green again (7 scenarios, all 9
-flags true), so it is next due after the next shipping change. The accepted control is **4.9150 decode tok/s**. The immediate target is 5.00 tok/s,
-which now requires saving about 3.5 ms from the ~203.5 ms request token. Two things are known
-after #229: the exp chains were worth ~1.75 ms of latency (half of it recovered), and the
-capture-real-inputs-then-device-microbench path works, so prefer it for 13-19. Earlier analytical closures for Experiments 7-11 are
-historical hypotheses, not substitutes for the concrete microbenchmarks below. Do not call an
-experiment complete merely because the phase map predicts a null.
+**NEXT: Experiment 14, using the ready recipe in `.auto/ideas.md`.** Do not re-derive it and do not
+skip ahead. Capture the real layer-0 `q_proj` fixture, run the two required integer numeric screens,
+and advance to a device candidate only if the screen passes. A failed numeric screen is a legitimate
+measured disposition and should advance immediately to Experiment 15. After 15, perform 16 and then
+the isolated/non-shipping 19 diagnostic. The accepted control is **4.9417 decode tok/s**. Reaching
+5.00 requires saving about 2.36 ms from the ~202.36 ms request token. Earlier analytical closures
+are hypotheses, not substitutes for these concrete screens.
 
 ### Research loop rules
 
-1. **No unchanged verification loops.** The current three-board batch is the final baseline-only
-   batch. After it is recorded, do not run or log another unchanged HEAD verification. A control
-   belongs in the same batch as a novel candidate, not in a standalone cycle.
+1. **No unchanged verification loops, with no per-iteration exception.** Do not run or log the
+   accepted image by itself. A control belongs in the same concurrent batch as a novel candidate.
+   Context pressure, a generic instruction to produce a run each iteration, or wanting a noise datum
+   is not permission to run the control. Persist work and continue the candidate instead.
 2. Work on the first unmeasured experiment below. Each experiment must end in a concise measured
    disposition in `.auto/ideas.md` and `.auto/log.jsonl`: hypothesis, implementation/variant,
    image hashes and board assignments, isolated timing where requested, full-model delta, quality,

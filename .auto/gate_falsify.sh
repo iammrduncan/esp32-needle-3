@@ -88,6 +88,33 @@ else
     echo "MISSED  test_count: ctest reports zero tests"; fails=$((fails + 1))
 fi
 
+# M6 (opt-in, needs the board): the DEVICE golden is the only reference that can
+# see a two-core defect - on the host nd_parallel_rows is rows_serial, which is
+# exactly why run #159's shared-table race looked byte-exact - and it is gated in
+# measure.sh, not checks.sh, so run_gate() cannot reach it. Breaks one device
+# golden entry by one character and requires measure.sh to refuse the run.
+# Measured on run #298: DEVICE_OUTPUT_DIVERGED 16/17 with device_token_delta=0,
+# i.e. a text-only change that any token-count check would pass.
+if [ -n "${AUTO_DEVICE_FALSIFY:-}" ]; then
+    python3 - <<'PY'
+import json
+p = '.auto/golden/device.json'
+d = json.load(open(p))
+c = d['cases']['timer60']
+c['raw'] = c['raw'][:-1] + ('Z' if c['raw'][-1] != 'Z' else 'W')
+json.dump(d, open(p, 'w'), indent=1)
+PY
+    AUTO_NOFLASH=1 bash .auto/measure.sh > "$D/falsify_device_golden.log" 2>&1
+    drc=$?
+    restore .auto/golden/device.json
+    if [ "$drc" != 0 ] && grep -q DEVICE_OUTPUT_DIVERGED "$D/falsify_device_golden.log"; then
+        echo "CAUGHT  device_golden: measure.sh refused a text-only device divergence (rc=$drc)"
+    else
+        echo "MISSED  device_golden: rc=$drc $(grep -oE '^[A-Z_]{5,}' "$D/falsify_device_golden.log" | tail -2 | tr '\n' ' ')"
+        fails=$((fails + 1))
+    fi
+fi
+
 # Control - the unmutated tree must be green, or nothing above means anything.
 if bash .auto/checks.sh > "$D/falsify_control.log" 2>&1; then
     echo "CONTROL green: unmutated tree passes every gate"

@@ -73,8 +73,26 @@ SAVE=0
 [ "$(wc -l < .auto/log.jsonl 2>/dev/null || echo 0)" -le 1 ] && SAVE=1
 [ -n "${AUTO_SAVE:-}" ] && SAVE=1
 cd "$ROOT"
+BENCH_LOG="$AUTO_LOG_DIR/auto_bench.log"
 if [ "$SAVE" = 1 ]; then
-    .venv/bin/python .auto/bench.py "${ARGS[@]}" --save-golden
+    .venv/bin/python .auto/bench.py "${ARGS[@]}" --save-golden 2>&1 | tee "$BENCH_LOG"
 else
-    .venv/bin/python .auto/bench.py "${ARGS[@]}"
+    .venv/bin/python .auto/bench.py "${ARGS[@]}" 2>&1 | tee "$BENCH_LOG"
+fi
+
+# Device byte-exactness is a hard gate, not a number to eyeball. checks.sh's only
+# byte-exact veto runs on the HOST build, where nd_parallel_rows is rows_serial -
+# so a two-core defect is invisible there by construction (that is exactly how
+# run #159's shared-table race looked byte-exact) and can only be caught here.
+# Skipped for a restricted AUTO_GROUPS run, which does not measure the whole set.
+# grep failures are neutralised because `set -e` would otherwise exit on a short
+# run where a metric line simply is not present.
+if [ -z "${AUTO_GROUPS:-}" ]; then
+    EX=$(grep -o 'device_output_exact=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
+    CS=$(grep -o 'device_cases=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
+    MISS=$(grep -o 'device_golden_missing=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
+    [ "${EX:-0}" = "${CS:-1}" ] || { echo "DEVICE_OUTPUT_DIVERGED ${EX:-0}/${CS:-?}"; exit 1; }
+    # exact == cases is satisfiable while comparing against nothing (run #296).
+    [ "${MISS:-1}" = "0" ] || { echo "DEVICE_GOLDEN_INCOMPLETE missing=${MISS:-?}"; exit 1; }
+    echo "DEVICE_GATE_OK exact=${EX}/${CS} golden_missing=${MISS}"
 fi

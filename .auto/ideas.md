@@ -1700,3 +1700,42 @@ device-only divergence (exactly the class of the #159/#162 two-core race, which 
 by timing luck) would print `device_output_exact=11/17` and the run would still report PASSED unless
 a human read the number. Next: gate it in `measure.sh`, then falsify it by mutating the device
 golden on a no-flash re-measure.
+
+## MEASURED, KEPT: the device byte-exact comparison was gated by nothing, and that is the gate that guards the central rule (run #298)
+
+Run #297 could not reach the device gate (its `run_gate()` drives `checks.sh`, which never looks at
+the device). Completing the lens found the sixth and most consequential silent-pass hole:
+**`measure.sh`'s only failure exits were `HOST_BUILD_FAILED` and `FLASH_FAILED`.** The byte-exact
+veto in `checks.sh` runs on the **host** build, where `nd_parallel_rows` is `rows_serial` - so a
+two-core defect is *structurally invisible* to it. That is exactly the class of run #159's shared
+8 kB codebook table written from both cores, byte-exact on three boards by timing luck and reverted
+at #162: had the race actually bitten, the run would have printed `device_output_exact=11/17` and
+still reported **PASSED**, with only a human reading a number as the safeguard.
+
+Fix: `measure.sh` tees the bench log and, for a full-group run, requires
+`device_output_exact == device_cases` **and** `device_golden_missing == 0`, exiting 1 with
+`DEVICE_OUTPUT_DIVERGED` / `DEVICE_GOLDEN_INCOMPLETE`. Restricted `AUTO_GROUPS` runs skip it (they do
+not measure the whole set), and the greps are `|| true`-guarded because `set -e` would otherwise exit
+on a short run where a metric line is simply absent.
+
+Falsified by measurement: one character changed in one device golden entry, re-measured the
+already-flashed app (`AUTO_NOFLASH=1`) -> `DEVICE_OUTPUT_DIVERGED 16/17`, exit 1, and
+**`device_token_delta = 0`** - text-only divergence with an identical token count, which is precisely
+what a token-count-only check waves through. Restored with `git checkout` (exactly 2 DIVERGE lines,
+no host leakage), then green: `DEVICE_GATE_OK exact=17/17 golden_missing=0` at 5.0117.
+
+**The property this buys is the campaign's own licence.** The divergent run measured *the same*
+5.0117 decode. Speed and quality are now independently gated on the device, so a fast-but-wrong
+candidate cannot pass this pipeline - which is what "we did not buy speed with model quality" has
+been resting on. Gates proven falsifiable now number six: host byte-exact, fidelity reference,
+primary-prompt hash, quality-trade (Sinkhorn 20->10) veto, non-zero test count, device byte-exact.
+M6 is kept in `gate_falsify.sh` behind `AUTO_DEVICE_FALSIFY=1`; it is the only probe that needs a
+board, and it costs one no-flash re-measure (~3.5 min).
+
+**Does this invalidate any prior discard? Checked, and no.** The obvious candidate was the
+race-free 4-bit folded-codebook retry (#162), since a device-only race is now auto-caught rather than
+eyeballed. But #162 rejected it on *speed* as well (4.87 / 4.7857 / 3.95 vs 4.8817 / 4.7986 / 3.87
+controls): one handshake per group plus a read-modify-write of `y` costs more than the fold saves,
+and per-core tables need 16 kB against 15 kB of heap. The gate change removes only the risk half of a
+two-part rejection, so no retry. The RAM-blocked family still waits on the owner's assertion-level
+decision (#293), which this run did not touch.

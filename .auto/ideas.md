@@ -1545,3 +1545,46 @@ slice, so the ratio is an upper bound on the gap, not a clean measurement of it.
 measurement is the same four modes at the *real* 24-row x 3-tensor sweep, warm versus cold, which
 needs a kbench build (see the harness fact above on why `NEEDLE_KBENCH=ON` does not currently
 build).
+
+## RETRACTION and closure: the phi "4.3x gap" was a units error of mine; the phase is fully accounted (run #295/#296)
+
+Run #295 recorded that the field attribution for the mHC phi GEMVs (9.2 ms/token for 73,728
+weights = 30 cycles/weight) was 4.3x the microbenchmark's 6.98 cycles/weight, and inferred that the
+residual must be cold PSRAM line fill on a 37 KB working set, redirecting the phi candidate from
+assembly to residency. **That inference was wrong and is retracted.** The comparison mixed units:
+`nd_cq_gemv_rows` goes through `nd_parallel_rows`, so the field's 9.2 ms is *two-core wall time*,
+while the microbenchmark runs at the kbench hook, before `app_main` creates the row-split worker,
+so it measures *one core doing all the rows*. Normalising to core-cycles:
+
+    field:  9.2 ms / 8 layers = 1.15 ms/layer = 276,000 cycles wall x 2 cores / 73,728 weights
+            = 7.5 core-cycles per weight
+    bench:  6.41 warm, 7.00 cold  ->  agreement to within 9 %
+
+There was never a gap. The phase map's phi entry and the kernel's measured cost have always agreed;
+I had divided a one-core number by a two-core number and then compared it to an inferred "GEMV
+share" rather than to the measured phase.
+
+The warm-versus-cold measurement that was meant to explain the phantom gap is still worth keeping,
+because it independently closes the family. It runs the *real* per-token phi work - all three phi
+tensors, the layer's 24 rows (4+4+16), row bases `li*n` and `li*n*n`, `in` 3072, group 128,
+73,728 weights, 36,864 weight bytes per layer - against real archive bytes staged into PSRAM the way
+the tier stages them, with a real `nd_cq_prepare` activation, `row_mismatch=0` on every mode:
+
+| mode | cycles/layer | cyc/weight | ms/layer | ms/token at 8 layers |
+|---|---|---|---|---|
+| `warm_sweep` - cache left alone | 472,385 | 6.41 | 1.968 | 15.75 |
+| `cold_sweep` - 160 KB sequential PSRAM sweep before each call | 516,013 | 7.00 | 2.150 | 17.20 |
+
+So the *entire* cost of the data cache being evicted between phi calls is **+9.2 %** - and run #295
+measured perfect weight residency buying **+9.3 %**. Two independent methods, same number, which is
+the strongest closure this family has had: phi's only addressable share is operand delivery, it is
+worth under 10 % of the phase, and it cannot be paid anyway (12 rows per core x 1,536 B = 18 KB per
+core against 15,215 B of internal heap). Assembly, residency, and row blocking are therefore all
+closed on measurement, with consistent numbers behind them.
+
+**Lesson, and it is the campaign's own lesson recurring: normalise units before believing an
+anomaly.** Every previous "anomaly" in this ledger (the 5x sampler cost, the 2x boot-bench gap, the
+route-phase gap) turned out to be a comparison between two things measuring different scopes - here
+core-cycles against wall-cycles, and the phase map's overlapping timers were already documented as
+not summable. A 4.3x discrepancy in a firmware whose every other phase agrees to 9 % is far more
+likely to be my arithmetic than the model's.

@@ -21,6 +21,13 @@ candidate is already priced on real captured data and banked at the top of the o
 `.auto/ideas.md`: the same exact-zero skip in the **attention** softmax pairs, 48.5 % of
 which have one argument exactly zero (+17 % of that phase's exp work, ~+0.6 % predicted,
 with the measured -2.10 % scheduling risk from runs #230-231 stated alongside it). Anything
+**Harness fact for the next window (measured this cycle):** `git push` from this container fails -
+`could not read Username for 'https://github.com'`, no credentials - so `origin` stays behind the
+accepted runtime, and a worker that runs `git fetch origin` will be REVERTED to a stale baseline
+(that is how a control can read low and invalidate a batch). Sync workers by local path instead,
+no network needed, verified this cycle to land all three boards on the accepted commit:
+`git -C /root/board-pool/boardN fetch /workspace/esp32-needle-3 autoresearch/decode-tps-2026-09-18 && git -C /root/board-pool/boardN reset --hard FETCH_HEAD`.
+
 above the documented 240 MHz / 80 MHz clock remains ineligible, and every candidate must
 still clear 14/14 + 13/13 byte-exact output, token_delta 0, the fidelity gate and top1 10/10.
 

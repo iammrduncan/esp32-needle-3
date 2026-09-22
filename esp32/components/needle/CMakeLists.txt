@@ -27,12 +27,25 @@ endif()
 # it is the default. The microbenchmark still turns it on for its own A/B.
 option(NEEDLE_LUT2_ASM "Use the handwritten TIE728 CQ2 row walker" ON)
 
+# Experiment 22: the handwritten CQ 4-bit row walker (the mHC phi projections).
+# Measured on device against the C walker on the three real phi tensors, min of 25
+# rounds: 5.647 vs 6.338 cycles per weight (+11.6 %) and bit-exact row for row. The
+# win is call structure, not instruction count - dot_group is a call per group in
+# the C path - so read the header of engine/src/gemv4_tie728.S before touching it.
+option(NEEDLE_GEMV4_ASM "Use the handwritten CQ 4-bit row walker" ON)
+
 option(NEEDLE_KBENCH_ASM "Assemble the handwritten TIE728 CQ2 kernels for the bench" OFF)
 if(NEEDLE_LUT2_ASM OR NEEDLE_KBENCH_ASM)
     target_sources(${COMPONENT_LIB} PRIVATE "../../../engine/src/lut2_tie728.S")
 endif()
 if(NEEDLE_LUT2_ASM)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_LUT2_ASM=1)
+endif()
+if(NEEDLE_GEMV4_ASM OR NEEDLE_KBENCH_ASM)
+    target_sources(${COMPONENT_LIB} PRIVATE "../../../engine/src/gemv4_tie728.S")
+endif()
+if(NEEDLE_GEMV4_ASM)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_GEMV4_ASM=1)
 endif()
 if(NEEDLE_KBENCH_ASM)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC ND_KBENCH_ASM=1)

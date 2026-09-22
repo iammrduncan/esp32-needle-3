@@ -1,5 +1,5 @@
 {
- "saved_at": "2026-09-21T07:17:49",
+ "saved_at": "2026-09-22T09:43:53",
  "cases": {
   "sampling5": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
@@ -155,6 +155,64 @@
      "name": "set_sampling_interval",
      "arguments": {
       "seconds": 400
+     }
+    }
+   ]
+  },
+  "heldout_free_text": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+   "tokens": 19,
+   "calls": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 120
+     }
+    }
+   ]
+  },
+  "heldout_route_translate_short": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+   "tokens": 14,
+   "calls": [
+    {
+     "name": "translate_or_write",
+     "arguments": {}
+    }
+   ]
+  },
+  "heldout_batch_three_field": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}}]</tool_call>",
+   "tokens": 67,
+   "calls": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 300
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 25
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 25
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 25
+     }
+    },
+    {
+     "name": "set_timer",
+     "arguments": {
+      "seconds": 25
      }
     }
    ]

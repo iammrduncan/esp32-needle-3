@@ -1656,3 +1656,47 @@ proved one silently passes. Falsify the rest by mutation - break each guarded in
 scratch copy (edit one primary prompt, flip one constant in a hot kernel, reorder `probe_ids`) and
 confirm `checks.sh` / the fidelity gate / the frozen-input guard actually go red. Host-side only,
 ~40 s each, no flash. Any gate that stays green is a bigger find than another 0.2 %.
+
+## MEASURED, KEPT: the campaign's quality gates are proven able to fail, and the metric's own definition was unprotected (run #297)
+
+Run #296 found a gate that silently passed 3 of 17 cases, which reframes the question: **"all gates
+green" is only evidence if the gates can turn red.** Built `.auto/gate_falsify.sh` - break each
+guarded input deliberately, require `checks.sh` to exit non-zero naming the expected gate, restore
+with `git checkout`, then require the unmutated tree green. **5/5, `gates_missed=0`:**
+
+| mutation (real, deliberate) | gate that fired |
+|---|---|
+| one character changed in a stored generation (`golden/host.json`) | `HOST_OUTPUT_DIVERGED` |
+| +0.5 on one reference logit (`golden/logits.txt`) | `FIDELITY` refusal |
+| one `primary` prompt's text edited | `BENCH_GUARDS_FAILED` (new) |
+| **real quality trade: `ND_SINKHORN` 20 -> 10** | `HOST_OUTPUT_DIVERGED` |
+| (negative control) ctest test count | 2 real tests: `grammar`, `prefix_isolation` |
+
+The third row is the finding: `checks.sh`'s frozen-input guard is a `git diff` over `model/`, `tools/`
+and `partitions.csv` - **it never included `.auto/prompts.json`, so the six prompts that *define the
+metric* were protected by no gate at all.** Closed by pinning primary's prompt text, its id/phase
+list and `probe_ids` with sha256 in `.auto/test_bench_guards.py`, which `checks.sh` now runs (so
+sanctioned `extended` additions still pass, and an edit to `primary` cannot). Second gate added: the
+host byte-exact check required only `exact == cases`, which #296 proved is satisfiable while
+comparing against nothing - it now also requires `host_golden_missing == 0`.
+
+The fourth row matters more than the others: the fidelity/byte-exact veto is the mechanism by which
+this campaign refuses to buy speed with model quality, and until now it was *assumed* to work rather
+than demonstrated. Sinkhorn 20->10 is precisely the trade the rules forbid, and the gate refuses it.
+
+Both new gates verified in the real pipeline (canonical run: checks green through the new code path,
+17/17 device byte-exact `golden_missing=0`, 5.0117 decode, all values identical to #296 - no engine
+change).
+
+**Rule worth keeping: a check whose tool is missing must report failure, not pass.** My own script
+keyed its env guard on `IDF_PATH`, which this environment sets with `cmake`/`ctest` **off PATH** - the
+exact trap `checks.sh` documents for cmake - so the test-count probe saw no output and reported
+"zero tests". Because the probe was written to fail on empty output, that showed up as `MISSED` in
+one run instead of never. Key on the tool (`command -v ctest`), not on the variable that implies it.
+
+**Still un-falsified, and it is the one that matters most:** nothing in `checks.sh` inspects the
+*device* golden - the host gates are the only byte-exact veto wired into the pipeline, so a
+device-only divergence (exactly the class of the #159/#162 two-core race, which was byte-exact only
+by timing luck) would print `device_output_exact=11/17` and the run would still report PASSED unless
+a human read the number. Next: gate it in `measure.sh`, then falsify it by mutating the device
+golden on a no-flash re-measure.

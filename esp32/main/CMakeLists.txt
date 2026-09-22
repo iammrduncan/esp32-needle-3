@@ -59,6 +59,9 @@ endif()
 # compile-time knob in this project.
 option(NEEDLE_KBENCH "Build the CQ2 kernel microbenchmark into the app" OFF)
 if(NEEDLE_KBENCH)
-    target_sources(${COMPONENT_LIB} PRIVATE "kbench.c")
+    # dot4_tie728.S is the Experiment 22 screen kernel (see the file header). It is
+    # compiled only into a kbench image, so a shipping configure never places it in
+    # IRAM and the accepted image cannot move.
+    target_sources(${COMPONENT_LIB} PRIVATE "kbench.c" "dot4_tie728.S")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
 endif()

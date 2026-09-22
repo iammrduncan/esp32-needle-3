@@ -1998,3 +1998,75 @@ soak. The 120 MHz number remains a forbidden +3.51 % diagnostic.
 **Reusable finding:** the temperature sensor and the PSRAM CRC line are cheap and stay in the tree.
 Any future memory-clock or PSRAM-integrity work starts from `TDIAG` output instead of rebuilding this
 instrument.
+
+## Experiment 22 - handwritten 4-bit phi kernel: the plain-asm form is BIT-EXACT and +11.6 % in isolation (run #332, board 2, no shipping change yet)
+
+**Measured result, in one line.** A handwritten CQ 4-bit row walker that changes
+nothing but the *structure* (one function per row instead of a call per group) and
+uses ordinary `lsi` loads is **bit-exact against the shipping `nd_cq_gemv_rows` on
+real `needle3.cact` bytes (0 mismatched rows of 128, unit probe exact) and 11.6 %
+faster** - 5.647 vs 6.338 cycles/weight, min of 25 rounds, CCOUNT 24000, board 2.
+phi's GEMVs are 9.2 ms of a ~200 ms token, so that is ~1.07 ms/token = **+0.53 %
+decode**, which is above the 0.2 % keep bar and above run #141's analytic +0.5 %
+ceiling. This is the first above-bar speed candidate since run #291.
+
+**It also retires run #295's "do not write the phi assembly".** That closure was
+built on a measured ceiling of 9.3-10 % for operand *delivery* and on instruction
+counts. Both are real, and neither is what this win comes from: in the shipping
+build `dot_group` is a **function call per group** (symbol at `0x4037bba8`, not
+inlined), so the C path pays call overhead plus a per-group norm conversion across
+the boundary 24 times per row, while one asm function per row keeps all 24 groups
+in registers with `loop`. Call/inline structure is a third category, and it is
+bigger than either of the two the closure considered. Lesson: a ceiling measured
+within one category is not a ceiling on the phase.
+
+**The TIE wide-float loads are NOT the win, and their numbers are invalid.**
+`ee.ldf.128.ip` (2 instrs per 8 floats) measured 4.774 cyc/weight (+25 %) and
+`ee.ldf.64.ip` (4 instrs) 5.023 (+21 %) - but both **fail the known-answer probe:
+they return 63.0 where the answer is exactly 64.0**, i.e. one of the eight floats
+per index word is not the value asked for, so the kernel is fast because it drops
+a term. Do not use either form until the fill order of `ee.ldf.*.ip`'s register
+list is determined; the 63/64 signature says exactly one contribution per word, so
+the question is register order (or a stale register), not the load itself. The
+plain-`lsi` variant is the one that is both exact and faster.
+
+**Two ABI facts, paid for with four boot-looping harvests.**
+1. **A C `float` return value arrives in the INTEGER return register.** GCC's own
+   float epilogue is `ssi f0, a1, 0` / `l32i.n a2, a1, 0`. An asm kernel that ends
+   with `mov.s f0, f13; retw` hands the caller a stale float, and the symptom is
+   *one identical wrong value from three different kernels, independent of their
+   inputs*. Fix, 2 instructions: `ssi f0, a1, 16` + `l32i a2, a1, 16`.
+2. `addx4 ar, as, at` is `ar = (as << 2) + at` with the **destination first**
+   (as `lut2_tie728.S` already writes it). `addx4 idx, base, idx` silently computes
+   `(base << 2) + idx`; on device that was a `LoadProhibited` at
+   `EXCVADDR 0xf40c03d4` = `(0x3d0300f4 << 2) + 4`, which is how the arithmetic
+   confirmed the semantics.
+
+**Why the unit probe was worth more than the differential it replaced.** The real
+fixture comparison only said "all rows differ". A known-answer probe on
+hand-computable inputs (`cb[i]=i`, row bytes `0x10`, `xh=1.0`, norm `0x3C00`, one
+group -> exactly 64.0) said *which* stage was wrong in one build, and it is what
+turned up both facts above. Rule for this repo's asm screens: ship a known-answer
+probe in the same kbench run as the differential, not instead of it.
+
+**Shipping impact so far: none, and proven none.** The screen lives in
+`esp32/main/dot4_tie728.S` and `esp32/main/CMakeLists.txt`'s `if(NEEDLE_KBENCH)`
+branch. Same-checkout A/B (fresh `-B build_s1` with the change, fresh `build_s2`
+without): both 281,072 bytes, **68 differing bytes in 4 regions** = header stamps
+(0x74-0x77), the 32-byte build id (0xb0-0xcf) and the MD5 footer (0x449cf-0x449ef)
+- i.e. nothing but the build identity, exactly the pattern recorded in run #330.
+
+**Banked integration (the next experiment, priced at +0.5 %).**
+(a) Fold the tie0 body into `engine/src/nd_quant.c`'s 4-bit path behind an
+`nd_lut2_asm_ok()`-style gate - it needs only g == 128, ordinary-fp16 norms and
+4-byte alignment (no 16-byte requirement, because it uses no TIE load) - keeping
+the C path as fallback; the row-split via `nd_parallel_rows` stays outside.
+(b) Differential-test the primitive off-device first on the real 4-bit fixture
+already captured in `.auto/exp22/` (`phi4-prefill.bin`, `phi4-decode.bin`,
+`replay.c`), then on device with the row-for-row memcmp this bench already does.
+(c) Three-board batch, and watch `internal_free`: this kernel is ~200 bytes of
+IRAM, and IRAM text is subtracted from the internal heap (#292's coupling).
+(d) In the same integration, measure hoisting the norm conversion out of the group
+bottom - #204 measured that ordering as worth -1.1 pp in the 2-bit kernel.
+(e) Separately: determine `ee.ldf.*.ip`'s register fill order. If it is fixable the
+ceiling above the plain-asm form is another ~10 %.

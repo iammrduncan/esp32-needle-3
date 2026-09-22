@@ -4,7 +4,9 @@ The byte-exact gate is the campaign's quality authority, so the ways it could
 silently stop checking things matter more than a fraction of a percent of speed.
 Run: .venv/bin/python .auto/test_bench_guards.py
 """
+import hashlib
 import importlib.util
+import json
 import pathlib
 import sys
 
@@ -44,5 +46,23 @@ assert len(bench.CASES['primary']) == 6
 assert {c['id'] for c in bench.CASES['primary']} == {
     'sampling5', 'timer60', 'status_heap', 'batch', 'heldout_timer45',
     'route_translate'}, 'primary set changed'
+
+# 5. `primary` defines the metric and `probe_ids` defines the fidelity probe, but
+#    checks.sh's frozen-input guard is a git diff over model/, tools/ and
+#    partitions.csv - it does NOT cover .auto/prompts.json, so editing the prompt
+#    set was invisible to every gate. Pinned here instead (sha256 of the canonical
+#    JSON, first 16 hex). Adding a case to `extended` is sanctioned (run #296) and
+#    must not trip this; editing, reordering or trimming `primary` must.
+def _sha(obj):
+    return hashlib.sha256(
+        json.dumps(obj, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
+assert _sha([c['input'] for c in bench.CASES['primary']]) == '52d80c388c6caf26', \
+    'primary prompt TEXT changed - this changes what the metric measures'
+assert _sha([(c['id'], c['phase']) for c in bench.CASES['primary']]) == '84cc8dea3e0bd9ae', \
+    'primary ids/phases changed - route vs tools phase changes the code path measured'
+_prompts = json.loads((pathlib.Path(__file__).resolve().parent / 'prompts.json').read_text())
+assert _sha(_prompts['probe_ids']) == 'b67f231b98f76efd', 'fidelity probe changed'
 
 print('bench guard checks OK')

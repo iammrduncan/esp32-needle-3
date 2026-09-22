@@ -21,6 +21,13 @@ cmake --build host/build -j8 >> "$AUTO_LOG_DIR/auto_chost.log" 2>&1 || {
 ctest --test-dir host/build > "$AUTO_LOG_DIR/auto_ctest.log" 2>&1 || {
     echo CTEST_FAILED; tail -40 "$AUTO_LOG_DIR/auto_ctest.log"; exit 1; }
 
+# The harness's own guards. This is where the *metric definition* is protected:
+# the frozen-input git diff below covers model/, tools/ and partitions.csv but not
+# .auto/prompts.json, so without this an edit to `primary` - the six prompts the
+# metric is the mean of - would pass every gate silently.
+.venv/bin/python .auto/test_bench_guards.py > "$AUTO_LOG_DIR/auto_cguards.log" 2>&1 || {
+    echo BENCH_GUARDS_FAILED; tail -20 "$AUTO_LOG_DIR/auto_cguards.log"; exit 1; }
+
 # No buying speed with the model: the archive, its rung, the schemas and the
 # partition layout are frozen for the whole session.
 .venv/bin/python tools/download_model.py --verify-only > /dev/null
@@ -36,6 +43,11 @@ grep -E '^(METRIC|DIVERGE|FIDELITY)' "$AUTO_LOG_DIR/auto_cq.log"
 exact=$(grep -o 'host_output_exact=[0-9]*' "$AUTO_LOG_DIR/auto_cq.log" | cut -d= -f2)
 cases=$(grep -o 'host_cases=[0-9]*' "$AUTO_LOG_DIR/auto_cq.log" | cut -d= -f2)
 [ "${exact:-0}" = "${cases:-1}" ] || { echo "HOST_OUTPUT_DIVERGED ${exact}/${cases}"; exit 1; }
+# exact == cases is not enough on its own: a case with no golden entry counts as
+# exact (that is what keeps adding a held-out case non-breaking), so the count can
+# match while comparing against nothing. Run #296 measured this at missing=3.
+missing=$(grep -o 'host_golden_missing=[0-9]*' "$AUTO_LOG_DIR/auto_cq.log" | cut -d= -f2)
+[ "${missing:-1}" = "0" ] || { echo "HOST_GOLDEN_INCOMPLETE missing=${missing:-unknown}"; exit 1; }
 
 # Quality gate 2: numeric fidelity of the forward pass on a fixed probe.
 .venv/bin/python .auto/bench.py fidelity >> "$AUTO_LOG_DIR/auto_cq.log" 2>&1 || {

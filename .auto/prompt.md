@@ -88,7 +88,32 @@ measured the wrong axis. 80 MHz stays the production default on measured grounds
 and proven free (two 5.0117 canonical runs with it off): `esp32/main/thermal_diag.c` behind
 `NEEDLE_THERMAL_DIAG` - die temperature plus a CRC32 over a live 256 KiB PSRAM buffer every 5 s.
 
-**NEXT -- Experiment 24 (new): integrate the measured bit-exact 4-bit row kernel and price it end to
+**ACCEPTED RUNTIME IS NOW 5.0300 decode tok/s (+106.1 %)** - Experiment 22's integrated
+plain-load CQ 4-bit row walker (run #333, +0.365 %, 17/17 device + 16/16 host byte-exact,
+fidelity 5.341e-05 unchanged, internal_free 14,903). The earlier 5.0117 figure in this file is
+the *pinned discovery baseline* for the lanes, not the shipping value.
+
+**NEXT (in this order).** (1) `make capture` is due - shipping code changed at run #333.
+(2) Cross-board confirmation of 5.0300 on board 2 (discovery -> confirmed); board 3 keeps
+screening. (3) The banked multi-row differential for `nd_gemv4_rows_tie1` (row-range kernel
+vs N per-row calls of the proven single-row kernel, real phi bytes): run #333's first build
+diverged (5/17 byte-exact, `DEVICE_OUTPUT_DIVERGED`, and *faster*) because the row epilogue
+double-stepped the packed and norm cursors, and no primitive test could see a multi-row
+cursor - build that test before touching the kernel again. (4) Then re-derive the phase map
+(`AUTO_PROFILE=1`): phi dropped from ~9.2 ms of GEMVs toward ~8.1 ms, so the ranking of what
+is left (2-bit GEMV at its floor, attention, MLP, engram) should be re-checked against a
+197 ms boot bench instead of 198.
+
+Closed by Experiment 22's lanes, do not re-open: forced-inline C `dot_group` (+0.10 %, below
+bar, -1,024 B heap); `ee.ldf.64/128.ip` wide loads (probe A returns exactly probe B's answer,
+so nibble identity is lost before the float loads - no register reorder fixes it, see
+`.auto/ideas.md` 22C). Harness facts that cost real time this window are recorded in
+`.auto/ideas.md` (the `measure.sh` `set -euo pipefail` + missing-`sdkconfig` silent exit that
+killed four lanes; tmux windows must run `needle-board run N --` *inside* the window; an
+unreferenced new `.S` is garbage-collected and the run silently re-measures the accepted
+runtime - `nm` the ELF for the candidate symbol before believing a number).
+
+**Superseded NEXT (Experiment 24 as originally written): integrate the measured bit-exact 4-bit row kernel and price it end to
 end.** The isolated screen (run #332) says one handwritten row walker per row - no TIE instructions,
 plain `lsi` - is **bit-exact on real archive bytes and +11.6 %** (5.647 vs 6.338 cycles/weight),
 worth ~1.07 ms/token = **+0.53 % decode**, because the shipping build calls `dot_group` once per

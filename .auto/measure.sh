@@ -15,6 +15,51 @@ cd "$(dirname "$0")/.."
 AUTO_LOG_DIR=${AUTO_LOG_DIR:-$PWD/.auto/runs/local}
 mkdir -p "$AUTO_LOG_DIR"
 ROOT=$PWD
+
+# Refuse the failure mode that consumed runs #302-#329: measuring the exact
+# same shipping tree because the autoresearch iteration driver demands a
+# number.  Prompt text is not strong enough to stop that loop, so enforce it
+# before acquiring a board or building anything.
+#
+# The signature covers tracked/untracked runtime inputs plus the resolved IDF
+# sdkconfig (which is intentionally gitignored).  Build products are ignored by
+# git and therefore absent.  A successful full measurement records its
+# signature.  One explicit confirmation is available for a genuinely new
+# candidate, but it requires a reason and is then exhausted for that signature.
+shipping_signature() {
+    {
+        git ls-files -co --exclude-standard -z -- engine esp32 host tools model |
+            sort -z |
+            while IFS= read -r -d '' f; do
+                [ -f "$f" ] && sha256sum "$f"
+            done
+        [ -f esp32/sdkconfig ] && sha256sum esp32/sdkconfig
+    } | sha256sum | cut -d' ' -f1
+}
+
+SIG_HISTORY="$AUTO_LOG_DIR/measured_shipping_signatures"
+REPEAT_HISTORY="$AUTO_LOG_DIR/measured_repeat_overrides"
+CURRENT_SHIPPING_SIG=$(shipping_signature)
+SIGNATURE_SEEN=0
+grep -q "^${CURRENT_SHIPPING_SIG} " "$SIG_HISTORY" 2>/dev/null && SIGNATURE_SEEN=1
+if [ "$SIGNATURE_SEEN" = 1 ]; then
+    if [ "${AUTO_ALLOW_REPEAT:-0}" != 1 ]; then
+        echo "UNCHANGED_SHIPPING_IMAGE_REFUSED signature=${CURRENT_SHIPPING_SIG}"
+        echo "Implement a real candidate first. Controls belong in concurrent candidate batches."
+        exit 42
+    fi
+    if [ -z "${AUTO_REPEAT_REASON:-}" ]; then
+        echo "REPEAT_REASON_REQUIRED: set AUTO_REPEAT_REASON for the one allowed confirmation"
+        exit 43
+    fi
+    if grep -q "^${CURRENT_SHIPPING_SIG} " "$REPEAT_HISTORY" 2>/dev/null; then
+        echo "REPEAT_BUDGET_EXHAUSTED signature=${CURRENT_SHIPPING_SIG}"
+        echo "This image already has its confirmation; implement the next candidate."
+        exit 44
+    fi
+    echo "EXPLICIT_REPEAT_ALLOWED signature=${CURRENT_SHIPPING_SIG} reason=${AUTO_REPEAT_REASON}"
+fi
+
 # The coordinator's normal confirmation run shares board 1 with its worker.
 # Pool workers already hold this lock in needle-board.
 if [ -z "${NEEDLE_BOARD:-}" ] && [ -d /root/board-pool ]; then
@@ -104,4 +149,15 @@ if [ -z "${AUTO_GROUPS:-}" ]; then
     # exact == cases is satisfiable while comparing against nothing (run #296).
     [ "${MISS:-1}" = "0" ] || { echo "DEVICE_GOLDEN_INCOMPLETE missing=${MISS:-?}"; exit 1; }
     echo "DEVICE_GATE_OK exact=${EX}/${CS} golden_missing=${MISS}"
+fi
+
+# Record only after the benchmark and hard device gate complete. Recompute so a
+# deleted/regenerated sdkconfig is represented by the configuration actually
+# measured, not by the pre-build filesystem state.
+MEASURED_SHIPPING_SIG=$(shipping_signature)
+if ! grep -q "^${MEASURED_SHIPPING_SIG} " "$SIG_HISTORY" 2>/dev/null; then
+    printf '%s %s %s\n' "$MEASURED_SHIPPING_SIG" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse --short HEAD)" >> "$SIG_HISTORY"
+fi
+if [ "$SIGNATURE_SEEN" = 1 ] && [ "${AUTO_ALLOW_REPEAT:-0}" = 1 ]; then
+    printf '%s %s %s\n' "$MEASURED_SHIPPING_SIG" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$AUTO_REPEAT_REASON" >> "$REPEAT_HISTORY"
 fi

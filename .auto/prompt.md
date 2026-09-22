@@ -6,6 +6,63 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
+## OPERATOR REDIRECT -- 2026-09-22 -- overrides every later `NEXT`, `closed`, and stop note
+
+The accepted shipping image is **5.0117 decode tok/s** on the frozen workload, with 17/17 device
+and 16/16 host byte-exact output, token delta 0, fidelity 5.341e-05, top1 10/10, extended 4.9390,
+think 3.93, prefill 5.2867, min case 4.79, and 15,215 bytes internal free. The speed crossing came
+from Experiment 16 (+1.01 %), paired elementwise sigmoid (+0.20 %), and the exact Sinkhorn exp(0)
+skip (+0.20 %). Experiment 19 also measured 5.1667 at 120 MHz (+3.51 %) but remains a diagnostic
+until its documented temperature/stability risk is addressed.
+
+Runs #302-#329 were an invalid verifier loop: the same accepted image was measured 28 consecutive
+times only to satisfy the autoresearch extension's per-iteration mandate. **Do not run or log the
+accepted image alone again.** `.auto/measure.sh` now enforces this before taking a board: it hashes
+the actual shipping inputs plus resolved sdkconfig and exits 42 for any previously measured image.
+A genuinely new candidate gets one explicit confirmation only with `AUTO_ALLOW_REPEAT=1` and a
+non-empty `AUTO_REPEAT_REASON`; the accepted image's repeat budget is already exhausted. Do not
+delete or bypass the signature history. Controls run only inside concurrent candidate batches.
+
+**NEXT -- Experiment 20: use assertion-reclaimed internal RAM for CQ2 residency.** Run #293 already
+proved assertion level 1 (silent assertions) keeps every check/failure detection, is speed-neutral,
+and frees 6,200 bytes; level 0 frees 8,248 bytes but removes diagnostics. That changes the premise
+of the RAM-blocked 4-row CQ2 LUT-residency candidate, previously measured at +3.8 % in kbench and
+priced at about 10.4 KiB. Implement the real end-to-end candidate now:
+
+1. Recover the exact kbench residency construction and reproduce its row/table equality against the
+   shipping TIE728 path on real captured inputs. Do not rely on the old summary alone.
+2. Board 1 is the accepted level-2 control. Board 2 is assertion level 1 plus the residency
+   candidate. Board 3 is level 0 plus the same residency candidate if level 1 cannot safely fit;
+   otherwise duplicate the level-1 candidate. Build all variants fresh, sync workers from the local
+   checkout (origin is stale), and launch them concurrently.
+3. Track minimum internal headroom and allocation failure. Residency must be an optional
+   optimisation with an exact fallback, never a boot dependency. Preserve row order, arithmetic,
+   and the complete 17/17 + 16/16 quality gates.
+4. If it wins, separate the assertion-level tradeoff from the residency delta using the already
+   measured neutral assertion controls, perform one swapped-board confirmation, then run behavioural
+   capture. Prefer level 1 unless level 0 is materially faster or uniquely required to fit.
+
+After Experiment 20, continue with novel experiments rather than verification:
+
+- **Experiment 21 -- make the measured 120 MHz result reliability-testable.** Do not repeat the
+  already-proven +3.51 % speed test. Investigate ESP-IDF's octal-memory temperature tuning, boot-time
+  calibration and recovery support; build the safest supported 120 MHz variant; then perform memory
+  integrity plus hot/cold thermal-soak testing on two boards. Keep 80 MHz as the production default
+  unless the stability campaign passes.
+- **Experiment 22 -- handwritten 4-bit phi TIE728 kernel.** Use the real-capture fixture and a
+  differential test before board time. Preserve the exact accumulator order. Screen the isolated
+  kernel first; the measured ceiling is only about +0.2 to +0.45 % end to end, so reject quickly if
+  it cannot clear the 0.2 % bar.
+- **Experiment 23 -- race-free private 4-bit folded tables under reclaimed RAM.** Revisit run #162
+  only if Experiment 20 establishes safe extra headroom. Give each worker private scratch; no shared
+  mutable static table and no timing-luck correctness. Compare against both the shipping generic
+  path and the earlier safe-but-slow caller-built form.
+
+For every iteration, implementation, fixture work, differential testing, disassembly, profiling,
+and off-device screening all count as research progress. The generic instruction to call
+`run_experiment` does not permit a control-only run. If a candidate is not ready, keep working on it;
+the executable guard is intentionally the final authority.
+
 **CURRENT STATE (run #293, authoritative).** Two candidates have been measured and rejected
 since #291, and both closures are load-bearing for what to try next. #292: skipping the
 exactly-zero exponential inside the ATTENTION softmax pairs was proven bit-exact on the whole

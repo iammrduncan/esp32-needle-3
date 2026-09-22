@@ -999,3 +999,163 @@ left in flash is either a wrapper or so small/cold that the L1 instruction cache
 Any remaining single-function candidate is <= 0.1 % by this measurement, so do not burn a build per
 function. Note also that `internal_free` (15503) is now the binding constraint on placement ideas:
 IRAM has to be paid for out of the same pool as data scratch.
+
+## Experiment 15 - operator-internal GDMA double buffering: MEASURED, CLOSED as rejected (run #287, three boards)
+
+Hypothesis tested: the AHB GDMA could prefetch the next sequential PSRAM weight block
+into one of two small internal DMA buffers while TIE728 consumes the current one, so
+the dominant CQ2 GEMV stops paying PSRAM latency at the cache. This is the memory-system
+test, not the rejected schedule test. Measured in `kbench` (`bench_gdma`, kept in
+`.auto/exp15/kbench.c.with_gdma_bench`, raw device output in `.auto/exp15/board{1,2,3}.gdma.txt`),
+real `needle3.cact` bytes: the 768x768 CQ2 tensor staged into PSRAM exactly as the tier
+stages it (147,456 B), blocks of 10 rows (1,920 B, the 2 KiB budget) and 21 rows
+(4,032 B, the 4 KiB budget), the shipping `tie1n` kernel, 20 blocks swept per round,
+5 rounds, min-of-rounds reported, CCOUNT calibrated 24,000 cycles/us.
+
+**All three boards agree to under 0.1 %** (image hashes 008116dd…, e335c7b5…, 27c16c8c…;
+each worker rebuilt fresh, `kbench_compile_lines=3 asm_sources=4`, `nd_lut2_rows_tie1n`
+resident in IRAM). Numbers below are board 1 medians, cycles per block.
+
+| mode | 2 KiB block (10 rows) | 4 KiB block (21 rows) | what it bounds |
+|---|---|---|---|
+| `copy_raw` submit-then-wait, one at a time | 19,381 (23.8 MB/s) | 25,766 (37.6 MB/s) | copy cost, no overlap |
+| `copy_pipe` two in flight, **no compute** | 12,845 (35.9 MB/s) | 15,693 (61.7 MB/s) | copy ceiling |
+| `comp_psram` row walker, cached PSRAM | 18,307 | 43,165 (22.4 MB/s) | **the shipping path** |
+| `comp_int` same rows, operands in internal RAM | 18,287 | 38,332 (25.2 MB/s) | the ceiling: +0.11 %, **+11.2 %** |
+| `overlap` prefetch b+1 while consuming b | 30,733 | 50,914 | **the proposal: -67.8 %, -17.9 %** |
+| `wait` blocked on the done semaphore | 281 (0.9 % of overlap) | 554 (1.1 %) | the copy is *not* the stall |
+
+Every overlapped row was **bit-exact** against the PSRAM path (`int_rows_mismatch=0`,
+`dma_rows_mismatch=0`), so this is a speed verdict, not a correctness one.
+
+**Why it fails, in the order the evidence rules things out.**
+1. *It is not the wait.* The consumer blocks 281 of 30,733 cycles per block, so the copy
+   really is hidden. The overlapped loop is slower than the direct loop because of what
+   the two extra in-flight PSRAM reads do to the shared octal bus, not because the DMA is
+   slow to finish. Per block, compute alone is 18.3k cycles and the copy alone is 12.8-15.7k;
+   together they cost 30.7k, i.e. they **serialise on the memory system** instead of overlapping.
+2. *The ceiling is not worth reaching.* `comp_int` is the "weights already in internal RAM"
+   bound: +0.11 % on the 2 KiB block. Only at 4 KiB, where 20 blocks (80 KB) overflow the
+   32 KB data cache, does residency buy anything (+11.2 %) - and that gain belongs to the
+   *cache*, which already has it: the 12 MB PSRAM tier plus the L1 D-cache is exactly this
+   mechanism, already measured at its own ceiling (tier family closed: span, stride, order,
+   allocation limit).
+3. *The bandwidth is not there to steal.* GDMA's best sustained rate - 61.7 MB/s at 4 KiB
+   with two transactions in flight and nothing else running - is the same order as the
+   ~64 MB/s the cached path already sustains for the whole 3.59 MB/token weight stream. A
+   prefetcher that must share the bus with the consumer cannot deliver a free second stream.
+
+**Cache/DMA coherency, checked explicitly, both directions.** Destination first dirtied
+by the CPU (`memset` 0xA5) and read back so its lines are in the data cache, then
+overwritten by GDMA, then read again: `stale_without_invalidate=0` and
+`stale_with_invalidate=0` at both sizes on all three boards - on this access pattern no
+stale bytes were observed either way, so the invalidate bought nothing measurable here.
+Two hazards found, both hard:
+* **Doing the invalidate correctly is impossible inside the loop.** `esp_cache_msync()`
+  briefly disables the cache, and the async-memcpy completion chain (IDF's
+  `esp_async_memcpy.c` plus the done callback) is mapped from flash, so a GDMA done ISR
+  landing in that window fetches code from a disabled cache: `Guru Meditation Error:
+  Core 0 panic'ed (InstrFetchProhibited)`, **identical PC 0x4020c4df and identical
+  backtrace on two boards**, at the first submit after the coherency test. A shipping
+  design would need the whole callback chain in IRAM, which the campaign's 1 KB IRAM
+  budget (spent on `lut2_tie728.S`) cannot pay.
+* **Even without a transaction in flight, the invalidate costs 1.416 M cycles**
+  (`msync min 1,416,510 / max 1,416,880`, and a single 64-byte call costs the same
+  1,416,51x) - a fixed ~5.9 ms, size-independent, reproducible across all three boards to
+  the last digits. Cause not chased (nothing in `engine/` or `esp32/main/main.c` calls
+  cache maintenance - verified by grep - so the accepted runtime is untouched by this),
+  but it alone ends the experiment: 76 blocks/token x 5.9 ms is not a price any 2 % win pays.
+
+**Heap impact (measured, would-be shipping cost).** A pair of DMA buffers costs 4,600 B of
+internal heap at 2 KiB and **8,728 B at 4 KiB** (allocation overhead included), plus the
+80 KB internal window needed for the ceiling control. The accepted runtime has
+**15,247 B internal free**, so the 4 KiB pair alone consumes 57 % of the remaining internal
+RAM for a measured -17.9 %.
+
+**Disposition: not integrated; `esp32/main/kbench.c` and the kbench-only CMake
+requirement reverted; main tree back at the accepted 4.9417 runtime.** No canonical
+decode measurement was spent on it - the proposal lost in the microbenchmark on three
+boards before it could touch the request path, so a 13-minute flash would have measured
+the control. `decode_tps` therefore stays at the accepted 4.9417 (unchanged, not
+re-measured this run). Memory-system family now closed from both sides: cross-operator
+worker overlap (#133, #213), tier geometry, and operator-internal DMA prefetch.
+
+**Harness facts bought by this experiment.**
+* `nd_lut2_rows_*` index `packed`, `norms` **and** `y` by the row number they are handed.
+  Sweeping row blocks with a block-local payload buffer must offset `packed` and `norms`
+  independently and call the kernel with `(0, rows_blk)`; the first version passed the
+  absolute row base and wrote `y[750]` into a 10-float buffer - heap corruption, later a
+  crash. Symptom to remember: a *bit-exactness* failure (10 rows/round) that appeared only
+  on the internal-RAM path.
+* Never `git stash -u` inside a board worker: the untracked `.venv` symlink and
+  `.board.json` are infrastructure, and taking them away costs that board's slot in the
+  batch (`timeout: failed to run command '.venv/bin/python'`). Restore with
+  `git show 'stash@{0}^3:.board.json' > .board.json` and re-create the venv symlink.
+* `esp_async_memcpy` needs `esp_hw_support` + `esp_mm` in the component's REQUIRES
+  (`esp_cache.h` is provided by `esp_mm`); adding them to the kbench-scoped block keeps
+  the shipping component's dependency list untouched.
+
+## Experiment 16 - compact first-byte grammar index: MEASURED, KEPT, +1.01 % decode (run #288, 4.9417 -> 4.9917)
+
+**Hypothesis.** The constrained sampler decides which vocabulary pieces the current
+grammar state can spell by examining all 8,176 pieces every decode token (a
+`nd_tok_piece` call plus a first-byte table test each). Index the vocabulary by first
+byte once - ascending ids per byte, counting sort, plus the list of the byte values
+that actually start a piece - and per token walk only the buckets whose byte the state
+accepts. Legality itself is untouched: every visited id still takes the same
+`token_ok` byte walk, results still land in the same one-bit-per-id bitmap, and the
+caller still reads it in ascending id order, so the candidate list, the argmax and its
+tie-breaking are the shipped ones.
+
+**Off-device screen first (`.auto/exp16/`, host build behind `-DND_SAMPLE_STATS`).**
+All six primary prompts, 93 real decode steps: the grammar admits a **median of one
+first byte** per step (max 11), only **94 of 256** byte values ever start a piece, and
+the bucket walk touches a **median of 51 ids against 8,176** - **1.62 %** of the
+shipped walk in aggregate, with **zero** steps above half of it. The bucket
+enumeration reproduced the shipped candidate list **element for element and in
+ascending order on all 93 steps**. That is what justified board time, and it is also
+why this is not the rejected run #149 (which kept all 8,176 iterations and only
+shortened each one, measuring -0.17 %): here 98 % of the iterations disappear, and the
+two-core split the walk needed at that depth (`nd_parallel_rows`, run #176's +0.20 %)
+is dropped because ~50 ids do not pay for a handshake.
+
+**Three-board batch (fresh builds, board 1 pristine control), batch `20260922T052753.408423Z`.**
+All three workers ran at 1000 Hz because their `esp32/sdkconfig` is gitignored and so
+survives `git reset --hard` - the control read 4.9250, exactly the pre-tick accepted
+value, which both proves the drift and confirms the control is otherwise healthy.
+At that identical configuration: control **4.9250**, candidate **4.9733** and
+**4.9767** (+0.98 % and +1.05 %), both `device_output_exact=14/14`,
+`device_token_delta=0`. Images 84276dd4… / 7564bb66… vs control 2a54c156….
+
+**Canonical confirmation on the original board at the shipping configuration** (tick
+100 Hz, 64 B data cache line, `sdkconfig` deleted and regenerated, image 280320 B,
+md5 dcce6a62…, `lex_index_build` in the map at 0x42011234):
+**decode 4.9917** = +1.01 % over 4.9417 and +104.6 % over the 2.44 baseline,
+extended **4.9129** (+1.06 %), think 3.92, prefill 5.265 (unchanged), **min_case 4.77**
+(previous best 4.72, so the worst case improved with the mean rather than trading
+against it), boot bench 5.039 / 198 ms/token **unchanged** - the same request-path-only
+signature and internal control that run #147 produced, because the bench calls
+`nd_model_step_hidden` and never samples. `14/14` device and `13/13` host byte-exact,
+`token_delta 0`, fidelity `5.341e-05` (gate 2e-3), top1 `10/10`, `make test` green
+(grammar + prefix isolation), and `make capture` rc=0 with all nine behavioural flags
+true (routes, tools, two-pass local execution, no external calls, telemetry, sampling
+interval, timer expiry). Memory: `internal_free` 15,247 -> **15,215** (32 B for the
+index handle); the ~17 KB index itself is `ND_ALLOC`ed in PSRAM (2,052,252 B free at
+boot; allocated on the first constrained sample, so it is not in that boot-time number),
+and allocation failure falls back to the original full walk, so the index is an
+optimisation rather than a dependency.
+
+**Why it paid more than the screen implied.** The screen priced the arithmetic
+(~1.5 ms of piece lookups); the delivered +2.05 ms of saved token time also includes
+the per-token handshake that the split used to pay and the work both cores did on the
+256-entry first-byte probe (two builds of a 256-step grammar walk per token, one per
+core, replaced by one walk over the 94 bytes that can actually start a piece). Lesson:
+a phase built as `nd_parallel_rows` carries a fixed handshake plus duplicated per-core
+setup, and removing the *need* for the split can be worth more than removing the work.
+
+**Boundary for future ideas in this phase.** The sampler's remaining cost is now
+dominated by `nd_model_logits_subset` (5.7 ms, a legitimate row count at the 2-bit
+GEMV floor) and by `token_ok`'s byte walk over the ~50 visited ids - the enumeration
+itself is no longer a lever. The index is keyed on (tokenizer, vocab) and rebuilt if
+either changes; it covers vocab <= 8,192 (one pass of the bitmap), above which the
+chunked walk remains.

@@ -1,0 +1,36 @@
+KB GDMA CFG buffer=2048 payload=1920 rows_blk=10 nblk=76 sweep=20 rowbytes=192 ngroup=6 tensor=156672 kernel=tie1n int_free_pre=312507 int_free_window=245707 psram_free=16614884
+KB GDMA MEM buffer=2048 dma_pair=3840 internal_free=241107 delta=-4600 dma0=0x3fcebf40 internal=1 dma_cap=1 window=0x3fcb0ce0 psram_src=0x3c030a1c
+KB GDMA COHERENCY buffer=2048 stale_without_invalidate=0 stale_with_invalidate=0
+KB GDMA R buffer=2048 round=0 copy_raw=383652 copy_pipe=257255 comp_psram=368546 comp_int=366009 overlap=614086 wait=5620 msync=26293237 bad_int=0 bad_dma=0
+KB GDMA R buffer=2048 round=1 copy_raw=387767 copy_pipe=257049 comp_psram=368872 comp_int=364335 overlap=614776 wait=5620 msync=26304022 bad_int=0 bad_dma=0
+KB GDMA R buffer=2048 round=2 copy_raw=387612 copy_pipe=256854 comp_psram=364726 comp_int=365748 overlap=614660 wait=5620 msync=26307321 bad_int=0 bad_dma=0
+KB GDMA R buffer=2048 round=3 copy_raw=387647 copy_pipe=257005 comp_psram=364891 comp_int=365743 overlap=613317 wait=5620 msync=26308300 bad_int=0 bad_dma=0
+KB GDMA R buffer=2048 round=4 copy_raw=386652 copy_pipe=256473 comp_psram=366133 comp_int=364331 overlap=614834 wait=5620 msync=26306950 bad_int=0 bad_dma=0
+KB GDMA SUM buffer=1920 mode=copy_raw    n=5 min=383652 med=387612 mean=386666 cyc_per_blk=19381 MBps=23.78
+KB GDMA SUM buffer=1920 mode=copy_pipe   n=5 min=256473 med=257005 mean=256927 cyc_per_blk=12850 MBps=35.86
+KB GDMA SUM buffer=1920 mode=comp_psram  n=5 min=364726 med=366133 mean=366634 cyc_per_blk=18307 MBps=25.17
+KB GDMA SUM buffer=1920 mode=comp_int    n=5 min=364331 med=365743 mean=365233 cyc_per_blk=18287 MBps=25.20
+KB GDMA SUM buffer=1920 mode=overlap     n=5 min=613317 med=614660 mean=614335 cyc_per_blk=30733 MBps=14.99
+KB GDMA SUM buffer=1920 mode=msync_only  n=5 min=26293237 med=26306950 mean=26303966 cyc_per_blk=1315348 MBps=0.35
+KB GDMA MSYNC buffer=2048 per_call_min=0 max=1417675 one_64B_call=1416513
+KB GDMA WAIT buffer=2048 wait_per_blk=281 of_overlap_per_blk=30733 (0.9% blocked)
+KB GDMA NUM buffer=2048 int_rows_mismatch=0 dma_rows_mismatch=0 coherency_stale_no_invalidate=0 coherency_stale_with_invalidate=0
+KB GDMA MEM buffer=2048 final_internal_free=240543 final_psram_free=16614884
+KB GDMA CFG buffer=4096 payload=4032 rows_blk=21 nblk=36 sweep=20 rowbytes=192 ngroup=6 tensor=156672 kernel=tie1n int_free_pre=312303 int_free_window=202363 psram_free=16614884
+KB GDMA MEM buffer=4096 dma_pair=8064 internal_free=193635 delta=-8728 dma0=0x3fced080 internal=1 dma_cap=1 window=0x3fcb0ce0 psram_src=0x3c030a1c
+KB GDMA COHERENCY buffer=4096 stale_without_invalidate=0 stale_with_invalidate=0
+KB GDMA R buffer=4096 round=0 copy_raw=511073 copy_pipe=313527 comp_psram=860752 comp_int=766639 overlap=1018170 wait=11094 msync=25633345 bad_int=0 bad_dma=0
+KB GDMA R buffer=4096 round=1 copy_raw=515793 copy_pipe=313851 comp_psram=863332 comp_int=766626 overlap=1019363 wait=11094 msync=25633353 bad_int=0 bad_dma=0
+KB GDMA R buffer=4096 round=2 copy_raw=515334 copy_pipe=314043 comp_psram=863326 comp_int=768017 overlap=1018242 wait=11094 msync=25633402 bad_int=0 bad_dma=0
+KB GDMA R buffer=4096 round=3 copy_raw=515661 copy_pipe=314475 comp_psram=864732 comp_int=766619 overlap=1018278 wait=11094 msync=25633348 bad_int=0 bad_dma=0
+KB GDMA R buffer=4096 round=4 copy_raw=515376 copy_pipe=312780 comp_psram=864670 comp_int=766647 overlap=1018336 wait=11099 msync=25633369 bad_int=0 bad_dma=0
+KB GDMA SUM buffer=4032 mode=copy_raw    n=5 min=511073 med=515376 mean=514647 cyc_per_blk=25769 MBps=37.55
+KB GDMA SUM buffer=4032 mode=copy_pipe   n=5 min=312780 med=313851 mean=313735 cyc_per_blk=15693 MBps=61.66
+KB GDMA SUM buffer=4032 mode=comp_psram  n=5 min=860752 med=863332 mean=863362 cyc_per_blk=43167 MBps=22.42
+KB GDMA SUM buffer=4032 mode=comp_int    n=5 min=766619 med=766639 mean=766910 cyc_per_blk=38332 MBps=25.24
+KB GDMA SUM buffer=4032 mode=overlap     n=5 min=1018170 med=1018278 mean=1018478 cyc_per_blk=50914 MBps=19.01
+KB GDMA SUM buffer=4032 mode=msync_only  n=5 min=25633345 med=25633353 mean=25633363 cyc_per_blk=1281668 MBps=0.76
+KB GDMA MSYNC buffer=4096 per_call_min=0 max=1416571 one_64B_call=1416518
+KB GDMA WAIT buffer=4096 wait_per_blk=554 of_overlap_per_blk=50912 (1.1% blocked)
+KB GDMA NUM buffer=4096 int_rows_mismatch=0 dma_rows_mismatch=0 coherency_stale_no_invalidate=0 coherency_stale_with_invalidate=0
+KB GDMA MEM buffer=4096 final_internal_free=193167 final_psram_free=16614884

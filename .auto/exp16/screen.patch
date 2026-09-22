@@ -1,0 +1,103 @@
+diff --git a/engine/src/nd_sample.c b/engine/src/nd_sample.c
+index 40ae456..d5f1bd2 100644
+--- a/engine/src/nd_sample.c
++++ b/engine/src/nd_sample.c
+@@ -2,6 +2,12 @@
+ #include "nd_quant.h"
+ 
+ #include <string.h>
++#ifdef ND_SAMPLE_STATS
++#include <stdio.h>
++#include <stdlib.h>
++static int cmp_u16(const void *a, const void *b)
++{ return (int)(*(const uint16_t *)a) - (int)(*(const uint16_t *)b); }
++#endif
+ 
+ void nd_sampler_init(nd_sampler *s, const nd_tokenizer *tok,
+                      const nd_grammar *g)
+@@ -156,6 +162,7 @@ uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
+         static uint32_t s_legal[ND_LEX_MAX_WORDS];
+         lex_ctx    lc;
+         uint32_t   base = 0u, w;
++        (void)w;
+ 
+         lc.s = s; lc.bits = s_legal; lc.vocab = m->vocab;
+         /* Chunked so a vocabulary larger than the static bitmap still works: one
+@@ -183,8 +190,77 @@ uint32_t nd_sample_hidden(nd_model *m, nd_sampler *s, const float *hidden)
+                 n++;
+             }
+         }
++
++    #ifdef ND_SAMPLE_STATS
++        /* ---- Experiment 16 screen (diagnostic build only, never measured) ------
++         * Build the compact first-byte index once, enumerate exactly what it would
++         * enumerate, and compare the resulting candidate set with the shipped one.
++         * Answers the only question that decides the experiment: how many of the
++         * ~8.2K piece lookups per token the bucket walk removes, and whether the
++         * set - and after sorting, the order - is identical. */
++        {
++            static uint16_t s_ids[16384];
++            static uint32_t s_off[258];
++            static uint16_t s_new[16384];
++            static uint8_t  s_ok[256];
++            uint32_t        b, k, vocab = m->vocab, allowed = 0, touched = 0, nn = 0;
++            uint32_t        set_equal;
++
++            if (!s_off[257]) {                     /* counting sort by first byte */
++                uint32_t j;
++                for (j = 0; j < 257u; j++) s_off[j] = 0;
++                for (j = 16; j < vocab; j++) {
++                    uint16_t plen;
++                    const char *pc = nd_tok_piece(&m->tok, j, &plen);
++                    if (!pc || plen == 0u) continue;
++                    s_off[(unsigned char)pc[0] + 1u]++;
++                }
++                for (b = 1; b < 257u; b++) s_off[b] += s_off[b - 1];
++                s_off[257] = s_off[256];
++                for (j = 16; j < vocab; j++) {
++                    uint16_t plen;
++                    const char *pc = nd_tok_piece(&m->tok, j, &plen);
++                    if (!pc || plen == 0u) continue;
++                    s_ids[s_off[(unsigned char)pc[0]]++] = (uint16_t)j;
++                }
++                for (b = 255u + 1; b > 0; b--) s_off[b] = s_off[b - 1];
++                s_off[0] = 0;
++                printf("SAMPLEIDX ids=%u buckets_nonempty=%u\n",
++                       (unsigned)s_off[257], (unsigned)({ uint32_t c2 = 0, q;
++                           for (q = 0; q < 256u; q++) c2 += (s_off[q+1] > s_off[q]);
++                           c2; }));
++            }
++            for (b = 0; b < 256u; b++) {
++                nd_gstate trial = s->st;
++                s_ok[b] = nd_gstate_byte(&trial, (char)b) ? 1u : 0u;
++                allowed += s_ok[b];
++            }
++            for (b = 0; b < 256u; b++) {
++                if (!s_ok[b]) continue;
++                for (k = s_off[b]; k < s_off[b + 1]; k++) {
++                    uint16_t id = s_ids[k];
++                    touched++;
++                    if (!token_ok(s, id, NULL)) continue;
++                    if (nn < 16384u) s_new[nn] = id;
++                    nn++;
++                }
++            }
++            if (nn > 1u) qsort(s_new, nn, sizeof(s_new[0]), cmp_u16);
++            set_equal = (nn == n);
++        for (k = 0; set_equal && k < nn; k++)
++            set_equal = (k < ND_SAMPLE_MAX_CAND) && (cand[k] == s_new[k]);
++
++        printf("SAMPLESTEP vocab=%u allowed_bytes=%u touched_by_buckets=%u candidates=%u "
++                   "new_candidates=%u pct_of_walk=%.1f set_equal=%d\n",
++                   (unsigned)vocab, (unsigned)allowed, (unsigned)touched, (unsigned)n,
++                   (unsigned)nn, 100.0 * (double)touched / (double)(vocab > 16u ? vocab - 16u : 1u),
++                   (int)set_equal);
++            fflush(stdout);
++        }
++    #endif
+     }
+ 
++
+     if (n == 0)
+         return (uint32_t)-1;
+     if (n > ND_SAMPLE_MAX_CAND)                 /* too many: full projection */

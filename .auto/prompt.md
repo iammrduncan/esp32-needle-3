@@ -13,8 +13,11 @@ fidelity 5.341e-05 / top1 10/10, internal_free 15247. Experiment 12 is kept
 (paired attention `nd_expf`, isolated +19.96 %, end to end +0.48 %); Experiment 13 is measured
 and rejected; Experiment 17 is measured and rejected; Experiment 18 is kept (+0.204 % exact KV
 reciprocal); the 100 Hz FreeRTOS tick is kept (+0.34 %) and its behavioural capture is green.
-**Experiment 14 is measured and closed as rejected (run #286).** Experiments **15, 16 and 19
-remain unperformed**. Their evidence and recipes are in `.auto/ideas.md`.
+**Experiment 14 is measured and closed as rejected (run #286); Experiment 15 is measured
+and CLOSED as rejected (run #287, three boards: overlapped -17.9 % to -67.8 %, internal-RAM
+ceiling +0.11 %, one cache invalidate 1.416 M cycles); Experiment 16 is measured and KEPT
+(+1.01 %, 4.9417 -> 4.9917, which is the accepted runtime). Only Experiment 19 remains
+unperformed.** Their evidence and recipes are in `.auto/ideas.md`.
 
 **Operator intervention after run #284.** Runs after the accepted gate fell into a canonical-repeat
 loop: the same `674b168` image returned 4.9417 dozens of times with no hypothesis or code change.
@@ -38,7 +41,12 @@ re-run with no code change adds cost and no information), couple three-board con
 candidates instead of running periodic baseline-only batches, and treat any candidate below the
 0.2 % keep bar as not worth a build.
 
-**NEXT: Experiment 15 (operator-internal GDMA double buffering), recipe in `.auto/ideas.md`.**
+**Experiment 16 is measured and KEPT (run #288, +1.01 %: 4.9417 -> 4.9917 decode, 14/14 +
+13/13 byte-exact, capture green).** Accepted runtime is now **4.9917 decode tok/s**.
+**NEXT: Experiment 19, the 120 MHz octal-memory diagnostic - isolated, non-shipping by
+default** (ESP-IDF labels 120 MHz DDR experimental; it is a thermal/stability campaign, not
+a free clock, and its result must be measured against two 80 MHz controls with board
+assignments swapped).
 Experiment 14 is measured and CLOSED as rejected (run #286): the real layer-0 `q_proj` fixture
 replayed bit-exact 1024/1024, int8 CQ2 on ONE tensor moved `logit_max_delta` to 0.3282 (164x the
 2e-3 gate) and the best case of the whole integer family - int16 activation with an exact codebook

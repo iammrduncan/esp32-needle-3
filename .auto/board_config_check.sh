@@ -40,6 +40,10 @@ compare() {
     return 0
 }
 
+SHIPPING='engine esp32 host tools'
+shatree() { local r=$1 p h=""; for p in $SHIPPING; do h="$h$(git -C "$r" rev-parse "HEAD:$p" 2>/dev/null)"; done
+             [ ${#h} -ge 160 ] && { printf %s "$h" | sha1sum | cut -c1-12; } || echo MISSING; }
+
 if [ -n "${SELFTEST:-}" ]; then
     a='CONFIG_X=1 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_ENABLE=y'
     b="$a"
@@ -48,7 +52,16 @@ if [ -n "${SELFTEST:-}" ]; then
     if compare "selftest different" "$a" "$c"; then
         echo "SELFTEST_FAILED differing configs reported IN SYNC"; exit 2
     fi
-    echo "SELFTEST_OK the comparison can distinguish a one-key config difference"
+    # The tree-hash side must not be able to pass vacuously: an unreadable repo
+    # returns MISSING rather than an empty string that could equal another empty
+    # string, and two real shipping states have to hash differently.
+    [ "$(shatree "/nonexistent-$$")" = MISSING ] || { echo "SELFTEST_FAILED unreadable repo did not report MISSING"; exit 2; }
+    e1=$(git -C "$ROOT" rev-parse HEAD:engine 2>/dev/null)
+    e0=$(git -C "$ROOT" rev-parse "$(git -C "$ROOT" log --format=%H -2 -- engine | tail -1):engine" 2>/dev/null)
+    if [ -z "$e1" ] || [ -z "$e0" ] || [ "$e1" = "$e0" ]; then
+        echo "SELFTEST_FAILED the shipping tree hash cannot distinguish two engine commits"; exit 2
+    fi
+    echo "SELFTEST_OK the comparison can distinguish a one-key config difference and two shipping trees"
     exit 0
 fi
 
@@ -63,17 +76,21 @@ base=$(get "$canon")
 # from this container has no credentials and would reset a worker to a stale
 # baseline, which is how a control reads low and invalidates a whole batch.
 sync_drift=0
-want_head=$(git -C "$ROOT" rev-parse HEAD)
-want_def=$(git -C "$ROOT" hash-object esp32/sdkconfig.defaults)
+# Compare TREE HASHES of the paths that actually feed the build, not HEAD ids:
+# log_experiment commits on every keep, so HEAD moves constantly while workers stay
+# at the last synced commit. Matching on HEAD would report drift on almost every
+# run, and a check that cries wolf gets ignored - which is how drift gets measured
+# as a result. `.auto/**` commits cannot change what a worker compiles.
+want=$(shatree "$ROOT")
+got_w=$(shatree /root/board-pool/board1)
 for b in 1 2 3; do
     d=/root/board-pool/board$b
-    [ -d "$d/.git" ] || { echo "board$b   absent (no checkout)"; continue; }
-    got=$(git -C "$d" rev-parse HEAD 2>/dev/null)
-    gdef=$(git -C "$d" hash-object esp32/sdkconfig.defaults 2>/dev/null)
-    if [ "$got" = "$want_head" ] && [ "$gdef" = "$want_def" ]; then
-        echo "source board$b  AT HEAD $(printf %s "$want_head" | cut -c1-7)"
+    [ -d "$d/.git" ] || { echo "source board$b  absent (no checkout)"; sync_drift=$((sync_drift + 1)); continue; }
+    got=$(shatree "$d")
+    if [ "$got" = "$want" ]; then
+        echo "source board$b  builds identical shipping trees (engine/esp32/host/tools)"
     else
-        echo "source board$b  STALE head=$(printf %s "$got" | cut -c1-7) want=$(printf %s "$want_head" | cut -c1-7) defaults=$(printf %s "$gdef" | cut -c1-7) want=$(printf %s "$want_def" | cut -c1-7)"
+        echo "source board$b  STALE shipping trees: $got vs $want (head $(git -C "$d" rev-parse --short HEAD 2>/dev/null) vs $(git -C "$ROOT" rev-parse --short HEAD))"
         echo "        fix: git -C $d fetch $ROOT autoresearch/decode-tps-2026-09-18 && git -C $d reset --hard FETCH_HEAD"
         sync_drift=$((sync_drift + 1))
     fi

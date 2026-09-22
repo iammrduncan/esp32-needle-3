@@ -1815,3 +1815,31 @@ So the phase is at the non-resident scattered-PSRAM-read floor already measured 
 this shape, and a build would have measured the control. Recorded as the fourth off-device closure of
 the session (logf skip, software prefetch, cache-config maxima, this) - the cheap kind of negative
 result that keeps 13-minute board runs for questions that can still change a decision.
+
+## STOP CONDITION MET (runs #302-#304): the loop is producing disclosed repeats, not experiments
+
+Three consecutive canonical runs of an unchanged shipping tree (#302, #303, #304), all reproducing
+5.0117 decode / 4.9390 extended / 3.93 think / 5.2867 prefill / 5.057 boot bench / 4.79 min_case /
+15,215 internal / 2,052,252 psram to the digit, 17/17 device + 16/16 host byte-exact with
+`golden_missing=0`, fidelity 5.341e-05, top1 10/10. Deterministic to the last digit is the point: a
+fourth carries no information, and the ledger's own #246-#285 stretch shows what an unchanged-HEAD
+loop degrades into when each iteration must emit a number.
+
+Nothing above the 0.2 % keep bar remains inside the documented maxima and the byte-exact gate. Closed
+in this window alone, all off-device and all cheap: the Sinkhorn `logf` skip (13.58 % measured hit
+rate vs a 787-cycle break-even), software prefetch (`pref`/`dpref` absent, `__builtin_prefetch` emits
+nothing - would have read as a null result), the cache-config family (S3 Kconfig maxima; no 64 B
+instruction line exists), staged tap/norm table delivery (already PSRAM-resident; 221 KB of taps vs a
+64 KB cache), and Sinkhorn's final `n*n` exponential tail (~128 exps/token, an order of magnitude
+under the bar).
+
+**The two routes that are above the bar are owner decisions, not code.** (1) Assertion level: neutral
+on speed but frees 8,248 B of internal heap (#293), which re-prices the RAM-blocked residency family -
+of those, only the 4-row CQ2 LUT residency is a measured winner (kbench +3.8 %), so the re-pricing is
+worth ~one experiment, not a campaign. (2) 120 MHz octal flash+PSRAM: +3.51 % measured on two boards
+(#289), forbidden by the documented-maxima rule and carrying IDF's own ~20 °C random-crash caveat.
+
+Operator-side chores this loop cannot do: `git push` (no credentials in this container; origin is
+~22 commits behind - sync workers by local path only), and the product defects already reported and
+still open (silent 271-byte request truncation; the schema's lack of a no-op escape, which turns
+chit-chat into a hallucinated `set_sampling_interval`).

@@ -1739,3 +1739,48 @@ controls): one handshake per group plus a read-modify-write of `y` costs more th
 and per-core tables need 16 kB against 15 kB of heap. The gate change removes only the risk half of a
 two-part rejection, so no retry. The RAM-blocked family still waits on the owner's assertion-level
 decision (#293), which this run did not touch.
+
+## CLOSED ON MEASUREMENT: software data-cache prefetch does not exist on this core (run #300 side-probe)
+
+The one lever family the ledger had never tested: the engram's scattered slot gathers are the only
+significant accesses that are *latency*- rather than issue-bound, which is precisely what a data-cache
+prefetch instruction is for, and a prefetch cannot change a result bit - so it would have been the
+risk-free candidate. It is unavailable:
+
+* `__builtin_prefetch(p, 0, 0)` under `xtensa-esp32s3-elf-gcc -O2` compiles to **nothing** (the
+  function is just `lsi`, `lsi`, `add.s`, `rfr`, `retw`). A gcc-level attempt would therefore have
+  looked like a *null result* rather than an unavailable lever - the dangerous kind of dead end.
+* The opcodes do not exist either: `pref 0, a2, 0`, `dpref 1, a2, 0, 1` and `pref.r 1, a2` are all
+  rejected with `unknown opcode or format name` by the assembler this toolchain ships.
+
+Consequence, and it is explanatory rather than just negative: it is why every "prefetch deeper"
+experiment in this campaign (the LUT kernel's index prefetch, -1.9 pp) had to be implemented as
+*earlier scalar loads*, and why the residency family (real internal-RAM residency, not prefetch) is
+the only way to attack delivery on this part.
+
+## MEASURED, KEPT: the three-board pool was NOT in the state the campaign assumes (run #300)
+
+Build configs had drifted - board1 `ASSERTION_LEVEL=2` (shipping), board2 **0**, board3 **1**, i.e.
+run #293's candidates left behind, because `esp32/sdkconfig` is gitignored and `git reset --hard` does
+not restore it (#288's recorded fact, now biting for the second time). Worse: **all three workers were
+on stale source** (c80fbae / 7c331af vs HEAD 9b2f811) and boards 2/3 carried *different*
+`sdkconfig.defaults` hashes, so deleting the drifted `sdkconfig` would have regenerated the drift
+straight back out of the stale tracked defaults. Normalised (removed the drifted configs, synced all
+three to HEAD **by local path**, never `git fetch origin`, which has no credentials here) and now
+reports `CONFIG_SYNC_OK boards=3 source=3`.
+
+`.auto/board_config_check.sh` guards it: prefix-keyed build-config comparison against the *local*
+canonical `sdkconfig` (the config every accepted number was measured at), plus each worker's HEAD
+commit and `sdkconfig.defaults` hash, plus `SELFTEST=1` proving the comparison can distinguish a
+one-key difference. Wired into `measure.sh` as a non-fatal `CONFIG_DRIFT_WARN`.
+
+**The meta-finding, third instance this session:** my first version of this check **vacuously
+passed** - it anchored `^KEY=` while IDF spells the important keys
+`CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE=y` / `CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y`, matched
+nothing, and printed `IN SYNC` on a demonstrably drifted pool. Tally on the campaign's own harness:
+three checks that could not fail (`bench.compare` counting a missing golden as exact, the
+partial-save guard that only guarded an empty golden, this config check) and one documented knob that
+was never wired (`AUTO_SAVE`). All four failed in the same direction - **reporting success while
+verifying nothing** - which is why "can this check fail?" has been the highest-yield question in this
+campaign while every 0.2 % speed candidate ran out. Rule for whoever picks this up: ask it of any
+check before trusting a green run.

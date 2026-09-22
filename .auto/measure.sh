@@ -62,6 +62,15 @@ if [ "${AUTO_NOFLASH:-0}" != 1 ]; then
     echo "flash_s=$(( $(date +%s) - t0 ))"
 fi
 
+# Loud, non-fatal. Another worker's source or build config being out of sync does
+# not invalidate THIS canonical measurement, but it invalidates the next three-board
+# batch, and the failure mode - a control reading low because its worker is stale -
+# looks exactly like a result. Run #300 found all three workers behind HEAD and two
+# of them with run #293's assertion-level change still baked into their
+# sdkconfig.defaults. The check itself is falsifiable (SELFTEST=1).
+bash .auto/board_config_check.sh > "$AUTO_LOG_DIR/auto_config_check.log" 2>&1 ||
+    echo "CONFIG_DRIFT_WARN: $(tail -1 "$AUTO_LOG_DIR/auto_config_check.log")"
+
 ARGS=(device --port "$SERIAL_PORT")
 [ -n "${AUTO_GROUPS:-}" ] && ARGS+=(--groups "$AUTO_GROUPS")
 # The baseline run (iteration 1) freezes the device goldens; later runs compare

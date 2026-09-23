@@ -219,6 +219,87 @@ static ND_HOT void nd_fwht3s(float *x0, float *x1, float *x2, uint32_t n, float 
     }
 }
 
+/* Radix-4 stage fusion on top of the three-group walk.
+ *
+ * Two adjacent stages (len, 2*len) touch exactly four elements per base - j,
+ * j+len, j+2len, j+3len - and the second stage consumes precisely what the first
+ * stored. Keeping p,q,r,s in registers removes a whole load/store round trip per
+ * pair of stages, which for the model's g == 128 is 3 of its 7 passes.
+ *
+ * Bit-exact by construction: p=a+b, q=a-b, r=c+d, s=c-d ARE stage len's four
+ * butterflies, and the four stores ARE stage 2*len's butterflies over those same
+ * values in the same order. Nothing is reassociated, and no multiply appears until
+ * the final scaled stage, so -ffp-contract cannot interfere. The three groups are
+ * written as three independent statements so the compiler decides interleaving;
+ * liveness is 8 floats per group, the same shape the accepted walk already runs.
+ */
+static ND_HOT void nd_fwht4s(float *x0, float *x1, float *x2, uint32_t n, float scale)
+{
+    uint32_t len, base, j;
+
+    /* Fused pairs (len, 2*len) while the SECOND stage is still below the final one:
+     * 2*len <= n/4, i.e. len <= n/8. For n = 128 that is len = 1, 4, 16, covering
+     * stages 1,2,4,8,16,32 in three passes. */
+    for (len = 1u; len <= (n >> 3); len <<= 2) {
+        const uint32_t l2 = len << 1, l3 = len + l2, st = len << 2;
+        for (base = 0u; base + st <= n; base += st) {
+            for (j = base; j < base + len; j++) {
+                float a = x0[j], b = x0[j + len], c = x0[j + l2], d = x0[j + l3];
+                float p = a + b, q = a - b, r = c + d, s = c - d;
+                x0[j] = p + r; x0[j + l2] = p - r; x0[j + len] = q + s; x0[j + l3] = q - s;
+
+                a = x1[j]; b = x1[j + len]; c = x1[j + l2]; d = x1[j + l3];
+                p = a + b; q = a - b; r = c + d; s = c - d;
+                x1[j] = p + r; x1[j + l2] = p - r; x1[j + len] = q + s; x1[j + l3] = q - s;
+
+                a = x2[j]; b = x2[j + len]; c = x2[j + l2]; d = x2[j + l3];
+                p = a + b; q = a - b; r = c + d; s = c - d;
+                x2[j] = p + r; x2[j + l2] = p - r; x2[j + len] = q + s; x2[j + l3] = q - s;
+            }
+        }
+    }
+
+    /* One plain stage when the non-final stage count is odd (n == 4, 16, ...). Never
+     * reached by the model, whose group size is 128, but it keeps every n correct. */
+    if (len < (n >> 1)) {
+        const uint32_t step = len << 1;
+        for (base = 0u; base + step <= n; base += step) {
+            const uint32_t half = base + len;
+            for (j = base; j < half; j++) {
+                float a = x0[j], b = x0[j + len], c = x1[j], d = x1[j + len];
+                float e = x2[j], f = x2[j + len];
+                x0[j] = a + b; x0[j + len] = a - b;
+                x1[j] = c + d; x1[j + len] = c - d;
+                x2[j] = e + f; x2[j + len] = e - f;
+            }
+        }
+    }
+
+    /* The final stage, rescale folded in, exactly as the accepted walk writes it. */
+    len = n >> 1;
+    for (j = 0u; j + 1u < len; j += 2u) {
+        float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+        float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+        float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
+
+        x0[j] = (a0 + b0) * scale;        x0[j + len] = (a0 - b0) * scale;
+        x0[j + 1u] = (a1 + b1) * scale;   x0[j + 1u + len] = (a1 - b1) * scale;
+        x1[j] = (c0 + d0) * scale;        x1[j + len] = (c0 - d0) * scale;
+        x1[j + 1u] = (c1 + d1) * scale;   x1[j + 1u + len] = (c1 - d1) * scale;
+        x2[j] = (e0 + f0) * scale;        x2[j + len] = (e0 - f0) * scale;
+        x2[j + 1u] = (e1 + f1) * scale;   x2[j + 1u + len] = (e1 - f1) * scale;
+    }
+    if (j < len) {                        /* only when n/2 is odd, i.e. n == 2 */
+        float a = x0[j], b = x0[j + len];
+        float c = x1[j], d = x1[j + len];
+        float e = x2[j], f = x2[j + len];
+
+        x0[j] = (a + b) * scale; x0[j + len] = (a - b) * scale;
+        x1[j] = (c + d) * scale; x1[j + len] = (c - d) * scale;
+        x2[j] = (e + f) * scale; x2[j + len] = (e - f) * scale;
+    }
+}
+
 static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
 {
     const fwht_ctx *c = (const fwht_ctx *)vc;
@@ -250,7 +331,10 @@ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
         float *blk2 = blk + g;
         float *blk3 = blk2 + g;
 
-        nd_fwht3s(blk, blk2, blk3, g, scale);
+        /* n >= 8 is where two stages can be fused below the final one; below that
+         * the accepted walk already covers every stage in one or two passes. */
+        if (g >= 8u) nd_fwht4s(blk, blk2, blk3, g, scale);
+        else         nd_fwht3s(blk, blk2, blk3, g, scale);
     }
     for (; gi + 1u < g1; gi += 2u) {
         float *blk  = xh + (size_t)gi * g;

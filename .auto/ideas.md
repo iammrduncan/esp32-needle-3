@@ -1,3 +1,74 @@
+# Runs #360-#365: the prepare/FWHT family, one win shipped and one large null closed
+
+**Accepted runtime is 5.0467 decode tok/s (+107.2 %)** as of run #362: the per-group rescale in
+`fwht_rows` unrolled by 4, +0.332 %, bit-exact, 17/17 device + 19/19 host, confirmed on two boards
+(both-boards readings in 20260923T1022L reproduce 5.0467 exactly).
+
+## SHIPPED: unroll the element-per-cell loops (run #362, +0.332 %)
+
+`fwht_rows`'s rescale went from 10,789 to 2,968 cycles (+263 %) in isolation and delivered +0.332 %
+end to end - slightly more than its isolated pricing implied, because the request path calls
+`nd_cq_prepare` ~16 times per token. Unroll-8 was **-28 %** (the LX7 register-file ceiling the
+ledger already recorded for `kron_apply`), and `restrict` on the same loop was exactly zero (#358).
+
+**This reopens one family and closes one citation.** The ledger's ~20 "scheduling nulls" were
+unrolls of *GEMV* inner loops, which sit at the 2-instructions-per-weight issue floor. Loops whose
+body is one independent multiply per element are a different animal. Do not cite "instruction
+scheduling is closed" for an elementwise loop again.
+
+## CLOSED: the paired-butterfly transform (+0.000 %, run #364) - and why isolation lied
+
+`ee.ldf.64.ip`/`ee.stf.64.ip` around the same scalar `add.s`/`sub.s` measured **+36.75 % bit-exact**
+against the shipped `nd_fwht`, was 80.6 % of prepare by the engine's own cycle accounting, and
+delivered **exactly zero** on device: transform-only read 5.0300 (= the pre-rescale accepted value to
+the digit) and both-halves read 5.0467 on two boards (= rescale-only). Reverted; dead helper deleted.
+
+Cause: the kbench screen re-swept the same 768-float block 25 times, so the transform ran warm in the
+64 KB data cache; the field calls `nd_fwht` on a freshly prepared activation. Third independent
+confirmation after #330 (flat 13.90 % cold delivery tax) and #295 (phi warmth) - and the strongest,
+because the isolated delta was large and the transfer was nil. **Rule: a warm kbench number prices
+nothing. Either isolate cold or do not price from isolation.**
+
+## The bug class that cost a board (run #363), and the rule it wrote
+
+The first integrated transform diverged on device (`DEVICE_OUTPUT_DIVERGED 4/17`, token_delta 257)
+while its kbench differential reported `diff=0`, because **the bench had its own copy of the loop and
+that copy was correct**: the pasted engine copy collapsed the whole `len == 1` stage (n/2 butterflies)
+into one butterfly. Fourth instance of this class (#333's multi-row cursor, #242's probe placed before
+the line it replaced, #359's macro never forwarded to the compiler). Rule: **differential the
+integrated function**; if the bench holds a transcription, it has proved the transcription.
+
+Cheap corollary that also came out of it: when a candidate image collapses generation, `bench.py`
+sits in the 600 s request timeout and the lane log looks frozen. The tell is the CASE lines
+(`tokens=2`, `calls_ok=0`), not the process state.
+
+## MEASURED, CHEAP: prepare's copy stage is already a memcpy (run #365 off-device)
+
+`nd_cq_prepare`'s copy/pad is `memcpy` + `memset`, so the "unroll the copy loop" candidate is null by
+inspection - retired for the price of reading the function, no board time.
+
+## RUNNING: Experiment 35 (batch 20260923T0905L), three distinct boards
+
+All three are the *aliasing* lever rather than the schedule lever: `const T *` is not `restrict`, and
+both target loops write through a pointer the compiler cannot separate from their own operand reads.
+Each was host-verified byte-exact (19/19, `token_delta 0`, `golden_missing 0`) before any flash,
+because the host compiles this same C - which is how #363's class is caught without a board.
+
+| board | variant | loop |
+|---|---|---|
+| 1 | `hoist` | `lutb_rows`: read `c->cb[0..3]` once instead of once per pair |
+| 2 | `hoist2` | as 1 plus two pairs per iteration (two chains to interleave) |
+| 3 | `fwathoist` | `fwht_rows`: hoist `c->g` / `c->scale` / `c->xh` out of both loops (`c->scale` is currently read **per element**) |
+
+## NEXT if E35 is null (which #364 makes plausible)
+
+1. **The bar decision the owner owes** (not another measurement): `sigmoidf_pair` into IRAM is
+   +0.18 % mean over three readings, -768 B, zero per-variant board spread (#336/#342).
+2. `make capture` is due: shipping code changed at #362.
+3.phi 4-bit row residency still waits on the assertion-level RAM decision (#293, +8,248 B).
+4. Cold-isolate the kbench harness itself (evict before each timed pass) before any further kernel
+   screen is believed - #364 says every warm screen in this ledger is an upper bound at best.
+
 # Experiment 13 - dot-product schedule audit: CLOSED, rejected, no integration (run #230)
 
 **Blocker, recorded exactly:** Espressif's `esp-dsp` component is not in this tree, not a managed

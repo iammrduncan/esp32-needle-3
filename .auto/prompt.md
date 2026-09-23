@@ -6,6 +6,48 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
+## CURRENT STATE AND QUEUE -- 2026-09-23T10:05Z (runs #360-#366)
+
+**Accepted runtime: 5.0467 decode tok/s (+107.2 %)** - run #362's `fwht_rows` rescale unroll, confirmed
+on two boards. Active batch `20260923T1000L`: three distinct `nd_model.c` elementwise unrolls (board 1
+`kvstore`, board 2 `zcsplit`, board 3 `zchead`), each host-proven byte-exact before flashing.
+
+Three closures and one schedule debt belong in whoever's hands this file is next:
+
+1. **CLOSED OFF-DEVICE, no board spent - the per-element `lrintf` in `kv_store_int8`.** The accepted
+   ELF proves `kv_store_int8` (IRAM, 0x4037b228) calls **flash-mapped `lrintf`** (0x42013f48) once per
+   element, ~1,792 elements per decode token - the callee-placement class worth +0.18 % in #336. It is
+   not reachable: `frint.nf`, `frint.z.f`, `frint.xf`, `frint.mf`, `frint.pf`, `itrunc.s` and `quou.s`
+   are **all rejected by the shipped assembler** - the ESP32-S3 TIE FP engine implements no rounding
+   instruction at all. So dropping the call needs software float<->integer transfers, which this
+   campaign has measured twice as expensive (#230, #292) and once as a 3.9x loss against a ROM helper
+   that was already at the FMA-chain floor (#338). Premise retired with the ISA fact, not with a guess.
+   Revisit only if a tie-correct sequence is ever written *and* proven over dense exact-.5 ties - the
+   naive `+0.5f` and truncate is forbidden: it is round-half-away, and run #2e was rejected for less.
+2. **The scheduler debt I owe myself:** `tmux kill-server` destroyed two in-flight lanes at 08:59Z
+   (logs stopped cleanly at `flash_s=6`, no `MEASURE rc`). It also killed the session the harness runs
+   in. **Kill lanes by session name (`tmux kill-session -t e36n`) - never the server.** No bad data
+   resulted: the images were built and flashed correctly, so both lanes were re-measured without paying
+   a redundant flash.
+3. **A generator's assertions are what make generated code trustworthy.** The KV variant asserted on
+   the shipped loop body; the first version failed because the store is `(int8_t)lrintf(q)` and not
+   `(int8_t)q` - which is exactly the failure mode (a hand-typed Markstein fixup differing in a range
+   the goldens never reach, #230) the assertion exists to catch. A confusing `accum_loops_untouched=3
+   vs 4` turned out to be my own probe counting a comment, verified with a real diff.
+4. **`make capture` is still owed** (shipping code changed at #362). The first attempt aborted
+   correctly: `idf.py` run from the worker root fails ("CMakeLists.txt not found", build_rc=2), and the
+   lane now refuses to capture a stale image instead of carrying on. Use the repo's own target:
+   `make -C <worker> flash-app FLASH_PORT=$FLASH_PORT`.
+
+NEXT THREE after the active batch: (4) run the owed `make capture` on the first free board. (5) If
+`zcsplit`/`zchead` pay, batch the remaining independent emit loops (cond fold, lane mix, `pool_cell`,
+dequant rows) as one three-board batch; if they are null, the elementwise-unroll family is closed at
+one win and the remaining candidates are the sub-bar banked pair (`sigmoidf_pair` IRAM +0.18 %,
+`fwathoist` +0.065 %) which need an owner bar decision, not more measurements. (6) Cold-isolate kbench
+(160 KB PSRAM eviction before each timed pass, the form #350/#352 used) - run #364 showed a warm screen
+can be +36.75 % in the lab and +0.000 % in the field, so every warm number in this ledger is an upper
+bound at best.
+
 ## OPERATOR REDIRECT -- 2026-09-22 -- overrides every later `NEXT`, `closed`, and stop note
 
 ## THREE INDEPENDENT BOARD LANES -- OPERATOR DIRECTIVE 2026-09-22

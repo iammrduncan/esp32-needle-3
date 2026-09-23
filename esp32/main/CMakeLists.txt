@@ -71,4 +71,10 @@ if(NEEDLE_KBENCH)
     # knob through compile_commands.json, never by the fact that -D was typed.
     set(ND_KB_LANE "1" CACHE STRING "E29 lane: 1 engram pair, 2 qkv+gate, 3 rows-per-call curve")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_LANE=${ND_KB_LANE})
+
+    # Experiment 30's bench replaces Experiment 29's in the dispatch, so it gets
+    # its own knob rather than a shared one: an Experiment 29 re-run must still be
+    # buildable from the same tree byte-for-byte.
+    set(ND_KB_EXP30 "0" CACHE STRING "Run the Experiment 30 lane instead of Experiment 29")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP30=${ND_KB_EXP30})
 endif()

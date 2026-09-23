@@ -15,24 +15,9 @@ from tools.serial_api import CATALOG, Device, validate_prompt
 STATE = {"device": "esp32-s3", "schema": "agent-watch-v2", "layers": 8}
 
 
-class Serial:
-    def __init__(self, lines):
-        self.lines = deque((line + '\n').encode() for line in lines)
-        self.written = []
-
-    def readline(self):
-        return self.lines.popleft() if self.lines else b''
-
-    def write(self, data):
-        self.written.append(data)
-
-    def flush(self):
-        pass
-
-
-def device(lines, timeout=0.05):
+def device(lines, timeout=0.05, boot=()):
     d = Device.__new__(Device)
-    d.serial = Serial(lines)
+    d.serial = Serial(lines, boot=boot)
     d.lock = threading.RLock()
     d.available = True
     d.request_timeout = timeout
@@ -50,11 +35,33 @@ class Port:
     around the open, so the open is pinned down here too.
     """
 
-    def __init__(self, lines=(), busy=0.0, state=STATE):
-        self.q = deque((line + "\n").encode() for line in lines)
+    def __init__(self, lines=(), busy=0.0, state=STATE, boot=()):
+        # `lines` is what this board ANSWERS REQUESTS WITH, so it is split on END
+        # into one block per request and block k is only served to request k: the
+        # firmware cannot answer before it is asked, and `complete()` deliberately
+        # clears whatever is queued before it writes, so a flat pre-filled queue
+        # hands the next request's own answer to that drain.
+        # `boot` is output the console genuinely already holds - the boot bench and
+        # its `EVT prof` block, or the tail of a previous request.
+        # A STATE frame in the script is not a queued line either: the firmware
+        # generates it on demand, so it becomes what "!status" answers.
+        self.replies, block = [], []
+        self.state = state
+        for line in lines:
+            if line.startswith("STATE "):
+                self.state = json.loads(line[len("STATE "):])
+                continue
+            block.append(line)
+            if line == "END":
+                self.replies.append(deque((x + "\n").encode() for x in block))
+                block = []
+        if block:
+            self.replies.append(deque((x + "\n").encode() for x in block))
+        self.q = deque()
+        self.bootq = deque((line + "\n").encode() for line in boot)
+        self.requested = False
         self.written = []
         self.busy = busy          # seconds of priming left when we arrive
-        self.state = state        # what this firmware answers for "!status"
         self.dtr = True           # pyserial's own default: the thing to guard
         self.rts = True
         self.port = self.baudrate = self.timeout = None
@@ -69,27 +76,55 @@ class Port:
 
     def reset_input_buffer(self):
         self.q.clear()
+        self.bootq.clear()
         self._idle_after = time.monotonic() + self.busy
 
     def readline(self):
-        if self.q:
+        if self.bootq:                 # already on the console before anyone asked
+            return self.bootq.popleft()
+        if self.q:                     # the answer this board owes its last prompt
             return self.q.popleft()
         if time.monotonic() < self._idle_after or not self.written:
             return b""
         # A real readline() never blocks here (timeout=1) and never returns a
         # second reply for one write, so the probe is consumed as it is answered.
-        last = self.written.pop()     # the console consumes what it echoes
+        last = self.written[-1]
+        # A probe is answered once and its echo consumed - the attach path asserts
+        # exactly that, because a probe left in the console is a probe the next
+        # reader will be handed an answer for. A real prompt is never answered from
+        # here: its script block has already been delivered, so there is nothing
+        # more to say, and its write stays visible as evidence.
         if last.startswith(b"!status"):
+            self.written.pop()
             return b"STATE " + json.dumps(self.state).encode() + b"\n"
         if last.startswith(b"!think"):
+            self.written.pop()
             return last.strip() + b"\n"
-        return b"ERR unknown_command\n"
+        return b""
+
+    #: the only console commands serial_api writes that are NOT a request
+    PROBES = (b"!status", b"!think")
 
     def write(self, data):
         self.written.append(data)
+        # A request - with or without the "!route " prefix the route phase uses -
+        # earns the next block of the script. Only !status / !think are probes, so
+        # matching on a leading "!" would misread every route prompt as one.
+        if not data.lstrip().startswith(self.PROBES):
+            self.requested = True
+            if self.replies:
+                self.q = self.replies.pop(0)
 
     def flush(self):
         pass
+
+
+# One console model for the whole file. Two doubles meant one of them could let a
+# request's answer sit on the console before that request was written - a state no
+# board can be in - which is what made the pre-write drain in serial_api.complete()
+# look broken to seven tests (run #359): the drain was reading a reply that a real
+# firmware could not have produced yet.
+Serial = Port
 
 
 class AttachTests(unittest.TestCase):
@@ -110,7 +145,8 @@ class AttachTests(unittest.TestCase):
         self.ports = []
 
         def factory(*args, **kwargs):
-            port = Port(self.LINES, busy=self.BUSY, state=self.STATE)
+            # AttachTests script what the console already holds when we attach.
+            port = Port(boot=self.LINES, busy=self.BUSY, state=self.STATE)
             self.ports.append(port)
             return port
 
@@ -234,8 +270,20 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(d.state()['samples'], 7)
 
     def test_firmware_error_is_drained_before_next_request(self):
-        d = device(['ERR incomplete_call', 'END', 'STATE ' + json.dumps({**STATE, "samples": 8})])
-        self.assertFalse(d.complete('test')['success'])
+        # A previous request left 'ERR incomplete_call' + 'END' on the console. The
+        # next request must be answered by its OWN reply rather than by those
+        # leftovers - run #345's mispaired suite answered a route prompt with
+        # tools-schema calls its own grammar forbids. Drained lines are surfaced
+        # (bench.py parses the boot/profile block that also lives there) and never
+        # parsed as this reply.
+        d = device(['EVT done tokens=2 ms=100 tps=20', 'JSON []', 'RESULT []', 'END',
+                    'STATE ' + json.dumps({**STATE, "samples": 8})],
+                   boot=['ERR incomplete_call', 'END'])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            got = d.complete('test')
+        self.assertTrue(got['success'])
+        self.assertEqual(got['decode_tokens'], 2)   # from ITS OWN reply, not the tail
+        self.assertIn('ERR incomplete_call', out.getvalue())
         self.assertEqual(d.state()['samples'], 8)
 
     def test_no_json_is_not_reported_as_a_successful_empty_route(self):

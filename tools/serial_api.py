@@ -230,18 +230,32 @@ class Device:
         forbids, and with this drain the same three prompts answered their own schema
         (run #346). Draining with reads - not reset_input_buffer, which only clears
         bytes nobody has read yet - before the write cannot touch our own answer,
-        because it has not been asked for yet. Returns lines dropped; the caller
-        warns when nonzero so a desync cannot pass as a clean run.
+        because it has not been asked for yet. Returns the lines it removed from the
+        queue, and echoes them through the log: excluded from THIS reply's parsing,
+        never silently thrown away. The caller warns when nonzero so a desync cannot
+        pass as a clean run.
 
         A fixed window, deliberately: settle-to-quiet (quiet=1.5 s, budget=8 s) was
         tried on the same suite in run #346 and regressed it - 17 cases and a request
         timeout instead of 20/20 - so keep this short and let the toggle pay it.
         """
-        dropped, deadline = 0, time.monotonic() + window
+        dropped, deadline = [], time.monotonic() + window
         while time.monotonic() < deadline:
-            if not self.serial.readline():
+            # Read through _line(), not the raw port: these are real firmware
+            # output (the boot bench and the `EVT prof` block live here, and
+            # bench.py parses them), so DROPPING them would be a second bug -
+            # the idle-board startup-log test exists precisely because of that.
+            # Excluded from reply parsing, surfaced to the log: both properties,
+            # not one at the cost of the other.
+            line = self._line()
+            if not line:
                 break
-            dropped += 1
+            # Same classifier the attach path uses: if a drained line can only be
+            # the answer to a probe, the startup log is interleaved and bench.py
+            # must stop reading it as boot output - whether the line was read by
+            # the attach reader or by this drain.
+            self._is_echo_reply(line)
+            dropped.append(line)
         return dropped
 
     def _line_quiet(self):
@@ -260,7 +274,7 @@ class Device:
         # measured the constrained path instead. One guard here covers every caller.
         stale = self.drain_stale()
         if stale:
-            print(f"WARN drained {stale} stale line(s) before the think toggle")
+            print(f"WARN drained {len(stale)} stale line(s) before the think toggle")
         self.serial.write(f"!think {int(self.think)}\n".encode())
         self.serial.flush()
 
@@ -288,7 +302,7 @@ class Device:
                 # Loud, not silent: a nonzero count means the last response was not
                 # drained, which is exactly how run #345's cases answered the wrong
                 # schema. Surfaces in bench.py's log instead of shifting the suite.
-                print(f"WARN drained {stale} stale line(s) before this request")
+                print(f"WARN drained {len(stale)} stale line(s) before this request")
             start = time.monotonic()
             self.serial.write((b"!route " if phase == "route" else b"") + prompt.encode() + b"\n")
             self.serial.flush()

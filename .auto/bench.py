@@ -400,6 +400,16 @@ def main():
     ap.add_argument('--save-golden', action='store_true')
 
     args = ap.parse_args()
+    # Metric-safe fail-fast diagnostic, file form (the strict run_experiment guard cannot
+    # carry env vars). It only shortens how long a stalled request is waited for; a timed-out
+    # case makes the run FAIL loudly, it can never turn a failure into a pass. Measured need:
+    # a session that wedges at case ~6 burns 600 s per remaining case, i.e. 2+ hours for a
+    # suite that is actually dead after seven minutes.
+    diag_to = ".auto/diag_request_timeout_s"
+    env_to = os.environ.get("AUTO_REQUEST_TIMEOUT_S")
+    if not env_to and os.path.exists(diag_to):
+        with open(diag_to) as fh:
+            args.request_timeout = float(fh.read().strip())
     if args.mode == 'host':
         host_mode(args)
     elif args.mode == 'fidelity':

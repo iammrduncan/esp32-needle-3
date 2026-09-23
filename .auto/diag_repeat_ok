@@ -1,1 +1,1 @@
-gate completion on the SAME flashed radix-4 image via AUTO_NOFLASH; primary already read 5.1467, this session exists to reach the device byte-exact gate
+radix-4 fusion image re-measured with a 60 s inter-case gap: this is BOTH the wedge discriminator (console-TX throughput vs firmware state) and the attempt to reach the device byte-exact gate, which no session on this image has reached

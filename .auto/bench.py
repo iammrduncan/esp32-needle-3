@@ -200,7 +200,15 @@ def device_mode(args):
                 # keep bar. Each extra attach makes the firmware emit a think-ack and
                 # a STATE line, and console emission is real CPU time on this part.
                 # Diagnostic only: NEVER use it for a speed verdict.
-            gap = float(os.environ.get("AUTO_CASE_GAP_S") or 0)
+            # The file form exists because the strict run_experiment guard accepts only
+            # the literal `bash .auto/measure.sh` and cannot carry AUTO_* env vars; the
+            # marker is deleted when the diagnostic is over.
+            gap_file = ".auto/diag_case_gap_s"
+            env_gap = os.environ.get("AUTO_CASE_GAP_S")
+            if not env_gap and os.path.exists(gap_file):
+                with open(gap_file) as fh:
+                    env_gap = fh.read().strip()
+            gap = float(env_gap or 0)
             if gap:
                 # DIAGNOSTIC for the mid-suite wedge (#155,#345,#389-#396). Run #396
                 # excluded the connection: 17 fresh attaches, 16 cases, and it still

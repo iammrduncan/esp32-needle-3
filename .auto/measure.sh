@@ -53,9 +53,21 @@ CURRENT_SHIPPING_SIG=$(shipping_signature)
 # weaken the anti-repeat guard: a repeat still requires a non-empty reason, and the
 # signature + timestamp + reason are still appended to $REPEAT_HISTORY below. The
 # marker file is deleted when the diagnostic is over.
-if [ -f "$AUTO_LOG_DIR/diag_repeat_ok" ] && [ -z "${AUTO_ALLOW_REPEAT:-}" ]; then
+if [ -f "$AUTO_LOG_DIR/diag_repeat_ok" ]; then
+    REPEAT_MARKER="$AUTO_LOG_DIR/diag_repeat_ok"
+elif [ -f .auto/diag_repeat_ok ]; then
+    # Second location, and the reason it exists: AUTO_LOG_DIR is $PWD/.auto/runs/local, so an
+    # operator who reads the documented knob name and writes .auto/diag_repeat_ok gets silence.
+    # That is exactly what happened on 2026-09-23 - the marker was written three times and the
+    # guard refused every time, so the switch had never once executed its own purpose. `-s` not
+    # `-f` below, so an empty marker can never authorise a repeat without a reason.
+    REPEAT_MARKER=".auto/diag_repeat_ok"
+else
+    REPEAT_MARKER=""
+fi
+if [ -n "$REPEAT_MARKER" ] && [ -s "$REPEAT_MARKER" ] && [ -z "${AUTO_ALLOW_REPEAT:-}" ]; then
     AUTO_ALLOW_REPEAT=1
-    AUTO_REPEAT_REASON=$(cat "$AUTO_LOG_DIR/diag_repeat_ok")
+    AUTO_REPEAT_REASON=$(cat "$REPEAT_MARKER")
     export AUTO_ALLOW_REPEAT AUTO_REPEAT_REASON
 fi
 # PROVENANCE, printed by the runner itself rather than by a wrapper that could be

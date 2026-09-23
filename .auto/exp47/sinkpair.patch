@@ -1,0 +1,74 @@
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index fe79df6..83c94ca 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -241,6 +241,34 @@ static ND_HOT void lanemix_rows(void *vc, uint32_t k0, uint32_t k1)
+ }
+ 
+ /* Doubly-stochastic normalisation of a lanes x lanes matrix, in log space. */
++
++/* Two terms of a Sinkhorn log-sum-exp, in the shipped order.
++ *
++ * The values come from `nd_expf_pair`, whose two interleaved chains are each
++ * `nd_expf`'s own operation sequence (proven bit-identical over 4,000,000 pairs and
++ * shipped in run #229), and the partials are added one at a time at the positions the
++ * shipped loop used, so the accumulator's rounding sequence does not move.
++ *
++ * The exact-zero literal from run #291 is preserved per element: the pair is used only
++ * when neither difference is +-0.0f. Both-zero is listed first because in a converged
++ * Sinkhorn pass it is the most common pair shape (the row maximum and any entry that
++ * has fallen below nd_expf's clamp both contribute exactly 1.0f and 0.0f terms). */
++static ND_HOT inline void sink_term_pair(float d0, float d1, float *sum)
++{
++    if (d0 == 0.0f) {
++        *sum += 1.0f;
++        *sum += (d1 == 0.0f) ? 1.0f : nd_expf(d1);
++    } else if (d1 == 0.0f) {
++        *sum += nd_expf(d0);
++        *sum += 1.0f;
++    } else {
++        float w0, w1;
++        nd_expf_pair(d0, d1, &w0, &w1);
++        *sum += w0;
++        *sum += w1;
++    }
++}
++
+ static void sinkhorn(float *a, uint32_t n)
+ {
+     uint32_t it, i, j;
+@@ -252,17 +280,12 @@ static void sinkhorn(float *a, uint32_t n)
+             float sum = 0.0f;
+             for (j = 1; j < n; j++)
+                 if (a[i * n + j] > mx) mx = a[i * n + j];
+-            for (j = 0; j < n; j++) {
+-                /* The row maximum contributes exp(0), and `nd_expf` returns
+-                 * exactly 1.0f for both signed zeros, so that one term per pass
+-                 * is the literal rather than a 99-cycle degree-5 call: a quarter
+-                 * of this kernel's ~5,120 exponentials per decode token. Testing
+-                 * the difference (not the index) keeps it exact by construction:
+-                 * only equal finite operands can subtract to +-0, so NaN and
+-                 * inf-inf still fall through to `nd_expf` as before. The partial
+-                 * is added in the shipped position, so the sum's bits cannot
+-                 * move. Verified bit-identical to the shipped loop over 3.2 M
+-                 * elements in `.auto/sinkzero/test.c`. */
++            /* Two at a time. n is the mHC lane count (4 here), so this is two
++             * pairs per sum; the odd tail keeps the literal-only scalar form for
++             * an odd lane count so the function stays correct for other n. */
++            for (j = 0; j + 1u < n; j += 2u)
++                sink_term_pair(a[i * n + j] - mx, a[i * n + j + 1u] - mx, &sum);
++            for (; j < n; j++) {
+                 float d = a[i * n + j] - mx;
+                 sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+             }
+@@ -277,7 +300,9 @@ static void sinkhorn(float *a, uint32_t n)
+             float sum = 0.0f;
+             for (i = 1; i < n; i++)
+                 if (a[i * n + j] > mx) mx = a[i * n + j];
+-            for (i = 0; i < n; i++) {
++            for (i = 0; i + 1u < n; i += 2u)
++                sink_term_pair(a[i * n + j] - mx, a[(i + 1u) * n + j] - mx, &sum);
++            for (; i < n; i++) {
+                 float d = a[i * n + j] - mx;   /* same exact-zero shortcut */
+                 sum += (d == 0.0f) ? 1.0f : nd_expf(d);
+             }

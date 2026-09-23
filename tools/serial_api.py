@@ -292,6 +292,36 @@ class Device:
             return state
 
     def complete(self, prompt, phase="tools"):
+        """Run one request, rescuing a stalled console by re-sending it once.
+
+        Run #345's open defect, reproduced three times on 2026-09-23: late in a long
+        attached session a request goes unanswered - the same console fatigue that
+        makes `!think` stop acking - and `bench.py` loses the rest of the suite, which
+        loses the *device* byte-exact gate for whatever candidate was being measured
+        (the host gate cannot cover a two-core defect, #298). The rescue is the one
+        #346 proved for the think ack: reconnect without resetting the chip (DTR/RTS
+        are pinned through the open) and re-establish readiness.
+
+        The request is re-sent, never skipped, and a second failure propagates: a run
+        that quietly drops a case measures nothing while reporting as a pass. The
+        `retried` marker plus the WARN line keep it visible in the lane log.
+        """
+        try:
+            return self._complete_once(prompt, phase)
+        except TimeoutError:
+            print("WARN request timed out; reconnecting and re-sending this case "
+                  "(not skipping it)")
+            self.available = False
+            self._reconnect()
+            if self._request_state(min(self.request_timeout, 30.0)) is None:
+                raise TimeoutError(
+                    "board did not answer after one reconnect; case was not skipped")
+            self.available = True
+            result = self._complete_once(prompt, phase)
+            result["retried"] = 1
+            return result
+
+    def _complete_once(self, prompt, phase="tools"):
         validate_prompt(prompt)
         if phase not in ("tools", "route"):
             raise ValueError("unknown inference phase")

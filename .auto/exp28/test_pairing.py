@@ -43,15 +43,33 @@ class FakeDev:
     def __init__(self, lines):
         self.serial = FakeSerial(lines)
         self.think = False
-        drain = sa.Device.drain_stale.__get__(self, FakeDev)
-        self.drain_stale = drain
+        # _is_echo_reply() inspects the attach bookkeeping; a canned line set that
+        # contains no ERR/STATE never reads it, but the attribute must exist.
+        self.status_credit = 1
+        self._log_open = False
+        self._warned_noisy_log = False
+
+    # `drain_stale()` reads through `_line()` since run #346's rewrite (it has to
+    # drain with reads, not reset_input_buffer). The fake only ever provided the
+    # serial layer, so the guard had been dying on its FIRST assertion for many
+    # runs - an AttributeError is loud, but nothing ran it. Same semantics as the
+    # real Device._line: a stripped line, or '' to mean pyserial's read timeout.
+    def _line(self):
+        raw = self.serial.readline()
+        return raw.decode().rstrip("\n") if raw else ''
+
+    drain_stale = sa.Device.drain_stale
+    _is_echo_reply = sa.Device._is_echo_reply
 
 
 # 1. drain_stale counts stale lines, and reports zero on a clean port.
 d = FakeDev(['TOK x', 'CONF 0.5', 'END', ''])
 n = d.drain_stale(window=1.0)
-assert n == 3, n   # the canned '' stands for pyserial's read-timeout (b'')
-assert d.drain_stale(window=1.0) == 0, 'clean port must drop nothing'
+# drain_stale() returns the stale LINES (complete() logs len(stale)) - the count
+# contract this assertion was written against is gone. The canned '' stands for
+# pyserial's read timeout (b'').
+assert len(n) == 3, n
+assert d.drain_stale(window=1.0) == [], 'clean port must drop nothing'
 
 # 2. _set_think drains BEFORE writing, so a spill cannot be read as its ack.
 d = FakeDev(['TOK spill', 'END', ''])

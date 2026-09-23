@@ -2574,3 +2574,40 @@ narrow case where fewer instructions measurably does not mean less time on this 
 run #356's isolated screens said otherwise, and #374 already showed isolation overstates
 instruction-mix wins. If anyone revisits this, the burden is a field measurement of the
 accumulate itself, not another kbench number.
+
+## Runs #385-#386 corrections, and what the transform family has left (2026-09-23)
+
+Three ledger statements were found wrong this window; all three were load-bearing for a candidate.
+
+1. **`sigmoidf_pair` ND_HOT is NOT a pending sub-bar option - it shipped.** Run #371's bundle was
+   exactly `sigmoidf_pair`->IRAM + `fwht_rows` load hoisting, so the `RESERVED` bullet in
+   `.auto/prompt.md` ("needs the bar moved to 0.15 %") has been stale since #371 and would have
+   bought a duplicate candidate. Verified by reading the line in the accepted tree:
+   `engine/src/nd_model.c:64` already says `static ND_HOT inline void sigmoidf_pair` (#386).
+2. **The KV-store `lrintf` lever is closed at +0.01 %, and run #385's "+0.196 % field reading" for it
+   never existed** (see #386's retraction). Measured ceiling, both operand classes, bit-exact:
+   shipped 7.04-7.12 cycles/element vs magic-add+`trunc.s` 4.08-4.57, so ~2.5 cycles x ~1,792 elements
+   = 18.6 us = +0.01 % of a 197 ms token. Do not build it; do not price it off the 147 cycles/element
+   that `ND_P_KVST/1792` implies (that timer brackets more than the store).
+3. **A per-element library call is worth ~2.5 cycles/element, not a phase.** That is the general form
+   of run #36's other result (an IRAM-to-flash callee crossing costs **0** cycles warm: 86 vs 93
+   cycles/call with a 22-cycle call floor), and it is what makes the remaining libm-in-a-loop ideas
+   (Sinkhorn's `logf`) unpriceable from call counts alone.
+
+**Where the transform family stands, measured.** `nd_fwht2` (two groups per stage walk) ships at
++0.492 %; a three-group walk is worth **+0.098 %** (run #384 board 3, re-measured #387 board 1 at the
+same 5.1100, so the sign is established and only the magnitude is missing); merging the two rescale
+passes into one call over `2g`/`3g` adds **nothing** on top of the three-wide walk (#387 vs #384 are
+the same reading to the quantum). Descending stage order is -0.098 % (#383). The one rescale lever not
+yet tried in the field is *removing the pass* rather than shortening it - folding the multiply into
+the transform's final stage, which writes every element exactly once. That is `fwscale`
+(`.auto/exp44/`, proven bit-exact against the exported `nd_fwht` over 184,800 comparisons spanning
+g=2..256, scale in {0, 1/sqrt(g), random}, +-0), and the bundle the numbers actually sanction is
+three-wide + folded rescale as ONE change, which is #371's precedent applied to two measured sub-bar
+halves of the same phase.
+
+**Closed on rounding, not on effort:** folding the group `scale` into the pair-LUT table entries
+instead of rescaling `xh` cannot be bit-exact - `(cb*scale)*xh` and `cb*(xh*scale)` are different
+single roundings - so the "delete the rescale by moving it into the table" idea is dead before it is
+benchmarked. It would also be the wrong trade even if exact: the table is built once per (tensor,
+group) and reused by every row, the rescale is per token.

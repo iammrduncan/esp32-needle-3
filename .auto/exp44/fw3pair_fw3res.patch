@@ -1,0 +1,95 @@
+diff --git a/engine/src/nd_quant.c b/engine/src/nd_quant.c
+index da48dbb..ea177af 100644
+--- a/engine/src/nd_quant.c
++++ b/engine/src/nd_quant.c
+@@ -143,6 +143,53 @@ static ND_HOT void nd_fwht2(float *x0, float *x1, uint32_t n)
+     }
+ }
+ 
++/* Three groups in one stage walk.
++ *
++ * The accepted win here (run #379) is two chains in flight inside a transform whose
++ * butterflies are a long serial dependency with nothing else to overlap, and run #382
++ * showed the within-stage unroll and the pairing are ONE mechanism, not two. The
++ * remaining question was how far the group count goes, and the geometry answers it:
++ * ngroup is 6 and the device splits it 3+3, so each core owns EXACTLY THREE groups -
++ * which means a three-wide walk covers a whole per-core call and the single-group
++ * path below stops executing in the field entirely (a four-wide walk would never run
++ * here at all, and would have silently re-measured the accepted path).
++ *
++ * Bit-exact by construction, for the same reason nd_fwht2 is: a group's stages
++ * complete in its own order, butterflies within a stage are disjoint pairs, and the
++ * three chains never touch each other's elements. */
++static ND_HOT void nd_fwht3(float *x0, float *x1, float *x2, uint32_t n)
++{
++    uint32_t len, step, base, j;
++
++    for (len = 1u; len < n; len <<= 1) {
++        step = len << 1;
++        for (base = 0u; base + step <= n; base += step) {
++            const uint32_t half = base + len;
++            for (j = base; j + 1u < half; j += 2u) {
++                float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
++                float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
++                float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
++
++                x0[j] = a0 + b0;          x0[j + len] = a0 - b0;
++                x0[j + 1u] = a1 + b1;     x0[j + 1u + len] = a1 - b1;
++                x1[j] = c0 + d0;          x1[j + len] = c0 - d0;
++                x1[j + 1u] = c1 + d1;     x1[j + 1u + len] = c1 - d1;
++                x2[j] = e0 + f0;          x2[j + len] = e0 - f0;
++                x2[j + 1u] = e1 + f1;     x2[j + 1u + len] = e1 - f1;
++            }
++            if (j < half) {
++                float a = x0[j], b = x0[j + len];
++                float c = x1[j], d = x1[j + len];
++                float e = x2[j], f = x2[j + len];
++
++                x0[j] = a + b; x0[j + len] = a - b;
++                x1[j] = c + d; x1[j + len] = c - d;
++                x2[j] = e + f; x2[j + len] = e - f;
++            }
++        }
++    }
++}
++
+ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
+ {
+     const fwht_ctx *c = (const fwht_ctx *)vc;
+@@ -162,13 +209,33 @@ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
+      * therefore always hands one core an even count. That is the #333 class
+      * (a bug in the range form that no single-row test can reach), so the tail
+      * is written first and the odd split is exercised on the host separately. */
+-    for (gi = g0; gi + 1u < g1; gi += 2u) {
++    /* Three, then two, then one. The three-wide step is the common case on device
++     * (ngroup 6 split 3+3 => one three-wide step per core call) and the two-wide step
++     * is what an even split takes; the single path is left in because it is the only
++     * thing standing between a wrong range guard and a silently dropped group. The
++     * guard for an ng-wide step is `gi + ng-1 < g1`, never `gi + ng < g1` - the latter
++     * is never true when ng equals the per-core count, which is exactly how a four-wide
++     * experiment once re-measured the accepted path without running at all. */
++    for (gi = g0; gi + 2u < g1; gi += 3u) {
++        float *blk  = xh + (size_t)gi * g;
++        float *blk2 = blk + g;
++        float *blk3 = blk2 + g;
++
++        nd_fwht3(blk, blk2, blk3, g);
++        /* ONE rescale pass over the whole three-group block rather than three passes
++         * over g elements each. Bit-exact because the rescale is one independent
++         * multiply per element (no accumulation order to move) and the three group
++         * blocks are contiguous in xh, so blk..blk+3g is exactly the same address set
++         * in the same ascending order. What it removes is two loop setups and two
++         * trip-count computations per call, i.e. the loop boundary, not the work. */
++        fw_scale(blk, 3u * g, scale);
++    }
++    for (; gi + 1u < g1; gi += 2u) {
+         float *blk  = xh + (size_t)gi * g;
+         float *blk2 = blk + g;
+ 
+         nd_fwht2(blk, blk2, g);
+-        fw_scale(blk,  g, scale);
+-        fw_scale(blk2, g, scale);
++        fw_scale(blk, 2u * g, scale);
+     }
+     for (; gi < g1; gi++) {
+         float   *blk = xh + (size_t)gi * g;

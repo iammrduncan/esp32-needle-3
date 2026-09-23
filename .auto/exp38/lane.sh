@@ -17,6 +17,15 @@ LOGF=$BATCH/e38.${NEEDLE_BOARD:-local}.txt
 # idf.py wants the project directory, not the repo root - running it from the
 # root fails with "CMakeLists.txt not found" (the same trap that cost the first
 # make capture attempt). All paths below are relative to esp32/.
+# The bench body and the CMake forwarding list live in the MAIN checkout, so this
+# lane syncs both itself. The first two refusals were this script's fault, not the
+# candidate's: the guard correctly found no E38 body in images built from workers
+# whose kbench.c/CMakeLists had never been updated. A lane that depends on files
+# in another tree has to prove it copied them, or it measures the old code.
+MAIN=/workspace/esp32-needle-3
+cp "$MAIN/esp32/main/kbench.c" "$R/esp32/main/kbench.c" || exit 1
+cp "$MAIN/esp32/main/CMakeLists.txt" "$R/esp32/main/CMakeLists.txt" || exit 1
+echo "[e38] synced kbench_md5=$(md5sum < "$R/esp32/main/kbench.c" | cut -c1-12) cmake_md5=$(md5sum < "$R/esp32/main/CMakeLists.txt" | cut -c1-12)"
 cd "$R/esp32" || exit 1
 echo "[e38] board=${NEEDLE_BOARD:-?} repo=$R start=$(date -u +%FT%TZ)"
 
@@ -29,7 +38,13 @@ idf.py -B "$BD" -DNEEDLE_KBENCH=ON -DND_KB_EXP38=1 build > "$BATCH/e38.build.${N
 rc=$?
 echo "[e38] build_rc=$rc"
 [ $rc -ne 0 ] && { tail -20 "$BATCH/e38.build.${NEEDLE_BOARD:-local}.log"; exit 1; }
-grep -c -- '-DND_KB_EXP38=1' "$BD/compile_commands.json" | sed 's/^/[e38] exp38_on_compile_line=/'
+python3 -c "
+import json
+db = json.load(open('$BD/compile_commands.json'))
+hit = [e for e in db if e['file'].endswith('main/kbench.c')]
+print('kbench_own_compile_lines=%d with_flag=%d' % (
+    len(hit), sum(1 for e in hit if '-DND_KB_EXP38=1' in e.get('command',''))))
+" | sed 's/^/[e38] exp38_on_compile_line=/'
 # The ELF lives under <build>/esp32/ when idf.py is invoked from the project
 # directory. Probing the wrong path makes the guard fail CLOSED (it refuses a
 # good image), which is the safe direction, but it still costs a board slot -
@@ -45,7 +60,8 @@ nm=$(strings "$ELF" 2>/dev/null | grep -c 'KB E38 ENTER')
 echo "[e38] e38_body_string_in_elf=$nm"
 [ "${nm:-0}" -ge 1 ] || { echo "[e38] REFUSING to flash: no E38 body string in $ELF (macro did not reach kbench.c?)"; exit 1; }
 
-idf.py -B "$BD" -p "${FLASH_PORT:-/dev/ttyACM0}" --before default-reset --after hard-reset flash \
+# idf.py has no --before/--after (those are esptool flags); it manages reset itself.
+idf.py -B "$BD" -p "${FLASH_PORT:-/dev/ttyACM0}" flash \
   > "$BATCH/e38.flash.${NEEDLE_BOARD:-local}.log" 2>&1
 echo "[e38] flash_rc=$?"
 

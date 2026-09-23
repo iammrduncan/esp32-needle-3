@@ -190,6 +190,27 @@
    "phase": "tools",
    "input": "Sample heap every 3 seconds, start a 25 second timer, then tell me if a timer is running",
    "expect": null
+  },
+  {
+   "id": "heldout_long_tools",
+   "phase": "tools",
+   "input": "Set the telemetry sampling interval to 45 seconds, then start a timer for 300 seconds, and afterwards tell me the heap high water mark, the sampling interval you just configured, and whether that timer is still counting down, as one short list of facts",
+   "expect": null,
+   "note": "longest tools request the harness allows (252 of the 255-byte validate_prompt cap; the firmware's own reader truncates silently at ND_LINE_MAX-1=271, run #155) - nothing in the suite exercised a prefill over ~20 tokens"
+  },
+  {
+   "id": "heldout_long_route",
+   "phase": "route",
+   "input": "Translate the following sentence into German and then into French, keeping the word order natural in both, and show the two results on separate lines: the board streams its weights out of flash and never copies them into RAM",
+   "expect": null,
+   "note": "long route request (224 B): route was only ever measured on short prompts, and route is the slow shape on the metric"
+  },
+  {
+   "id": "heldout_interval_one",
+   "phase": "tools",
+   "input": "Sample telemetry every second",
+   "expect": null,
+   "note": "lower bound of the interval schema. MEASURED behaviour, not an expectation: \"every second\" produces seconds=120, the same value the free-text and ambiguous cases produce, so the model resolves a 1-second request to its default interval. The suite already had the upper-bound case (40000 -> 400, i.e. a clamp). Both are recorded here as behaviour; the byte-exact golden is what this case actually guards."
   }
  ],
  "think": [

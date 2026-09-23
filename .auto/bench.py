@@ -144,9 +144,16 @@ def device_mode(args):
             ptps.append(r['prefill_tps'] or 0.0)
             group_tps.append({'id': case['id'], 'tps': r['decode_tps'] or 0.0,
                               'tokens': r['decode_tokens'] or 0})
-            print(f'CASE {case["id"]} phase={case["phase"]} tps={r["decode_tps"]:.3f} '
-                  f'tokens={r["decode_tokens"]} decode_ms={r["decode_ms"]:.0f} '
-                  f'prefill_tps={r["prefill_tps"]:.2f} calls_ok={int(good)} '
+            # A case that never saw `EVT done` has None metrics; the aggregate lines
+            # already use `or 0.0` and this one did not, so the FIRST such case used
+            # to kill the whole suite mid-run with a TypeError (measured: the case
+            # after the 128-token truncation, which cost the golden save and every
+            # case after it). A failed case must be reported, not crash the bench.
+            dt, dms, pt = (r['decode_tps'] or 0.0, r['decode_ms'] or 0.0,
+                           r['prefill_tps'] or 0.0)
+            print(f'CASE {case["id"]} phase={case["phase"]} tps={dt:.3f} '
+                  f'tokens={r["decode_tokens"]} decode_ms={dms:.0f} '
+                  f'prefill_tps={pt:.2f} calls_ok={int(good)} '
                   f'calls={json.dumps(r["function_calls"], separators=(",", ":"))[:90]}')
             if not good:
                 print(f'  BAD {r["error"]} raw={r["raw"][:140]!r}')

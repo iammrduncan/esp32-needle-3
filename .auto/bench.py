@@ -379,7 +379,12 @@ def fidelity_mode(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('mode', choices=['device', 'host', 'fidelity'])
-    ap.add_argument('--port', default='/dev/ttyACM1')
+    # The pool exposes one node per board and `needle-board run N` exports
+    # SERIAL_PORT; /dev/ttyACM1 is board 1's alias, so defaulting to it silently
+    # drove board 1 from a lane that had just flashed board 2 or 3 (measured: the
+    # process held /dev/needle-pi/console while its own board sat untouched). The
+    # canonical path was never affected - measure.sh passes --port "$SERIAL_PORT".
+    ap.add_argument('--port', default=os.environ.get('SERIAL_PORT', '/dev/ttyACM1'))
     ap.add_argument('--groups', default='primary,extended,think')
     ap.add_argument('--cases', default='', help='comma list of case ids to run (diagnostics)')
     ap.add_argument('--boot-timeout', type=float, default=1500)

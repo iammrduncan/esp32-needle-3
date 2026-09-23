@@ -47,9 +47,9 @@ idf.py -B build-e$EXP -p "$FP" flash > /tmp/kb-e$EXP-b$B-flash.log 2>&1
 echo "flash_rc=$?"
 
 cd ..
-python3 - "$FP" "$SP" <<'PY'
+python3 - "$FP" "$SP" "$EXP" <<'PY'
 import subprocess, sys, time, serial
-fp, sp = sys.argv[1], sys.argv[2]
+fp, sp, exp = sys.argv[1], sys.argv[2], sys.argv[3]
 s = serial.Serial(sp, 115200, timeout=0.2)
 s.dtr = True                      # the USB CDC bridge needs DTR or a warm board is silent
 time.sleep(0.5)
@@ -59,12 +59,12 @@ subprocess.run(["python3", "-m", "esptool", "--chip", "esp32s3", "-p", fp, "run"
 buf, t0, done = b"", time.time(), False
 while time.time() - t0 < 90:
     buf += s.read(4096)
-    if b"KBENCH_DONE" in buf or (b"KB E$EXP" in buf and time.time() - t0 > 25):
+    if b"KBENCH_DONE" in buf or (b"KB E" + exp.encode() in buf and time.time() - t0 > 25):
         done = True
         break
 s.close()
 lines = [l for l in buf.decode(errors="replace").splitlines()
-         if "KB E$EXP" in l or "KBENCH" in l or "panic" in l.lower() or "abort" in l.lower()]
+         if ("KB E" + exp) in l or "KBENCH" in l or "panic" in l.lower() or "abort" in l.lower()]
 print("harvest_lines=%d done=%s" % (len(lines), done))
 for l in lines[:24]:
     print(l[:220])

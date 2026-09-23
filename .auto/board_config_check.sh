@@ -17,7 +17,21 @@
 # first version anchored `^KEY=` and therefore matched nothing for the keys that
 # matter most, because IDF spells them `CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_
 # DISABLE=y` and `CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y`. It reported "IN SYNC" on
-# a pool that was demonstrably at three different assertion levels. SELFTEST=1
+# a pool that was demonstrably at three different assertion levels. # Build FILES, not just sdkconfig: Experiment 39's -O3 line was appended to the
+# needle component's CMakeLists in two workers and never removed, so the first
+# "cross-board confirmation" of run #377 silently measured candidate + -O3 and
+# reported -O3's 6 KiB heap cost as the candidate's. sdkconfig drift has a guard
+# (#300); an edited CMakeLists had none, and it is the same failure class - a
+# worker carrying state a git reset cannot see.
+for f in esp32/components/needle/CMakeLists.txt esp32/main/CMakeLists.txt .auto/bench.py; do
+  can=$(md5sum < "/workspace/esp32-needle-3/$f" 2>/dev/null | cut -c1-12)
+  for n in 1 2 3; do
+    got=$(md5sum < "/root/board-pool/board$n/$f" 2>/dev/null | cut -c1-12)
+    [ "$can" = "$got" ] || echo "BUILD_FILE_DRIFT board=$n file=$f main=$can worker=$got"
+  done
+done
+
+SELFTEST=1
 # proves the comparison can actually report drift.
 #
 #   bash .auto/board_config_check.sh            # non-zero exit on drift

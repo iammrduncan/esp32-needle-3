@@ -3059,8 +3059,15 @@ static void kb_fwht_u2ld2(float *x, uint32_t n)
                 continue;
             }
             for (uint32_t j = i; j + 3u < i + len; j += 4u) {
+                /* Separate load and store cursors ON PURPOSE: .ip post-updates the
+                 * base register, so two +8 loads advance the cursor 16 bytes, and a
+                 * store that reuses that same register would write 16 bytes past the
+                 * butterflies it just read. The single-pair variant above is only
+                 * correct because it happens to use distinct variables. */
                 float *pa = &x[j];
                 float *pb = &x[j + len];
+                float *sa = &x[j];
+                float *sb = &x[j + len];
                 __asm__ __volatile__(
                     "ee.ldf.64.ip  f4, f5, %[_a], 8\n\t"
                     "ee.ldf.64.ip  f6, f7, %[_b], 8\n\t"
@@ -3078,7 +3085,7 @@ static void kb_fwht_u2ld2(float *x, uint32_t n)
                     "sub.s  f14, f1, f3\n\t"
                     "ee.stf.64.ip  f8, f10, %[_c], 8\n\t"
                     "ee.stf.64.ip  f12, f14, %[_d], 8\n\t"
-                    : [_a] "+a"(pa), [_b] "+a"(pb), [_c] "+a"(pa), [_d] "+a"(pb)
+                    : [_a] "+a"(pa), [_b] "+a"(pb), [_c] "+a"(sa), [_d] "+a"(sb)
                     :
                     : "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11",
                       "f12", "f13", "f14", "f15", "f0", "f1", "f2", "f3",
@@ -3118,6 +3125,7 @@ static void kb_run_all(void (*fn)(float *, uint32_t), float *base, uint32_t n)
 
 static void bench_e33(void)
 {
+    printf("KB E33 ENTER lane=%d\n", (int)ND_KB_LANE);
     uint32_t r, rounds = 25u, gi, seed = 777u;
     uint32_t bad[4] = {0,0,0,0}, best[4] = { ~0u, ~0u, ~0u, ~0u };
     double butterflies = (double)(KBG / 2u) * 7u * KNG;   /* per timed round */
@@ -3202,6 +3210,7 @@ static void kb_scale_u8(float *restrict blk, uint32_t g, float scale)
 
 static void bench_e33(void)
 {
+    printf("KB E33 ENTER lane=%d\n", (int)ND_KB_LANE);
     uint32_t r, rounds = 25u, gi, bad = 0u, best[3] = { ~0u, ~0u, ~0u };
     float scale = 1.0f / sqrtf((float)KBG);          /* the engine's own scale */
     double elems = (double)KBG * 6u;
@@ -3273,6 +3282,7 @@ static void kb_rows_fast(void *vc, uint32_t g0, uint32_t g1)
 }
 static void bench_e33(void)
 {
+    printf("KB E33 ENTER lane=%d\n", (int)ND_KB_LANE);
     nd_tensor t;
     int       ti = -1;
     kb_fw     f;

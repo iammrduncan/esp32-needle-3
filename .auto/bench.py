@@ -167,7 +167,18 @@ def device_mode(args):
         switch_think(dev, group == 'think')
         tps, ptps, ok, group_tps = [], [], 0, []
         print(f'### group={group} think={int(group == "think")}')
-        for case in CASES[group]:
+        sel = CASES[group]
+        if args.cases:
+            # Tail probe (run #392): the suite wedges in the last few cases, so a
+            # diagnostic that has to replay 17 cases first costs 20 minutes per
+            # hypothesis. Host-side filter only - it cannot change the flashed image.
+            want = {c.strip() for c in args.cases.split(',') if c.strip()}
+            sel = [c for c in CASES[group] if c['id'] in want]
+            if sel:
+                print(f'NOTE partial run: selected {",".join(c["id"] for c in sel)} '
+                      f'of {len(CASES[group])} in group={group}; byte-exactness here '
+                      f'covers these cases only, not the suite')
+        for case in sel:
             r = dev.complete(case['input'], phase=case['phase'])
             # A blank expectation means "any grammar-legal, successfully executed
             # call is fine"; an exact list must match name and arguments.
@@ -224,7 +235,7 @@ def device_mode(args):
     metric('device_golden_missing', missing_golden(results, golden))
     # Reference is the 12-case golden; a short AUTO_GROUPS run only covers some
     # of it, so scale the pass criterion by the fraction actually measured.
-    measured_cases = sum(len(CASES[g]) for g in args.groups.split(','))
+    measured_cases = len(results)   # the selected set, whatever --groups/--cases did
     metric('device_cases_total', len(golden))
     if len(golden) > measured_cases:
         metric('device_output_exact_min', round(exact * len(golden) / measured_cases))
@@ -266,7 +277,16 @@ def host_case(case):
 def host_mode(args):
     results = {}
     for group in ('primary', 'extended'):
-        for case in CASES[group]:
+        if args.cases:
+            # The flag means the same thing in both modes; a filter that silently
+            # did nothing on the host would be the vacuous-control class.
+            want = {c.strip() for c in args.cases.split(',') if c.strip()}
+            cases = [c for c in CASES[group] if c['id'] in want]
+            if not cases:
+                continue
+        else:
+            cases = CASES[group]
+        for case in cases:
             r = host_case(case)
             results[case['id']] = r
             print(f'HOST {case["id"]} tokens={r["tokens"]} raw={r["raw"][:90]!r}')
@@ -330,6 +350,7 @@ def main():
     ap.add_argument('mode', choices=['device', 'host', 'fidelity'])
     ap.add_argument('--port', default='/dev/ttyACM1')
     ap.add_argument('--groups', default='primary,extended,think')
+    ap.add_argument('--cases', default='', help='comma list of case ids to run (diagnostics)')
     ap.add_argument('--boot-timeout', type=float, default=1500)
     ap.add_argument('--request-timeout', type=float, default=600)
     ap.add_argument('--save-golden', action='store_true')

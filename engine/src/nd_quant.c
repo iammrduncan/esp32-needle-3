@@ -36,80 +36,11 @@ float nd_f16_slow(uint16_t h)
     }
 }
 
-/* Two butterflies per memory instruction, with the same scalar add.s/sub.s the
- * generic loop uses. Measured (run #359 lane 1, on the real 6-group x 128
- * geometry, diffed cell-by-cell against the generic body below): +36.75 %.
- *
- * This is NOT float SIMD - the ESP32-S3 assembler rejects every vector float
- * arithmetic opcode this core might have wanted (ee.add.64 / ee.adds.64 /
- * ee.sub*.64 / ee.mul*.64 do not exist to it, which is what
- * engine/src/lut2_tie728.S:24 already records) - it is only fewer LSU
- * instructions around identical arithmetic, so the bits cannot move: each cell
- * still computes a+b and a-b over its own two operands, in the same order.
- *
- * Why ee.ldf is admissible here when run #335 found it returning the wrong
- * values: that defect was in the 2-bit *decoder* pattern, where the nibble
- * identity was lost upstream of the loads. On plain aligned fp32 arrays the wide
- * load passes both a bit-differential against the shipping kernel and a
- * known-answer probe (#356). The differential is the gate, not the instruction.
- *
- * `.ip` post-updates its base register: the access uses the old value and then
- * the register advances. The load and store cursors are therefore deliberately
- * DIFFERENT variables - one variable reused for both would write 16 bytes past
- * the pair it just read (that bug is in run #359's history). */
-#if defined(__XTENSA__)
-ND_HOT static void fwht_stages_pairs(float *x, uint32_t n)
-{
-    uint32_t len, i, j;
-
-    for (len = 2; len < n; len <<= 1) {
-        for (i = 0; i < n; i += len << 1) {
-            for (j = i; j < i + len; j += 2u) {
-                float *pa = &x[j],       *pb = &x[j + len];
-                float *qa = &x[j],       *qb = &x[j + len];
-                __asm__ __volatile__(
-                    "ee.ldf.64.ip  f4, f5,  %[_a], 8\n\t"
-                    "ee.ldf.64.ip  f6, f7,  %[_b], 8\n\t"
-                    "add.s  f8,  f4, f6\n\t"
-                    "add.s  f10, f5, f7\n\t"
-                    "sub.s  f12, f4, f6\n\t"
-                    "sub.s  f14, f5, f7\n\t"
-                    "ee.stf.64.ip  f8,  f10, %[_c], 8\n\t"
-                    "ee.stf.64.ip  f12, f14, %[_d], 8\n\t"
-                    : [_a] "+a"(pa), [_b] "+a"(pb), [_c] "+a"(qa), [_d] "+a"(qb)
-                    :
-                    : "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11",
-                      "f12", "f13", "f14", "f15", "memory");
-            }
-        }
-    }
-}
-#endif
 
 ND_HOT void nd_fwht(float *x, uint32_t n)
 {
     uint32_t len;
 
-#if defined(__XTENSA__)
-    /* The pair form needs 8-byte alignment of both pair bases. For an even len
-     * that is exactly `x` being 8-aligned; the len == 1 stage is left scalar
-     * because its "b" operand lives inside the same pair as its "a" operand. */
-    if (n >= 2u && (n & (n - 1u)) == 0u && (((uintptr_t)x) & 7u) == 0u) {
-        /* The WHOLE len == 1 stage: n/2 butterflies, one per block. Shipping the
-         * first one alone was measured on device as DEVICE_OUTPUT_DIVERGED 4/17
-         * with token_delta 257 (#362) - and the kbench differential could not see
-         * it, because the bench copy looped correctly while this copy did not.
-         * Differential the code that ships, never a transcription of it. */
-        uint32_t i;
-        for (i = 0; i < n; i += 2u) {
-            float a = x[i], b = x[i + 1u];
-            x[i]           = a + b;
-            x[i + 1u]      = a - b;
-        }
-        fwht_stages_pairs(x, n);
-        return;
-    }
-#endif
 
     for (len = 1; len < n; len <<= 1) {
         uint32_t i;
@@ -162,7 +93,7 @@ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
     for (gi = g0; gi < g1; gi++) {
         float   *blk = c->xh + (size_t)gi * c->g;
         nd_fwht(blk, c->g);
-        /* Unrolled by 4: measured +263 % on the shipped geometry (#359 lane 2,
+        /* Unrolled by 4: measured +263 % on the shipped geometry (#361 lane 2,(#361 lane 2,
          * 10,789 -> 2,968 cycles for 6 groups of 128, bit-exact because every
          * element is its own multiply and there is no accumulation order to
          * move). `restrict` alone measured exactly zero (#356 lane 3), which is

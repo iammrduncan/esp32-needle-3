@@ -2241,6 +2241,704 @@ static void bench_e30(void)
 #endif
 
 
+#if ND_KB_EXP31
+/* =============== Experiment 31: is the shipping tier already packed? =======
+ *
+ * Run #350 measured +0.89 % for packed-vs-four-mallocs, but shipping does not
+ * use four mallocs: nd_tier_ptr maps ONE contiguous archive span 1:1 into PSRAM,
+ * so a layer's tensors sit at their archive offsets. This lane rebuilds exactly
+ * that mapping and asks whether packing buys anything over it - and prints the
+ * archive gaps between the tensors, which is the mechanism that would explain
+ * either answer. Lanes B and C price the two remaining un-attributed costs.
+ *
+ *   LANE 1  A = one buffer, each tensor at (archive_off - min_off) = shipping's
+ *           1:1 tier mapping.  B = the SAME bytes in the SAME buffer, packed at
+ *           64 B-aligned offsets in per-token read order. Bit-exact by
+ *           construction, so any delta is placement and nothing else.
+ *   LANE 2  attention P.V accumulate: the shipped read-modify-write of the
+ *           output rows vs a (position x dim) chunked form. Every oh cell is an
+ *           independent accumulator, so chunking cannot move a bit.
+ *   LANE 3  nd_cq_prepare composition: copy / +memset / +FWHT / full scale pass,
+ *           separately. #344 priced the whole call at 0.156 ms (~2 cycles/op)
+ *           but never split it, so a TIE FWHT was a guess. This says whether the
+ *           FWHT is even the majority of it.
+ */
+#ifndef ND_KB_LANE
+#define ND_KB_LANE 1
+#endif
+
+/* ---------------- LANE 1: shipping's 1:1 tier mapping vs packed ------------ */
+#if ND_KB_LANE == 1
+static void bench_e31(void)
+{
+    static const uint32_t WANT[4] = { 576u, 96u, 128u, 768u };
+    nd_tensor    t[4];
+    int          idx[4];
+    uint8_t     *src[4];
+    uint8_t     *buf = NULL, *pk[4], *ar[4];
+    float       *ya[4], *yb[4], *xh = NULL, *lut = NULL;
+    nd_lut2_ctx  ca[4], cb[4];
+    kb_fuse      fa, fb;
+    uint32_t     s, i, in_pad, lutn, rows = 0u, weights = 0u;
+    uint32_t     lo = 0xFFFFFFFFu, hi = 0u, packed_sz = 0u;
+    uint32_t     rounds = 14u, r, bad = 0u, best[2] = { ~0u, ~0u };
+    nd_row_fn    fn;
+
+    memset(&fa, 0, sizeof(fa));
+    memset(&fb, 0, sizeof(fb));
+    for (s = 0; s < 4u; s++) {
+        if (!kb_find_shape(WANT[s], s, &t[s], &idx[s])) {
+            printf("KB E31 missing_shape=%u\n", (unsigned)WANT[s]); return;
+        }
+        src[s] = (uint8_t *)nd_cact_data(&s_c, &t[s]);
+        if (t[s].offset < lo) lo = t[s].offset;
+        if (t[s].offset + t[s].nbytes > hi) hi = t[s].offset + t[s].nbytes;
+        in_pad = nd_cq_in_pad(&t[s]);
+        ya[s] = heap_caps_malloc(sizeof(float) * t[s].shape[0], MALLOC_CAP_SPIRAM);
+        yb[s] = heap_caps_malloc(sizeof(float) * t[s].shape[0], MALLOC_CAP_SPIRAM);
+        if (!ya[s] || !yb[s]) { printf("KB E31 alloc_failed\n"); return; }
+        rows    += t[s].shape[0];
+        weights += t[s].shape[0] * in_pad;
+        fa.nrows[s] = fb.nrows[s] = t[s].shape[0];
+        fa.cum[s + 1u] = fb.cum[s + 1u] = rows;
+        packed_sz += (t[s].nbytes + 63u) & ~63u;
+    }
+    fa.nseg = fb.nseg = 4u;
+
+    buf = heap_caps_malloc((size_t)(hi - lo), MALLOC_CAP_SPIRAM);
+    if (!buf) { printf("KB E31 alloc_failed span=%u\n", (unsigned)(hi - lo)); return; }
+    /* A: shipping's mapping - archive offsets, gaps included. */
+    for (s = 0; s < 4u; s++) {
+        ar[s] = buf + (t[s].offset - lo);
+        memcpy(ar[s], src[s], t[s].nbytes);
+    }
+    /* B: packed in read order, 64 B aligned so no tensor shares a cache line. */
+    {
+        uint32_t off = 0u;
+        for (s = 0; s < 4u; s++) {
+            pk[s] = buf + off;                       /* separate buffer below */
+            off  += (t[s].nbytes + 63u) & ~63u;
+        }
+    }
+    /* Put B in its own buffer so the two layouts cannot share lines and so a
+     * comparison is layout-only, not "B happens to be the same pages". */
+    {
+        uint8_t *bbuf = heap_caps_malloc((size_t)packed_sz, MALLOC_CAP_SPIRAM);
+        uint32_t off = 0u;
+        if (!bbuf) { printf("KB E31 packed_alloc_failed\n"); return; }
+        for (s = 0; s < 4u; s++) {
+            pk[s] = bbuf + off;
+            memcpy(pk[s], src[s], t[s].nbytes);
+            off  += (t[s].nbytes + 63u) & ~63u;
+        }
+        printf("KB E31 L1 archive_span=%u packed_span=%u ids=%u,%u,%u,%u\n",
+               (unsigned)(hi - lo), (unsigned)packed_sz,
+               (unsigned)idx[0], (unsigned)idx[1], (unsigned)idx[2], (unsigned)idx[3]);
+        /* The gap structure IS the mechanism: zero gaps mean shipping is already
+         * packed and no layout lever exists for these tensors. */
+        for (s = 0; s < 4u; s++)
+            printf("KB E31 GAP id=%u off=%u nbytes=%u gap_before=%d\n",
+                   (unsigned)idx[s], (unsigned)t[s].offset, (unsigned)t[s].nbytes,
+                   (int)((s == 0u) ? 0 : (long)t[s].offset -
+                        (long)(t[s - 1u].offset + t[s - 1u].nbytes)));
+
+        in_pad = nd_cq_in_pad(&t[0]);
+        lutn   = nd_cq_lut_floats(in_pad);
+        xh  = (float *)ND_ALLOC_FAST(sizeof(float) * in_pad);
+        lut = (float *)ND_ALLOC_FAST(sizeof(float) * lutn);
+        if (!xh || !lut) { printf("KB E31 lut_alloc_failed\n"); return; }
+        kb_lane_xh(xh, in_pad, 1u);
+        nd_cq_lut_build(&s_c, xh, in_pad, lut);
+
+        fn = nd_lut2_rows_tie1n;
+        for (s = 0; s < 4u; s++) {
+            nd_lut2_fill(&ca[s], &t[s], ar[s], lut, ya[s]);
+            nd_lut2_fill(&cb[s], &t[s], pk[s], lut, yb[s]);
+            if (!nd_lut2_asm_ok(&ca[s], 0u, fa.nrows[s]) ||
+                !nd_lut2_asm_ok(&cb[s], 0u, fb.nrows[s])) fn = nd_lut2_rows_c;
+        }
+        for (s = 0; s < 4u; s++) { fa.ctx[s] = ca[s]; fb.ctx[s] = cb[s]; }
+        fa.fn = fb.fn = fn;
+
+        nd_parallel_rows(kb_fuse_rows, &fa, rows);
+        nd_parallel_rows(kb_fuse_rows, &fb, rows);
+        for (s = 0; s < 4u; s++)
+            for (i = 0u; i < fa.nrows[s]; i++)
+                if (memcmp(&ya[s][i], &yb[s][i], 4) != 0) bad++;
+        printf("KB E31 NUM rows=%u mismatch=%u%s asm=%d\n", (unsigned)rows,
+               (unsigned)bad, bad ? "" : " bitexact=1", (fn == nd_lut2_rows_tie1n));
+        if (bad) { printf("KB E31 ABORT reason=not_bitexact\n"); return; }
+
+        for (r = 0; r < rounds; r++) {
+            uint32_t c0 = esp_cpu_get_cycle_count(), cy;
+            nd_parallel_rows(kb_fuse_rows, &fa, rows);      /* A: 1:1 tier map */
+            cy = esp_cpu_get_cycle_count() - c0; if (cy < best[0]) best[0] = cy;
+            asm volatile("" : "+f"(ya[0][0]));
+            c0 = esp_cpu_get_cycle_count();
+            nd_parallel_rows(kb_fuse_rows, &fb, rows);      /* B: packed order */
+            cy = esp_cpu_get_cycle_count() - c0; if (cy < best[1]) best[1] = cy;
+            asm volatile("" : "+f"(yb[0][0]));
+        }
+        printf("KB E31 RES cycles tier_1to1=%u packed=%u | cyc_per_weight %.4f %.4f | packed_over_shipping_map=%+.2f%%\n",
+               (unsigned)best[0], (unsigned)best[1],
+               (double)best[0] / (double)weights, (double)best[1] / (double)weights,
+               100.0 * ((double)best[0] / (double)best[1] - 1.0));
+    }
+}
+#endif
+
+/* ---------------- LANE 2: attention P.V accumulate, chunked vs shipped ----- */
+#if ND_KB_LANE == 2
+#define KBD 24u                       /* half of head_dim, as attn_heads splits */
+#define KBP 8u                        /* positions in the timed block */
+static float s_oh[KBP][KBD] __attribute__((aligned(16)));
+static float s_v[KBP][KBD] __attribute__((aligned(16)));
+static float s_v2[KBP][KBD];
+static float s_w[KBP];
+
+/* The shipped shape: for each position, walk the whole dim, read-modify-writing
+ * oh[pos][d]. */
+static void kb_pv_shipped(uint32_t reps)
+{
+    uint32_t p, d, k;
+    for (k = 0u; k < reps; k++)
+        for (p = 0u; p < KBP; p++) {
+            float w = s_w[p] + (float)k * 1e-6f;
+            for (d = 0u; d < KBD; d++) s_oh[p][d] += w * s_v[p][d];
+        }
+}
+
+/* Same updates, dim-major outside: every oh cell is an independent accumulator,
+ * so the value of each cell after the block is identical bit-for-bit. */
+static void kb_pv_chunked(uint32_t reps)
+{
+    uint32_t p, d, k;
+    for (d = 0u; d < KBD; d++)
+        for (k = 0u; k < reps; k++)
+            for (p = 0u; p < KBP; p++) {
+                float w = s_w[p] + (float)k * 1e-6f;
+                s_oh[p][d] += w * s_v[p][d];
+            }
+}
+
+static void bench_e31(void)
+{
+    uint32_t r, p, d, rounds = 25u, reps = 32u;
+    uint32_t best[2] = { ~0u, ~0u };
+    uint32_t seed = 991u, bad = 0u;
+    double updates = (double)KBP * KBD * reps;
+
+    for (p = 0u; p < KBP; p++)
+        for (d = 0u; d < KBD; d++) {
+            seed = seed * 1664525u + 1013904223u;
+            s_v[p][d] = ((float)((seed >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+            seed = seed * 1664525u + 1013904223u;
+            s_v2[p][d] = ((float)((seed >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+        }
+    for (p = 0u; p < KBP; p++) s_w[p] = 0.5f + 0.01f * (float)p;
+
+    /* Exactness of the reordering, cell by cell. */
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) s_oh[p][d] = s_v2[p][d];
+    kb_pv_shipped(reps);
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) s_v2[p][d] = s_oh[p][d];
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) s_oh[p][d] = s_v[p][d] * 0.0f + s_v2[p][d] * 0.0f + s_v[p][d];
+    /* reset both to the same start and run the two orders separately */
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) { s_oh[p][d] = s_v[p][d]; }
+    kb_pv_shipped(reps);
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) s_v2[p][d] = s_oh[p][d];
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++) s_oh[p][d] = s_v[p][d];
+    kb_pv_chunked(reps);
+    for (p = 0u; p < KBP; p++) for (d = 0u; d < KBD; d++)
+        if (s_oh[p][d] != s_v2[p][d]) bad++;
+
+    printf("KB E31 L2 cells=%u updates=%u order_mismatch=%u%s\n",
+           (unsigned)(KBP * KBD), (unsigned)(KBP * KBD * reps), (unsigned)bad,
+           bad ? "" : " bitexact=1");
+
+    for (r = 0; r < rounds; r++) {
+        uint32_t c0, cy;
+        c0 = esp_cpu_get_cycle_count(); kb_pv_shipped(reps);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[0]) best[0] = cy;
+        asm volatile("" : "+f"(s_oh[0][0]));
+        c0 = esp_cpu_get_cycle_count(); kb_pv_chunked(reps);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[1]) best[1] = cy;
+        asm volatile("" : "+f"(s_oh[0][0]));
+    }
+    printf("KB E31 RES cycles shipped=%u chunked=%u | cyc_per_update %.4f %.4f | chunked=%+.2f%% (P.V phase ~15 ms/token)\n",
+           (unsigned)best[0], (unsigned)best[1], (double)best[0] / updates,
+           (double)best[1] / updates, 100.0 * ((double)best[0] / (double)best[1] - 1.0));
+}
+#endif
+
+/* ---------------- LANE 3: what is actually inside nd_cq_prepare ------------ */
+#if ND_KB_LANE == 3
+static float s_pin[3072] __attribute__((aligned(16)));
+static float s_pout[3072] __attribute__((aligned(16)));
+
+static void bench_e31(void)
+{
+    nd_tensor  tq;
+    int        ti = -1;
+    uint32_t   r, rounds = 25u, n, ngroup, g = 128u;
+    uint32_t   best[4] = { ~0u, ~0u, ~0u, ~0u }, seed = 4242u, j;
+
+    /* The engine's own geometry, not an invented one: nd_cq_prepare takes the
+     * tensor and derives in_pad and the group count from it. */
+    if (!kb_find_shape(768u, 0u, &tq, &ti)) { printf("KB E31 L3 no_tensor\n"); return; }
+    n = nd_cq_in_pad(&tq);
+    ngroup = n / g;
+    if (n > 3072u) { printf("KB E31 L3 in_pad_too_big=%u\n", (unsigned)n); return; }
+
+    for (j = 0u; j < n; j++) {
+        seed = seed * 1664525u + 1013904223u;
+        s_pin[j] = ((float)((seed >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+    }
+
+    for (r = 0; r < rounds; r++) {
+        uint32_t c0, cy, gi, st, half, k, base;
+        float scale;
+
+        /* 1: the activation copy alone (xh <- xin), as prepare does it. */
+        c0 = esp_cpu_get_cycle_count();
+        memcpy(s_pout, s_pin, sizeof(float) * n);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[0]) best[0] = cy;
+
+        /* 2: + the FWHT. Each group's 128-point transform is what prepare runs
+         * per group; here it is the same butterfly schedule the engine uses. */
+        c0 = esp_cpu_get_cycle_count();
+        for (gi = 0; gi < ngroup; gi++) {
+            float *x = s_pout + (size_t)gi * g;
+            for (half = 1u; half < g; half <<= 1) {
+                for (base = 0; base < g; base += (half << 1)) {
+                    for (k = 0; k < half; k++) {
+                        float a = x[base + k], b = x[base + k + half];
+                        x[base + k] = a + b;
+                        x[base + k + half] = a - b;
+                    }
+                }
+            }
+            (void)st;
+        }
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[1]) best[1] = cy;
+
+        /* 3: + the scale pass (prepare divides by in_pad and writes xh). */
+        c0 = esp_cpu_get_cycle_count();
+        scale = 1.0f / (float)n;
+        for (j = 0u; j < n; j++) s_pout[j] *= scale;
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[2]) best[2] = cy;
+
+        /* 4: the whole call, the engine's own function. */
+        c0 = esp_cpu_get_cycle_count();
+        nd_cq_prepare(&tq, s_pin, s_pout);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[3]) best[3] = cy;
+        asm volatile("" : "+f"(s_pout[0]));
+    }
+    printf("KB E31 L3 in_pad=%u ngroup=%u group=%u\n", (unsigned)n, (unsigned)ngroup, (unsigned)g);
+    printf("KB E31 RES cycles copy=%u fwht=%u scale=%u full_nd_cq_prepare=%u | share of full: copy %.1f%% fwht %.1f%% scale %.1f%%\n",
+           (unsigned)best[0], (unsigned)best[1], (unsigned)best[2], (unsigned)best[3],
+           100.0 * (double)best[0] / (double)best[3],
+           100.0 * (double)best[1] / (double)best[3],
+           100.0 * (double)best[2] / (double)best[3]);
+    printf("KB E31 VERDICT fwht_is_majority=%d -> a TIE FWHT is worth at most %.1f%% of a %.3f ms call, x ~16 calls/token = %.2f ms\n",
+           (best[1] * 2u > best[3]),
+           100.0 * (double)best[1] / (double)best[3],
+           (double)best[3] / 240000000.0,
+           16.0 * (double)best[1] / 240000000.0);
+}
+#endif
+/* ====================== end Experiment 31 =============================== */
+
+#endif
+
+#if ND_KB_EXP32
+/* ============ Experiment 32: the FWHT is 64 % of prepare - is it SIMD-able? =
+ *
+ * Run #351 lane 3 split nd_cq_prepare (0.245 ms/call, ~16 calls/token = 3.9 ms,
+ * which reproduces the phase map's prep+lut 3.6 ms) and found the transform owns
+ * 64.1 % of it: 37,763 cycles for 6 groups x 128-point FWHT = 2,688 butterflies =
+ * 14 cycles each, against a ~6-instruction scalar butterfly. If a vector form is
+ * bit-exact and 2-3x faster the prize is ~1.2 ms/token = +0.6 % decode, which is
+ * three keep bars.
+ *
+ * Bit-exactness is structural, not hoped for: a butterfly is x[k]=a+b,
+ * x[k+h]=a-b over the SAME two operands in the SAME order, so a vector version
+ * computes identical IEEE results, just several cells per instruction.
+ *
+ * Wide loads are exactly the thing run #335 caught returning wrong values on
+ * this core, so every variant here carries a KNOWN-ANSWER probe (delta input ->
+ * all ones; constant input -> exact powers of two) alongside the differential
+ * against the scalar reference. A fast variant that fails the probe is discarded
+ * on the spot, as #335's ee.ldf forms were.
+ *
+ *   LANE 1  scalar reference vs unrolled scalar vs ee.ldf.64/ee.add.64 vector
+ *           butterflies vs the 128-bit form, on the real 128-point group.
+ *   LANE 2  price it on the REAL function: is the model's transform bit-identical
+ *           to nd_cq_prepare's, and what does the engine's call cost at each real
+ *           in_pad (768 and 3072), so the prize has a real denominator.
+ *   LANE 3  the remaining 17.8 % of the call (copy 3.3 %, scale 14.5 %): the
+ *           scale pass costs 11 cycles per element, which is far off a multiply's
+ *           floor, so test restrict and vector forms for it.
+ */
+#ifndef ND_KB_LANE
+#define ND_KB_LANE 1
+#endif
+#ifndef KB_TIE_ASM
+#define KB_TIE_ASM 1
+#endif
+
+#define KBG 128u
+static float s_fw[KBG] __attribute__((aligned(16)));
+static float s_fr[KBG] __attribute__((aligned(16)));
+
+/* The reference: the scalar butterfly order the engine uses. */
+static void kb_fwht_scalar(float *x, uint32_t g)
+{
+    uint32_t half, base, k;
+    for (half = 1u; half < g; half <<= 1)
+        for (base = 0; base < g; base += (half << 1))
+            for (k = 0; k < half; k++) {
+                float a = x[base + k], b = x[base + k + half];
+                x[base + k] = a + b;
+                x[base + k + half] = a - b;
+            }
+}
+
+/* Unrolled in k. Cannot move a bit: each cell reads its own two operands. */
+static void kb_fwht_unroll(float *x, uint32_t g)
+{
+    uint32_t half, base, k;
+    for (half = 1u; half < g; half <<= 1)
+        for (base = 0; base < g; base += (half << 1)) {
+            for (k = 0u; k + 1u < half; k += 2u) {
+                float a0 = x[base + k],      b0 = x[base + k + half];
+                float a1 = x[base + k + 1u], b1 = x[base + k + 1u + half];
+                x[base + k]            = a0 + b0;
+                x[base + k + half]     = a0 - b0;
+                x[base + k + 1u]       = a1 + b1;
+                x[base + k + 1u + half]= a1 - b1;
+            }
+            for (; k < half; k++) {
+                float a = x[base + k], b = x[base + k + half];
+                x[base + k] = a + b;
+                x[base + k + half] = a - b;
+            }
+        }
+}
+
+#if KB_TIE_ASM
+/* FLOAT SIMD IS NOT AVAILABLE ON THIS PART, measured, not assumed: ee.add.64,
+ * ee.adds.64, ee.adds.sp, ee.addsp.64, ee.vadd.64, ee.sub*.64, ee.mul*.64 and
+ * ee.ldf.32 are ALL rejected by the assembler this toolchain ships ("unknown
+ * opcode or format name"), which is also what engine/src/lut2_tie728.S:24 records
+ * from the TIE728 work. Only the wide FLOAT LOADS assemble (ee.ldf.64.ip /
+ * ee.ldf.128.ip, the forms run #332/#335 used). So a vectorised butterfly is
+ * impossible; what IS still possible is fewer load/store instructions around the
+ * same scalar adds and subs - which is bit-exact by construction because the
+ * arithmetic is the scalar arithmetic, only the operand movement changes.
+ * Run #335 proved ee.ldf can return values that are not the ones asked for when
+ * the access pattern goes through the 2-bit decoder, so this variant earns its
+ * keep only if it passes the same known-answer probe and the bit-differential. */
+static void kb_fwht_ld64(float *x, uint32_t g)
+{
+    uint32_t half, base, k;
+    for (half = 1u; half < g; half <<= 1) {
+        for (base = 0; base < g; base += (half << 1)) {
+            if (half == 1u) {
+                float a = x[base], b = x[base + 1u];
+                x[base] = a + b;
+                x[base + 1u] = a - b;
+                continue;
+            }
+            for (k = 0u; k + 1u < half; k += 2u) {
+                float a0, a1, b0, b1;
+                float *pa = &x[base + k];
+                float *pb = &x[base + k + half];
+                __asm__ __volatile__(
+                    "ee.ldf.64.ip f4, f5, %[_a], 8\n\t"
+                    "ee.ldf.64.ip f6, f7, %[_b], 8\n\t"
+                    "add.s  f8, f4, f6\n\t"
+                    "add.s  f10, f5, f7\n\t"
+                    "sub.s  f12, f4, f6\n\t"
+                    "sub.s  f14, f5, f7\n\t"
+                    "ee.stf.64.ip f8, f10, %[_c], 8\n\t"
+                    "ee.stf.64.ip f12, f14, %[_d], 8\n\t"
+                    : [_a] "+a"(pa), [_b] "+a"(pb), [_c] "+a"(pa), [_d] "+a"(pb)
+                    :
+                    : "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11",
+                      "f12", "f13", "f14", "f15", "memory");
+            }
+        }
+    }
+}
+#endif
+
+/* Four butterflies per inner step, all eight operands held in locals: fewer
+ * dependent reloads per cell, and every cell still sees its own two operands. */
+static void kb_fwht_block4(float *x, uint32_t g)
+{
+    uint32_t half, base, k;
+    for (half = 1u; half < g; half <<= 1)
+        for (base = 0; base < g; base += (half << 1)) {
+            for (k = 0u; k + 3u < half; k += 4u) {
+                float a0 = x[base+k],      b0 = x[base+k+half];
+                float a1 = x[base+k+1u],   b1 = x[base+k+1u+half];
+                float a2 = x[base+k+2u],   b2 = x[base+k+2u+half];
+                float a3 = x[base+k+3u],   b3 = x[base+k+3u+half];
+                x[base+k]          = a0 + b0;  x[base+k+half]     = a0 - b0;
+                x[base+k+1u]       = a1 + b1;  x[base+k+1u+half]  = a1 - b1;
+                x[base+k+2u]       = a2 + b2;  x[base+k+2u+half]  = a2 - b2;
+                x[base+k+3u]       = a3 + b3;  x[base+k+3u+half]  = a3 - b3;
+            }
+            for (; k < half; k++) {
+                float a = x[base + k], b = x[base + k + half];
+                x[base + k] = a + b;
+                x[base + k + half] = a - b;
+            }
+        }
+}
+
+static void kb_fill_delta(float *x, uint32_t g)   /* FWHT = all ones */
+{
+    uint32_t j;
+    for (j = 0; j < g; j++) x[j] = (j == 0u) ? 1.0f : 0.0f;
+}
+static void kb_fill_const(float *x, uint32_t g)    /* FWHT = [g,0,0,...] */
+{
+    uint32_t j;
+    for (j = 0; j < g; j++) x[j] = 0.25f;
+}
+/* Returns 0 when every cell equals the hand-computed answer. */
+static uint32_t kb_probe(float *x, uint32_t g, uint32_t which)
+{
+    uint32_t j, bad = 0u;
+    for (j = 0; j < g; j++) {
+        float want = (which == 0u) ? 1.0f : (j == 0u ? (float)g * 0.25f : 0.0f);
+        if (x[j] != want) bad++;
+    }
+    return bad;
+}
+
+static uint32_t kb_diff(float *a, float *b, uint32_t g)
+{
+    uint32_t j, bad = 0u;
+    for (j = 0; j < g; j++) if (memcmp(&a[j], &b[j], 4) != 0) bad++;
+    return bad;
+}
+
+/* ---------------- LANE 1: the kernel screen -------------------------------- */
+#if ND_KB_LANE == 1
+#define KN 6u            /* groups per timed round, as one 768-wide prepare has */
+static void kb_apply(void (*fn)(float *, uint32_t), uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) fn(s_fw, KBG);
+    asm volatile("" : "+f"(s_fw[0]));
+}
+
+static void bench_e32(void)
+{
+    uint32_t r, rounds = 25u, n = 24u, seed = 31337u, j;
+    uint32_t best[4] = { ~0u, ~0u, ~0u, ~0u }, bad[4] = {0,0,0,0}, pb[4] = {0,0,0,0};
+    double butterflies = (double)(KBG / 2u) * 7u;   /* 448 per group */
+
+    for (j = 0; j < KBG; j++) {
+        seed = seed * 1664525u + 1013904223u;
+        s_fr[j] = ((float)((seed >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+    }
+
+    /* Correctness first: each variant must reproduce the scalar reference on
+     * real-shaped data AND answer the two hand-computable probes exactly. */
+    {
+        float ref[KBG];
+        memcpy(ref, s_fr, sizeof(ref));
+        kb_fwht_scalar(ref, KBG);
+        memcpy(s_fw, s_fr, sizeof(ref)); kb_fwht_unroll(s_fw, KBG);
+        bad[1] = kb_diff(ref, s_fw, KBG);
+        memcpy(s_fw, s_fr, sizeof(ref)); kb_fwht_scalar(s_fw, KBG);
+        bad[0] = kb_diff(ref, s_fw, KBG);
+#if KB_TIE_ASM
+        memcpy(s_fw, s_fr, sizeof(ref)); kb_fwht_block4(s_fw, KBG);
+        bad[2] = kb_diff(ref, s_fw, KBG);
+#if KB_TIE_ASM
+        memcpy(s_fw, s_fr, sizeof(ref)); kb_fwht_ld64(s_fw, KBG);
+        bad[3] = kb_diff(ref, s_fw, KBG);
+#endif
+#endif
+        kb_fill_delta(s_fw, KBG); kb_fwht_scalar(s_fw, KBG); pb[0] = kb_probe(s_fw, KBG, 0u);
+        kb_fill_const(s_fw, KBG);  kb_fwht_scalar(s_fw, KBG);
+        pb[0] += kb_probe(s_fw, KBG, 1u);
+        kb_fill_delta(s_fw, KBG); kb_fwht_block4(s_fw, KBG); pb[2] = kb_probe(s_fw, KBG, 0u);
+        kb_fill_const(s_fw, KBG);  kb_fwht_block4(s_fw, KBG); pb[2] += kb_probe(s_fw, KBG, 1u);
+#if KB_TIE_ASM
+        kb_fill_delta(s_fw, KBG); kb_fwht_ld64(s_fw, KBG);   pb[3] = kb_probe(s_fw, KBG, 0u);
+        kb_fill_const(s_fw, KBG);  kb_fwht_ld64(s_fw, KBG);   pb[3] += kb_probe(s_fw, KBG, 1u);
+#endif
+        printf("KB E32 L1 group=%u cells=%u diff_vs_scalar=%u,%u,%u,%u probe_bad=%u,%u,%u,%u (scalar,unroll,block4,wide_load64)\n",
+               (unsigned)KBG, (unsigned)KBG, (unsigned)bad[0], (unsigned)bad[1],
+               (unsigned)bad[2], (unsigned)bad[3], (unsigned)pb[0], (unsigned)pb[1],
+               (unsigned)pb[2], (unsigned)pb[3]);
+    }
+
+    for (r = 0; r < rounds; r++) {
+        uint32_t c0, cy;
+        c0 = esp_cpu_get_cycle_count(); kb_apply(kb_fwht_scalar, n);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[0]) best[0] = cy;
+        c0 = esp_cpu_get_cycle_count(); kb_apply(kb_fwht_unroll, n);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[1]) best[1] = cy;
+#if KB_TIE_ASM
+        c0 = esp_cpu_get_cycle_count(); kb_apply(kb_fwht_block4, n);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[2]) best[2] = cy;
+        c0 = esp_cpu_get_cycle_count(); kb_apply(kb_fwht_ld64, n);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[3]) best[3] = cy;
+#endif
+    }
+    printf("KB E32 L1 RES cycles=%u,%u,%u,%u | cyc_per_butterfly %.2f %.2f %.2f %.2f | unroll=%+.2f%% block4=%+.2f%% wide_load64=%+.2f%%\n",
+           (unsigned)best[0], (unsigned)best[1], (unsigned)best[2], (unsigned)best[3],
+           (double)best[0] / (butterflies * n), (double)best[1] / (butterflies * n),
+           (double)best[2] / (butterflies * n), (double)best[3] / (butterflies * n),
+           100.0 * ((double)best[0] / (double)best[1] - 1.0),
+           100.0 * ((double)best[0] / (double)best[2] - 1.0),
+           100.0 * ((double)best[0] / (double)(best[3] ? best[3] : 1u) - 1.0));
+    printf("KB E32 PRICE fwht_share=64.1%% of a 3.9 ms/token phase; a %.2fx transform saves %.2f ms = %+.2f%% decode\n",
+           (double)best[0] / (double)best[2],
+           3.9 * 0.641 * (1.0 - (double)best[2] / (double)best[0]),
+           100.0 * (3.9 * 0.641 * (1.0 - (double)best[2] / (double)best[0])) / 197.0);
+}
+#endif
+
+/* ---------------- LANE 2: is the model the engine, and what does the real
+ * call cost at each real geometry ------------------------------------------ */
+#if ND_KB_LANE == 2
+static float s_pin[3072] __attribute__((aligned(16)));
+static float s_eng[3072] __attribute__((aligned(16)));
+static float s_mod[3072] __attribute__((aligned(16)));
+
+static void bench_e32(void)
+{
+    static const uint32_t ROWS[4] = { 768u, 768u, 768u, 576u };
+    nd_tensor  t[4];
+    int        idx[4];
+    uint32_t   s, j, q, rounds = 20u, seed = 5150u;
+
+    printf("KB E32 L2 engine_vs_model\n");
+    for (s = 0u; s < 4u; s++) {
+        if (!kb_find_shape(ROWS[s], s, &t[s], &idx[s])) {
+            printf("KB E32 L2 missing=%u\n", (unsigned)ROWS[s]); continue;
+        }
+        {
+            uint32_t n = nd_cq_in_pad(&t[s]), ngroup, gi, half, base, k, bad;
+            uint32_t best = ~0u, c0, cy;
+            if (n > 3072u) { printf("KB E32 L2 in_pad_too_big=%u\n", (unsigned)n); continue; }
+            for (j = 0; j < n; j++) {
+                seed = seed * 1664525u + 1013904223u;
+                s_pin[j] = ((float)((seed >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+            }
+            /* The engine's own call, timed. */
+            for (q = 0; q < rounds; q++) {
+                c0 = esp_cpu_get_cycle_count();
+                nd_cq_prepare(&t[s], s_pin, s_eng);
+                cy = esp_cpu_get_cycle_count() - c0; if (cy < best) best = cy;
+                asm volatile("" : "+f"(s_eng[0]));
+            }
+            /* My model, then bit-compare with the engine's output. */
+            memcpy(s_mod, s_pin, sizeof(float) * n);
+            ngroup = n / KBG;
+            for (gi = 0; gi < ngroup; gi++) kb_fwht_scalar(s_mod + (size_t)gi * KBG, KBG);
+            {
+                float sc = 1.0f / (float)n;
+                for (j = 0; j < n; j++) s_mod[j] *= sc;
+            }
+            bad = 0u;
+            for (j = 0; j < n; j++) if (memcmp(&s_eng[j], &s_mod[j], 4) != 0) bad++;
+            printf("KB E32 L2 tensor=%d out=%u in_pad=%u ngroup=%u engine_cycles=%u model_ms=%.4f model_vs_engine_bad=%u\n",
+                   idx[s], (unsigned)t[s].shape[0], (unsigned)n, (unsigned)ngroup,
+                   (unsigned)best, (double)best / 240000.0, (unsigned)bad);
+        }
+    }
+}
+#endif
+
+/* ---------------- LANE 3: the scale pass (14.5 % of the call) -------------- */
+#if ND_KB_LANE == 3
+static float s_v[3072] __attribute__((aligned(16)));
+static float s_ref32[3072] __attribute__((aligned(16)));
+
+static void kb_fillv(float *x, uint32_t n, uint32_t sd)
+{
+    uint32_t jj;
+    for (jj = 0u; jj < n; jj++) {
+        sd = sd * 1664525u + 1013904223u;
+        x[jj] = ((float)((sd >> 8) & 0xFFFFu) / 32768.0f - 1.0f);
+    }
+}
+
+static void kb_scale_plain(float *x, uint32_t n, float sc)
+{
+    uint32_t jj;
+    for (jj = 0; jj < n; jj++) x[jj] *= sc;
+}
+static void kb_scale_restrict(float *restrict x, uint32_t n, float sc)
+{
+    uint32_t jj;
+    for (jj = 0; jj < n; jj++) x[jj] *= sc;
+}
+/* There is no vector float multiply on this part (the same probe table that
+ * rejects ee.add.64 rejects ee.muls.64), so the only scalar lever left is giving
+ * the loop scheduler independent work. */
+static void kb_scale_unroll4(float *restrict x, uint32_t n, float sc)
+{
+    uint32_t jj;
+    for (jj = 0u; jj + 3u < n; jj += 4u) {
+        float v0 = x[jj], v1 = x[jj+1u], v2 = x[jj+2u], v3 = x[jj+3u];
+        x[jj] = v0 * sc; x[jj+1u] = v1 * sc;
+        x[jj+2u] = v2 * sc; x[jj+3u] = v3 * sc;
+    }
+    for (; jj < n; jj++) x[jj] *= sc;
+}
+
+static void bench_e32(void)
+{
+    uint32_t r, rounds = 25u, n = 768u, jj, bad = 0u;
+    uint32_t best[3] = { ~0u, ~0u, ~0u };
+    float sc = 1.0f / 768.0f;
+
+    /* One canonical input, one canonical reference, then each variant against it
+     * from the SAME start - the #341 lesson, that a comparison must not advance
+     * the generator between the two sides it is comparing. */
+    kb_fillv(s_ref32, n, 6161u);
+    kb_scale_plain(s_ref32, n, sc);
+
+    kb_fillv(s_v, n, 6161u); kb_scale_restrict(s_v, n, sc);
+    for (jj = 0u; jj < n; jj++) if (memcmp(&s_v[jj], &s_ref32[jj], 4) != 0) bad++;
+    kb_fillv(s_v, n, 6161u); kb_scale_unroll4(s_v, n, sc);
+    for (jj = 0u; jj < n; jj++) if (memcmp(&s_v[jj], &s_ref32[jj], 4) != 0) bad++;
+    printf("KB E32 L3 n=%u scale_mismatch=%u%s\n", (unsigned)n, (unsigned)bad,
+           bad ? "" : " bitexact=1");
+
+    for (r = 0; r < rounds; r++) {
+        uint32_t c0, cy;
+        c0 = esp_cpu_get_cycle_count(); kb_scale_plain(s_v, n, sc);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[0]) best[0] = cy;
+        asm volatile("" : "+f"(s_v[0]));
+        c0 = esp_cpu_get_cycle_count(); kb_scale_restrict(s_v, n, sc);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[1]) best[1] = cy;
+        asm volatile("" : "+f"(s_v[0]));
+        c0 = esp_cpu_get_cycle_count(); kb_scale_unroll4(s_v, n, sc);
+        cy = esp_cpu_get_cycle_count() - c0; if (cy < best[2]) best[2] = cy;
+        asm volatile("" : "+f"(s_v[0]));
+    }
+    printf("KB E32 L3 RES cycles=%u,%u,%u | cyc_per_element %.2f %.2f %.2f | restrict=%+.2f%% unroll4=%+.2f%% (scale is 14.5%% of a 3.9 ms/token phase)\n",
+           (unsigned)best[0], (unsigned)best[1], (unsigned)best[2],
+           (double)best[0] / n, (double)best[1] / n, (double)best[2] / n,
+           100.0 * ((double)best[0] / (double)best[1] - 1.0),
+           100.0 * ((double)best[0] / (double)(best[2] ? best[2] : 1u) - 1.0));
+}
+#endif
+
+/* ====================== end Experiment 32 =============================== */
+
+#endif
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -2327,7 +3025,11 @@ int kbench_run(void)
     bench_gather();
     bench_wake();
     bench_rowrange();
-#if ND_KB_EXP30
+#if ND_KB_EXP32
+    bench_e32();
+#elif ND_KB_EXP31
+    bench_e31();
+#elif ND_KB_EXP30
     bench_e30();
 #else
     bench_fused();

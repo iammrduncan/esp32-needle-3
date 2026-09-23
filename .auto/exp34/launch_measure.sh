@@ -57,8 +57,8 @@ mkdir -p "$BATCH"
 #    is the direct verdict on the len==1 fix that #362's divergence forced.
 # 3: the SAME image as board 1 - a cross-board confirmation, the one case the
 #    anti-repeat guard exists to allow, with the reason printed into the lane log.
-pane 1 both
-pane 2 transform_only
-pane 3 both repeat
+pane 1 hoist
+pane 2 hoist2
+pane 3 fwathoist
 echo "panes=3 batch=$BATCH"
 grep -c . "$BATCH"/lane*.out 2>/dev/null

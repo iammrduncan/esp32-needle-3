@@ -41,12 +41,21 @@ ND_HOT void nd_fwht(float *x, uint32_t n)
 {
     uint32_t len;
 
-
+        /* Butterflies inside one stage are disjoint pairs - j and j+len differ
+         * for every j - so grouping K of them reads and writes each element
+         * exactly as often, in the same per-element order. Bit-exact by
+         * construction, and this is the same lever run #362's rescale unroll
+         * shipped (+0.332 %), applied to the loop that precedes it. */
     for (len = 1; len < n; len <<= 1) {
         uint32_t i;
         for (i = 0; i < n; i += len << 1) {
-            uint32_t j;
-            for (j = i; j < i + len; j++) {
+            uint32_t j = i, jend = i + len;
+            for (; j + 1u < jend; j += 2u) {
+            float a0 = x[j + 0u], b0 = x[j + 0u + len];
+            float a1 = x[j + 1u], b1 = x[j + 1u + len];
+                x[j + 0u] = a0 + b0; x[j + 0u + len] = a0 - b0; x[j + 1u] = a1 + b1; x[j + 1u + len] = a1 - b1;
+            }
+            for (; j < jend; j++) {
                 float a = x[j];
                 float b = x[j + len];
                 x[j]       = a + b;

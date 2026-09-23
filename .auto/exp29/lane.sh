@@ -1,7 +1,7 @@
 #!/bin/bash
 # One Experiment 29 performance lane on the board this wrapper locked.
 #
-#   inside `needle-board run N`:  .auto/exp29/lane.sh <lane 1|2|3>
+#   inside `needle-board run N`:  .auto/exp29/lane.sh <lane 1|2|3>   (EXP30=1 runs Experiment 30)
 #
 # Builds a FRESH directory per lane (the campaign's build-integrity rule: a knob
 # reused in an old CMakeCache silently re-flashes the previous image), verifies
@@ -12,7 +12,8 @@ set -uo pipefail
 
 L=${1:?usage: lane.sh 1|2|3}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-BD=build-e29-$L
+BD=build-e29-${EXP30:-0}-$L   # separate dir per experiment: a reused CMakeCache
+                                   # silently re-flashes the previous image
 OUT=${LANE_OUT:-/tmp/e29-lane$L-board${NEEDLE_BOARD:-?}.log}
 WIN=${KB_WINDOW:-200}
 . /opt/esp/idf/export.sh >/dev/null 2>&1
@@ -22,7 +23,7 @@ WIN=${KB_WINDOW:-200}
     cd "$ROOT/esp32" || exit 1
     rm -rf "$BD"
     idf.py -B "$BD" -DNEEDLE_KBENCH=ON -DND_KBENCH_ASM=ON -DND_KB_LANE="$L" \
-         -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
+         -DND_KB_EXP30="${EXP30:-0}" -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
     rc=$?
     echo "build_rc=$rc"
     [ $rc -ne 0 ] && { grep -E "error:|Error" "$OUT.build.log" | head -10; exit 1; }

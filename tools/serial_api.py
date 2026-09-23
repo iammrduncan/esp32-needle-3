@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import re
 import threading
 import time
@@ -291,6 +292,55 @@ class Device:
                 raise TimeoutError("ESP32 status request timed out")
             return state
 
+    def _hard_reset(self):
+        """Pulse the chip's EN line through the USB-JTAG (flash) port.
+
+        The soft rescue is not enough when the board stops answering a fresh
+        attach at all - which is what run #390's canonical run died on ("board did
+        not answer after one reconnect"), and what had already cost four gated
+        verdicts on 2026-09-23. A reconnect only replaces the host's file
+        descriptor; a wedge behind the CDC bridge needs the chip restarted.
+
+        On the S3's USB-Serial-JTAG the modem lines ARE the boot straps: RTS is EN
+        and DTR is IO0, so asserting RTS with DTR low and releasing it restarts the
+        app into normal boot - the same two transitions esptool uses, without
+        needing esptool importable inside the bench's own venv. The console is the
+        separate CDC port, which cannot reset anything, and the ledger's fact holds:
+        reset with the console CLOSED, or the strap is sampled wrong and the chip
+        sits in DOWNLOAD mode. Cost is the ~5 min prefix re-priming, which is why
+        this is the second stage, never the first.
+
+        Refuses to reset unless the flash node is identifiable as the same board as
+        the console: under the pool both paths carry `boardN-`, and a mismatch would
+        mean rebooting somebody else's measurement.
+        """
+        flash = os.environ.get("FLASH_PORT") or "/dev/ttyACM0"
+        con, fl = self.port, flash
+        if "/needle-pi/" in con and "board" in con:
+            cb = con.split("board")[-1][:1]
+            fb = fl.split("board")[-1][:1] if "board" in fl else ""
+            if cb != fb:
+                raise TimeoutError(f"console {con} and flash {fl} are different boards; "
+                                   "refusing to reset one of them")
+        try:
+            self.serial.close()
+        except Exception:
+            pass
+        rst = serial.Serial()
+        rst.port = fl
+        rst.baudrate = 115200
+        rst.timeout = 0.5
+        rst.dtr = False                 # IO0 high  -> normal boot, not download
+        rst.rts = True                  # EN low    -> hold in reset
+        rst.open()
+        time.sleep(0.10)
+        rst.rts = False                 # EN high   -> release into boot
+        time.sleep(0.10)
+        rst.close()
+        self.available = False
+        self._open(self.port, self.baud)
+        self._handshake(max(self.request_timeout, 600.0))   # two model caches re-warm
+
     def complete(self, prompt, phase="tools"):
         """Run one request, rescuing a stalled console by re-sending it once.
 
@@ -314,8 +364,23 @@ class Device:
             self.available = False
             self._reconnect()
             if self._request_state(min(self.request_timeout, 30.0)) is None:
-                raise TimeoutError(
-                    "board did not answer after one reconnect; case was not skipped")
+                if not os.environ.get("AUTO_HARD_RESET"):
+                    raise TimeoutError(
+                        "board did not answer after one reconnect; case was not skipped, "
+                        "and no chip reset was attempted (AUTO_HARD_RESET unset)")
+                # A mid-suite reset restarts the firmware's demo timer and sampling
+                # counters, and two held-out cases (`heldout_interval_one`,
+                # `heldout_long_tools_note_only`) depend on that state: measured on
+                # run #391's canonical session, exactly the two cases after a reset
+                # diverged. So a gated run must not mix pre- and post-reset context -
+                # opt in only for speed-only or diagnostic runs.
+                print("WARN reconnect got no answer; resetting the chip and re-sending "
+                      "this case (not skipping it)")
+                self._hard_reset()          # re-establishes readiness or raises
+                result = self._complete_once(prompt, phase)
+                result["retried"] = 1
+                result["hard_reset"] = 1
+                return result
             self.available = True
             result = self._complete_once(prompt, phase)
             result["retried"] = 1

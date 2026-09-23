@@ -35,7 +35,14 @@ import pathlib
 import sys
 
 MODEL = pathlib.Path('engine/src/nd_model.c')
-QUANT = pathlib.Path('engine/src/nd_quant.c')
+# The pair family's BASELINE is the fw2-only engine (md5 c416d6559a8f, the image
+# fw2pair was measured against at 5.0800). Once fw2pair was accepted the tree's own
+# nd_quant.c stopped containing the text these generators match, so the base is
+# pinned to a file and asserted rather than read from the tree - otherwise a stale
+# base silently produces a "candidate" that is really the accepted code again.
+QUANT_BASE = pathlib.Path('/tmp/ndq_fw2.c')
+QUANT_BASE_MD5 = "c416d6559a8f"
+QUANT = QUANT_BASE
 
 # ---------------------------------------------------------------- cond family
 
@@ -188,7 +195,10 @@ static ND_HOT void nd_fwht%d(%s, uint32_t n)
 
 
 def make_pair(out, ng, inner, tag):
-    s = QUANT.read_text()
+    import hashlib
+    md5 = hashlib.md5(QUANT_BASE.read_bytes()).hexdigest()[:12]
+    assert md5 == QUANT_BASE_MD5, "pair generator base is stale (%s != %s)" % (md5, QUANT_BASE_MD5)
+    s = QUANT_BASE.read_text()
 
     # 1. the paired transform, derived from the shipped nd_fwht's own geometry
     a = s.index("\nND_HOT void nd_fwht(")
@@ -248,12 +258,74 @@ def make_pair(out, ng, inner, tag):
           % (out, tag, ng, inner))
 
 
+def make_res_pair(out, tag):
+    """fwres2 - one fw_scale call spanning both paired groups instead of two.
+
+    The paired loop's blocks are ADJACENT by construction (blk1 = blk + g, both
+    inside xh), so a single rescale over 2g cells writes exactly the same cells in
+    the same order - each element is still its own multiply, so bit-exact - while
+    removing one loop entry/exit and giving the unroll-4 body twice the independent
+    multiplies to interleave. This is the candidate the refined rule points at: #380
+    and #381 showed interleaving chains costs on a strided-load reduction, while the
+    transform's wins came from resident operands plus pure arithmetic - and the
+    rescale's operand is the block the transform just produced, i.e. still hot."""
+    s = pathlib.Path('engine/src/nd_quant.c').read_text()   # the accepted image's file
+    old = """        nd_fwht2(blk, blk2, g);
+        fw_scale(blk,  g, scale);
+        fw_scale(blk2, g, scale);"""
+    assert s.count(old) == 1, "accepted paired rescale pair not found verbatim"
+    s = s.replace(old, """        nd_fwht2(blk, blk2, g);
+        /* One pass over both groups: they are adjacent in xh by construction, so
+         * this touches exactly the cells the two separate calls touched, in the
+         * same order, one multiply per element. */
+        fw_scale(blk, 2u * g, scale);""", 1)
+    out.write_text(s)
+    pathlib.Path('/tmp/ndm_%s.c' % tag).write_text(MODEL.read_text())
+    print("wrote %s (%s: paired transform + one rescale over 2g)" % (out, tag))
+
+
+def make_dif(out, tag):
+    """fwdif - the same transform, stages walked in DESCENDING len.
+
+    The shipped loop walks len = 1, 2, 4 ... n/2, so its innermost iterations jump
+    by `len` and the largest run (len = n/2) is the shortest one. Walking the same
+    stages from n/2 down to 1 makes the final stage's butterflies contiguous
+    (stride 1 across the whole half-block), which is the operand-delivery shape
+    this core likes - the same reason ascending row order beat shuffled reads (#352).
+
+    This is NOT assumed to be the same function: H_n = H_2 (x) H_(n/2) is symmetric,
+    so the two orders are expected to agree exactly, but "expected" is what run #363
+    was worth. Correctness rests on the host goldens (19/19, byte-identical text) and
+    the device byte-exact gate, not on a transcription of the loop in a test.
+    Only nd_fwht's stage order moves; the paired nd_fwht2 is untouched, so this is
+    one lever on top of the accepted image."""
+    s = pathlib.Path('engine/src/nd_quant.c').read_text()
+    # The two walks spell the same loop differently (`len = 1;` in the shipped
+    # nd_fwht, `len = 1u;` in the generated nd_fwht2), and matching only one of
+    # them quietly changes 2 of 3 groups instead of 3 of 3. Match both, require
+    # both, and report how many were changed.
+    olds = ["for (len = 1u; len < n; len <<= 1) {", "for (len = 1; len < n; len <<= 1) {"]
+    n_loops = sum(s.count(o) for o in olds)
+    assert n_loops == 2, "expected the stage loop in nd_fwht and nd_fwht2, found %d" % n_loops
+    new = ("    /* Same stages, descending: the last stage walked is then the contiguous one. "
+           "\n     * Expected identical because H_n = H_2 (x) H_(n/2); proven by the goldens, not "
+           "by\n     * assertion. */\n    for (len = n >> 1; len >= 1u; len >>= 1) {")
+    for o in olds:
+        s = s.replace(o, new.strip())
+    assert s.count("for (len = n >> 1;") == n_loops, "not every stage loop was rewritten"
+    out.write_text(s)                        # every stage loop, i.e. both walks
+    pathlib.Path('/tmp/ndm_%s.c' % tag).write_text(MODEL.read_text())
+    print("wrote %s (%s: descending stage order in %d transform walk(s))" % (out, tag, n_loops))
+
+
 VARIANTS = {
     "cond2":   lambda: make_cond(2, pathlib.Path('/tmp/ndm_cond2.c')),
     "cond4":   lambda: make_cond(4, pathlib.Path('/tmp/ndm_cond4.c')),
     "fw2pair": lambda: make_pair(pathlib.Path('/tmp/ndq_fw2pair.c'), 2, 2, "fw2pair"),
     "fw3pair": lambda: make_pair(pathlib.Path('/tmp/ndq_fw3pair.c'), 3, 2, "fw3pair"),
     "fw2single": lambda: make_pair(pathlib.Path('/tmp/ndq_fw2single.c'), 2, 1, "fw2single"),
+    "fwres2":  lambda: make_res_pair(pathlib.Path('/tmp/ndq_fwres2.c'), "fwres2"),
+    "fwdif":   lambda: make_dif(pathlib.Path('/tmp/ndq_fwdif.c'), "fwdif"),
 }
 
 if __name__ == "__main__":

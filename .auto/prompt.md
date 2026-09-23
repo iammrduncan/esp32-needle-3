@@ -6,7 +6,55 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-## CURRENT STATE AND QUEUE -- 2026-09-23T11:20Z (runs #367-#374)
+## CURRENT STATE AND QUEUE -- 2026-09-23T12:35Z (runs #375-#382)
+
+**Accepted runtime: 5.1050 decode tok/s (+109.1 %)** - run #379: two FWHT groups transformed in one
+stage walk (`nd_fwht2`) on top of run #378's within-stage butterfly unroll. Both came from ONE
+mechanism, which is now the campaign's sharpest tool: **put independent work in flight inside a serial
+dependency chain whose operands are already resident.** Readings: #378 fw2 +0.461 % (5.0567 -> 5.0800,
+three boards, three builds, zero spread, free at the heap); #379 fw2pair +0.492 % (5.0800 -> 5.1050,
+5.1050/5.1000/5.1050 on two boards), internal_free 13,623 (-256 B), extended 5.031, prefill 5.39,
+think 3.99, boot bench 5.151, min_case 4.87 (best worst case in 382 runs), 17/17 device + 19/19 host
+byte-exact, fidelity 5.341e-05, top1 10/10. **`make capture` is owed on this image** (shipping code
+changed twice since the last green capture).
+
+**The mechanism is bounded, and measured on both sides.** Interleaving *reductions* costs: cond2
+(two 768-term conditioning sums) -0.394 % and cond4 -0.427 %, monotonically worse with more chains
+(#380/#381), because that loop is bound by its strided `cond_v` loads and the interleave only added
+register pressure. And fw2single - pairing with NO within-stage unroll - ties the accepted image
+(+0.033 %, one tick, #382), so the two transform levers are one mechanism, not two. Rule before
+spending a board on any "more ILP" candidate: ask what the loop is bound by. Resident operand +
+pure arithmetic pays; strided loads do not.
+
+**Three lanes in flight (batches 20260923T1630L/1700L).** `fw3pair` - three groups per walk, which is
+*exactly* the per-core group count, so the paired path covers everything and the single-group tail
+never runs (5.1100 primary in hand = +0.098 % over accepted, sub-bar); `fw2single` - logged as #382;
+`fwres2` - one rescale pass over both adjacent paired groups instead of two (one-line diff, bit-exact,
+host 19/19 + odd-split guard green).
+
+NEXT THREE: (4) log `fw3pair` and `fwres2` with their gates. (5) If both are independently positive
+but individually sub-bar, build and measure **`fw3res`** (three groups + one rescale over 3g) as ONE
+change - the same precedent as run #371's bundle, where two measured sub-bar halves of the same phase
+crossed the bar together; if instead either is null, the transform family closes at ng=2/inner=2 and
+the remaining above-bar items are owner decisions only (phi row residency +0.39 % gated on the #293
+assertion-level RAM, 120 MHz +3.51 % vendor-blocked, and the bar itself). (6) Run the owed
+`make capture` on the accepted image, on board 1, while other boards screen.
+
+**Harness and method facts paid this window.** (a) A paired-transform loop guarded by `gi + ng < g1`
+never executes when ng exceeds the per-core group count (ngroup=6 split 3+3 gives each core exactly
+THREE groups), so it silently re-measures the accepted path - the guard is `gi + ng-1 < g1`, and ng=4
+is not a curve point on this geometry while ng=3 is. (b) A candidate generator must pin and md5-assert
+its BASE file: once fw2pair was accepted, the tree no longer contained the text the pair generator
+matched, and a stale base would have produced a "candidate" identical to the accepted code. (c) A
+`&&`-chained `cp` of a candidate that failed to generate silently tested the accepted tree and printed
+19/19 - the md5 of the tested tree is part of the evidence. (d) The same generator emitted a literal
+channel offset inside a loop over channels; the host golden caught it and
+`.auto/exp41/test_cond_equiv.c` now guards it. (e) An edited `CMakeLists.txt` in a worker carried
+`-O3` into three later lanes (run #377) - `board_config_check.sh` now hashes build files across the
+pool. The reusable guards are `.auto/exp41/test_cond_equiv.c` and `.auto/exp41/test_odd_split.c`, the
+latter covering the 3+3 split the host's `rows_serial` can never produce.
+
+## Superseded queue -- 2026-09-23T11:20Z (runs #367-#374)
 
 **Accepted runtime: 5.0567 decode tok/s (+107.2 %)** - run #371's bundle: `sigmoidf_pair` moved into
 IRAM with `ND_HOT` (+0.18 % mean, #336/#342) plus `fwht_rows` loop-invariant load hoisting

@@ -405,6 +405,18 @@ def main():
     # case makes the run FAIL loudly, it can never turn a failure into a pass. Measured need:
     # a session that wedges at case ~6 burns 600 s per remaining case, i.e. 2+ hours for a
     # suite that is actually dead after seven minutes.
+    # Group-restriction diagnostic, file form. Only consulted when AUTO_GROUPS is unset, so
+    # it can never silently narrow a canonical run; narrowing the groups changes WHICH
+    # monitors are reported, never what a reported monitor measures, and the device
+    # byte-exact gate in measure.sh is skipped for restricted runs for exactly that reason.
+    # Why it exists: the board answers ~16-20 requests per boot (16 alone, 6 with three
+    # lanes running), so a 20-case suite cannot reach its tail - while `primary,think`
+    # costs 7 requests and yields think_tps, the boot bench and both heaps, which is the
+    # monitor set a candidate record is otherwise missing.
+    diag_grp = ".auto/diag_groups"
+    if not os.environ.get("AUTO_GROUPS") and os.path.exists(diag_grp):
+        with open(diag_grp) as fh:
+            args.groups = fh.read().strip()
     diag_to = ".auto/diag_request_timeout_s"
     env_to = os.environ.get("AUTO_REQUEST_TIMEOUT_S")
     if not env_to and os.path.exists(diag_to):

@@ -12,7 +12,7 @@ set -uo pipefail
 
 L=${1:?usage: lane.sh 1|2|3}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-BD=build-e29-${EXP30:-0}${EXP31:-0}${EXP32:-0}-$L   # separate dir per experiment: a reused CMakeCache
+BD=build-e29-${EXP30:-0}${EXP31:-0}${EXP32:-0}${EXP33:-0}${EXP34:-0}-$L   # separate dir per experiment: a reused CMakeCache
                                    # silently re-flashes the previous image
 OUT=${LANE_OUT:-/tmp/e29-lane$L-board${NEEDLE_BOARD:-?}.log}
 WIN=${KB_WINDOW:-200}
@@ -34,7 +34,10 @@ WIN=${KB_WINDOW:-200}
     # is verified by its output, not by symbol presence).
     NB=$(xtensa-esp32s3-elf-nm "$BD/needle_demo.elf" 2>/dev/null | grep -c "${SYM:-bench_fused}" || true)
     [ "$NL" = 0 ] && NL=$(grep -o "ND_KB_LANE=$L" "$BD/project_description.json" | wc -l)
-    echo "lane_macro_on_compile_line=$NL bench_fused_in_elf=$NB"
+    # Which experiment macro actually reached the compiler. Run #359: the batch was
+    # invalid for this one field's absence, and nothing else in the run showed it.
+    EFL=$(grep -o "DND_KB_EXP[0-9]*=1" "$BD/compile_commands.json" 2>/dev/null | sort -u | tr "\n" ",")
+    echo "lane_macro_on_compile_line=$NL exp_on_compile_line=${EFL:-NONE} bench_sym_${SYM:-bench_fused}=$NB"
     img="$BD/needle_demo.bin"
     ls -l "$img" | awk '{print "bin_bytes="$5}'
     md5sum "$img"

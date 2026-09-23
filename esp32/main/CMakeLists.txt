@@ -75,12 +75,16 @@ if(NEEDLE_KBENCH)
     # Experiment 30's bench replaces Experiment 29's in the dispatch, so it gets
     # its own knob rather than a shared one: an Experiment 29 re-run must still be
     # buildable from the same tree byte-for-byte.
-    set(ND_KB_EXP30 "0" CACHE STRING "Run the Experiment 30 lane instead of Experiment 29")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP30=${ND_KB_EXP30})
+    # One list, not one pair of lines per experiment. Run #359's whole batch was
+    # wasted because the forwarding was hand-copied for EXP30/31/32 and EXP33 was
+    # missing: -DND_KB_EXP33=1 then sat unused in the CMake cache, the macro compiled
+    # as 0, and the bench silently ran the previous default body with a clean build AND
+    # a clean flash. A compile-time candidate that is never forwarded is invisible, so
+    # this list is data and nothing has to be remembered: add the number here only.
+    # (CMake comments are '#'; a C-style block comment here is a configure error.)
+    foreach(kb_exp 30 31 32 33 34 35 36)
+        set(ND_KB_EXP${kb_exp} "0" CACHE STRING "Run the Experiment 3x lane body instead of the default")
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP${kb_exp}=${ND_KB_EXP${kb_exp}})
+    endforeach()
 
-    set(ND_KB_EXP31 "0" CACHE STRING "Run the Experiment 31 lane instead")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP31=${ND_KB_EXP31})
-
-    set(ND_KB_EXP32 "0" CACHE STRING "Run the Experiment 32 lane instead")
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP32=${ND_KB_EXP32})
 endif()

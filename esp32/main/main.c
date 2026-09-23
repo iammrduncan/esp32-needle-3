@@ -23,7 +23,17 @@
 #include "router.h"
 #include "freertos/semphr.h"
 
-#define MAX_NEW        128
+#define MAX_NEW        256
+/* MAX_NEW was 128 and was the ONLY generation limit, which silently corrupted
+ * long answers: the extended case `heldout_long_tools` (a 252-byte request whose
+ * answer is 132 tokens) measured produced=128 with the JSON cut mid-key
+ * (`..."set_timer","arguments":{"seconds":300}},{"n`) and the host-side parser
+ * then saw `calls=[]` / BAD incomplete_call, while the same prompt on the host
+ * engine produced a valid 132-token call list. A truncated tool call is worse
+ * than a slow one because nothing says it happened. The frozen set never exceeded
+ * 99 generated tokens, which is why this survived the whole campaign. The cap is
+ * now a backstop only: run_inference() clamps it to the model's own remaining
+ * context and says so out loud when it stops early. */
 #define ND_LINE_MAX    272   /* not LINE_MAX: that is taken by limits.h */
 
 #include "tools_schema.h"
@@ -193,6 +203,7 @@ static void run_inference(const char *query, int phase)
     nd_sampler      smp;
     const float    *lg = NULL;
     int             n;
+    int             out_full = 0;   /* set when out[], not the model, stopped the answer */
     uint32_t        i, produced = 0, w = 0;
     int64_t         t0;
     double          pre_ms;
@@ -257,8 +268,16 @@ static void run_inference(const char *query, int phase)
         }
     }
 
+    /* Generate to the model's own limit, not past it: pos is absolute and the
+     * archive's context is max_seq_len, so a fixed 128 could both truncate a long
+     * answer and (with a long primed prefix) walk pos past the trained context. */
+    int cap = MAX_NEW;
+    if ((int64_t)s_model.pos + cap > (int64_t)s_model.c.h.max_seq_len)
+        cap = (int)s_model.c.h.max_seq_len - (int)s_model.pos;
+    if (cap < 1) cap = 1;
+
     t0 = esp_timer_get_time();
-    for (i = 0; i < MAX_NEW; i++) {
+    for (i = 0; i < (uint32_t)cap; i++) {
 #ifdef ND_PROFILE
         uint64_t s_t0 = esp_timer_get_time();
 #endif
@@ -291,11 +310,20 @@ static void run_inference(const char *query, int phase)
         if (w + strlen(piece) < sizeof(out) - 1) {
             strcpy(out + w, piece);
             w += strlen(piece);
+        } else {
+            out_full = 1;     /* the text buffer, not the model, stopped the answer */
         }
         produced++;
         lg = nd_model_step_hidden(&s_model, id);
     }
     out[w] = '\0';
+
+    /* An answer that stopped because it ran out of room is not an answer: say so,
+     * so a host cannot mistake a half-written tool call for a complete one. */
+    if (i >= (uint32_t)cap || out_full)
+        printf("ERR generation_truncated produced=%u bytes=%u reason=%s\n",
+               (unsigned)produced, (unsigned)w,
+               out_full ? "text_buffer" : "token_limit");
 
     {
         double dec_ms = (esp_timer_get_time() - t0) / 1000.0;

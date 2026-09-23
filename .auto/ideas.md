@@ -2331,3 +2331,46 @@ count; a 4-bit pair needs 256. So its 417/512 one-ULP "mismatches" were never a 
 question, and the 4-bit gather's only kernel lever is the plain-load row walker already shipped for
 phi (#333), worth ~0.02 ms at n=6.7 = **+0.01 %**. Gather delivery is closed four ways now:
 residency (#340), tier pointer (#341), n (#341), kernel bit-width (this run).
+
+## FINAL EVIDENCE TABLE (refreshed after runs #343-#344) - 5.0300 decode tok/s, +106.1 % over the 2.44 baseline
+
+Every phase of the decode token now has a measured mechanism behind it, and this window is what
+closed the last three "unattributed budget" claims. Cost of the window: zero shipping changes, three
+diagnostic images, zero wasted canonical runs.
+
+| phase (ms/token, boot bench = 197 ms) | value | mechanism, and where it was measured |
+|---|---|---|
+| `proj2bit` 2-bit GEMV | 86.2 | 2 instructions/weight, IPC ~1.33 (#144-#145), and a **flat 13.90 % PSRAM delivery tax on every cold 2-bit pass**, uncollectable at 3.59 MB/token (#330). Bounds agree: a 50 % wider MSPI clock moves the *whole* token 3.51 % (#289), so this phase is not waiting on bytes. |
+| attention head split | 35.3 | sum of three floor-level kernels per (head, position) at ctx 384: Q.K dot 138 cyc (#230, four schedules measured), `nd_expf_pair` 198 cyc/pair (#229), P·V accumulate 64 `oh` read-modify-writes that cannot be register-blocked on LX7 (quad block measured -8.4 %). |
+| Hadamard MLP | 24.4 | `kron_apply` saturated at 4 rows x 2 cols / 8 cols (#ledger), SiLU paired and shipped (#290), remaining FWHT at ~2 cycles/op. |
+| engram | 16.4 | **now attributed exactly**: geometry from the archive header is `orders={2,3}`, `tables=6`, `slots=18432`, `sub=128`, so the gather is **12 rows x 128 weights = 1,536 weights per token** (~0.02 ms, not a delivery problem at all), and the phase is its two 768x768 CQ2 GEMVs per site: 2 sites x 2 x 589,824 = **2.36 M weights = 14.2 ms at the 2-bit floor**. The old "engram gathers (flash latency)" share was wrong by ~3 orders of magnitude. |
+| mHC phi (4-bit) | 12.6 | plain-load asm shipped (#333, +0.365 %); delivery share measured 9.3 % and unpaid (#295); wide TIE loads excluded because they lose nibble identity (#335). |
+| `prep+lut` | 3.6 | per-call: prepare **0.156 ms** (37.4k cycles for copy+memset+FWHT(6 groups x 7 stages x 64 butterflies)+scale = ~2 cycles/op) and table build **13.6 us** (8 mul + 16 add + 16 contiguous-line stores per pair, ~2.1 cycles/op). Both at the scalar floor; FWHT unroll already a null. |
+| sampler (request path only) | ~0.3-1.0 | projection **0.23 ms/token** at mean_n **6.7** (max 68) measured on-device (#343), piece/`token_ok`/argmax ~0.7 ms (#149 reproduces), and the per-token console emit **0.10 ms** (`tok-emit`, with `tok-piece` 0.0) - i.e. the emit is *not* the bench-to-request residue. |
+| everything else | ~18 | sinkhorn (exp/log floor, `logf` skip closed at 13.58 % hit rate vs a 787-cycle break-even), mhc-mix, taps, norms, rope, KV store - each split and measured at +-0.15 %. |
+
+Three claims this window retired, each of which had been used to price a candidate:
+
+* **"the cross-core handshake costs ~15 us"** - `bench_wake()` measures **23 cycles, identical hot
+  and parked** (#344). That single number ends the serial-for-small-jobs family at +0.001 % and also
+  tells us the *reverse* play (splitting 2-3 row jobs) is worth <= +0.03 %.
+* **"the subset projection costs 3.8-5.7 ms"** - an artefact of `prof_dump()` dividing a *cumulative*
+  `nd_prof` total by the *current* request's token count. The per-call lines say 0.23 ms (#343).
+  Rule recorded in `.auto/prof_request.py`: difference the dumps and multiply by the token count, or
+  read only per-call prints.
+* **"the pair-LUT kernel could take the gather (+1.4 %)"** - invalid on geometry: the embedding is
+  4-bit and a 16-entry pair table encodes exactly a 2-bit pair's combinations (#343).
+
+And two banked assets now exist: `bench_rowrange()` (the multi-row differential whose absence cost
+run #333 its first build - passes at chunk 1/12/24), and the request-path harvester
+(`.auto/prof_request.py` + `.auto/lane_prof.sh`), which is the only way to see the per-request table
+because `serial_api.Device.complete()` reads with `_line_quiet()`.
+
+**Stop condition, restated with the evidence rather than as an opinion.** Nothing above the 0.2 % keep
+bar remains inside (a) the documented 240 MHz / 80 MHz maxima, (b) the frozen archive/quantisation/
+grammar/vocabulary, and (c) the byte-exact + fidelity gate. The two routes that are above the bar are
+both *owner decisions that measurement has since narrowed*: 120 MHz is vendor-blocked (IDF refuses the
+temperature timing retune on this flash model with `ESP_ERR_NOT_SUPPORTED`, #331) and the assertion-level
+RAM (+8,248 B, #293) now has no collectable buyer, because the residency idea it was meant to fund was
+shown to need 3.59 MB/token against a flat 13.90 % tax (#330). What is left for this loop is coverage,
+gate hardening, and honest disclosure runs.

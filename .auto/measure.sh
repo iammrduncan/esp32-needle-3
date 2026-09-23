@@ -154,8 +154,17 @@ if [ -z "${AUTO_GROUPS:-}" ]; then
     MISS=$(grep -o 'device_golden_missing=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
     [ "${EX:-0}" = "${CS:-1}" ] || { echo "DEVICE_OUTPUT_DIVERGED ${EX:-0}/${CS:-?}"; exit 1; }
     # exact == cases is satisfiable while comparing against nothing (run #296).
-    [ "${MISS:-1}" = "0" ] || { echo "DEVICE_GOLDEN_INCOMPLETE missing=${MISS:-?}"; exit 1; }
-    echo "DEVICE_GATE_OK exact=${EX}/${CS} golden_missing=${MISS}"
+    # A documented re-baseline (AUTO_SAVE=1) is the one run whose purpose is to ADD
+    # golden entries, so requiring missing == 0 there would make the suite
+    # un-widenable - the clause that made #296's save work is the same clause. The
+    # byte-exact clause above still runs, and the skip is printed rather than
+    # silent: the next (non-save) run is gated on missing == 0 again.
+    if [ "$SAVE" = 1 ]; then
+        echo "DEVICE_GATE_PARTIAL save-run exact=${EX}/${CS} new_entries=${MISS:-?}"
+    else
+        [ "${MISS:-1}" = "0" ] || { echo "DEVICE_GOLDEN_INCOMPLETE missing=${MISS:-?}"; exit 1; }
+        echo "DEVICE_GATE_OK exact=${EX}/${CS} golden_missing=${MISS}"
+    fi
 fi
 
 # Record only after the benchmark and hard device gate complete. Recompute so a

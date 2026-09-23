@@ -1,5 +1,5 @@
 {
- "saved_at": "2026-09-22T09:26:55",
+ "saved_at": "2026-09-23T00:42:10",
  "cases": {
   "sampling5": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
@@ -79,6 +79,21 @@
   "heldout_batch_three_field": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}}]</tool_call>",
    "tokens": 71,
+   "calls": null
+  },
+  "heldout_long_tools": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":45}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"",
+   "tokens": 132,
+   "calls": null
+  },
+  "heldout_long_route": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+   "tokens": 18,
+   "calls": null
+  },
+  "heldout_interval_one": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+   "tokens": 23,
    "calls": null
   }
  }

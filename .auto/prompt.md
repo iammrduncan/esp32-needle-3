@@ -67,6 +67,15 @@ retires a runnable idea. Within ten minutes of reading this directive, either
 three board jobs must be live with non-empty logs, or the log must name a concrete
 per-lane build/hardware blocker and immediately substitute another experiment.
 
+Pipeline discipline is part of the experiment system: maintain at least six
+ranked, runnable hypotheses (three active plus the next three). While a board
+batch measures, prepare the patches/scripts for the next batch. When a lane
+finishes, launch its replacement before writing the long interpretation. Check
+live PIDs and log growth after launch and at each tool boundary. More than two
+minutes of avoidable board idleness is a scheduler failure to correct immediately.
+Never occupy only one board with harness/correctness work; if such work is truly
+blocking, the other two boards continue independent performance screens.
+
 The accepted shipping image is **5.0117 decode tok/s** on the frozen workload, with 17/17 device
 and 16/16 host byte-exact output, token delta 0, fidelity 5.341e-05, top1 10/10, extended 4.9390,
 think 3.93, prefill 5.2867, min case 4.79, and 15,215 bytes internal free. The speed crossing came

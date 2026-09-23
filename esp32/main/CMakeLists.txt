@@ -64,4 +64,11 @@ if(NEEDLE_KBENCH)
     # IRAM and the accepted image cannot move.
     target_sources(${COMPONENT_LIB} PRIVATE "kbench.c" "dot4_tie728.S")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
+
+    # Experiment 29: which performance lane this image screens. A bare
+    # `idf.py -DND_KB_LANE=2` only sets a CMake cache variable - it does NOT reach
+    # the compile line - so forward it explicitly. Standing campaign rule: verify a
+    # knob through compile_commands.json, never by the fact that -D was typed.
+    set(ND_KB_LANE "1" CACHE STRING "E29 lane: 1 engram pair, 2 qkv+gate, 3 rows-per-call curve")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_LANE=${ND_KB_LANE})
 endif()

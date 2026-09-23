@@ -3512,10 +3512,33 @@ static void bench_e37(void)
     printf("KB E37 ENTER lane=kvround row=%u rows=%u rounds=%u\n",
            (unsigned)ROW, (unsigned)ROWS, (unsigned)ROUNDS);
 
-    /* Shaped like the field's operands: values around the int8 range with every
-     * .5 boundary present, so the clamp and the tie behaviour are both exercised. */
-    for (i = 0; i < ROW * ROWS; i++)
-        src[i] = (float)((int)(i % 257u) - 128) + 0.5f * (float)((i % 3u) - 1);
+    /* Operand classes, in two passes over the same two loops.
+     *
+     * Class 0 is what I originally wrote: integers and .5 ties. It is wrong as a
+     * stand-in for the field, and that turned out to be the whole story of this
+     * bench - a software rounding routine can shortcut exactly these inputs, so the
+     * reference loop measured 7.04 cycles/element while the same change was worth
+     * ~18x more end to end.
+     * Class 1 is the field's shape: values in the int8 range with GENERIC mantissas
+     * (an LCG fraction), which is what a Markstein-corrected quotient actually looks
+     * like, and which crosses the .5 boundaries irregularly instead of landing on
+     * them. If the reference loop gets much slower here while the magic loop does
+     * not, the isolation/field contradiction is explained by operands and not by
+     * anything about the memory system.
+     * The magic loop's result must stay byte-identical for BOTH classes, which is
+     * also the point .auto/rint/test_rint.c makes on the host. */
+    for (int cls = 0; cls < 2; cls++) {
+        uint32_t st = 12345u;
+        mism = 0;              /* per-class exactness, not a running total */
+        for (i = 0; i < ROW * ROWS; i++) {
+            if (cls == 0) {
+                src[i] = (float)((int)(i % 257u) - 128) + 0.5f * (float)((i % 3u) - 1);
+            } else {
+                st = st * 1664525u + 1013904223u;
+                src[i] = (float)((int)(i % 257u) - 128)
+                       + (float)((st >> 8) & 0xFFFFFFu) * (1.0f / 16777216.0f);
+            }
+        }
 
     for (int mode = 0; mode < 2; mode++) {
         int8_t *dst = mode ? b : a;
@@ -3531,11 +3554,12 @@ static void bench_e37(void)
         }
     }
     for (i = 0; i < ROW * ROWS; i++) if (a[i] != b[i]) mism++;
-    printf("KB E37 rows=%u cycles_ref=%u cycles_magic=%u gain_pct=%u.%02u"
+    printf("KB E37 class=%d %s rows=%u cycles_ref=%u cycles_magic=%u gain_pct=%u.%02u"
            " byte_mismatch=%u cyc_per_elem_ref=%u.%02u cyc_per_elem_magic=%u.%02u"
            " saving_ms_per_token_at_1792=%u.%03u sink=%d\n",
            /* uint32_t is `long unsigned int` for this target, so a bare uint32_t
             * against %u is a -Werror=format error rather than a warning. */
+           cls, cls == 0 ? "ties" : "generic",
            (unsigned)(ROWS * ROUNDS), (unsigned)best[0], (unsigned)best[1],
            (unsigned)((best[0] * 100u) / best[1] - 100u),
            (unsigned)(((best[0] * 10000u) / best[1]) % 100u), (unsigned)mism,
@@ -3547,6 +3571,7 @@ static void bench_e37(void)
            (unsigned)((((best[0] - best[1]) * 1792u * 1000u) / 240000u) % 1000u),
            (int)sink);
     fflush(stdout);
+    }
     free(src); free(a); free(b);
 }
 #endif /* ND_KB_EXP37 */

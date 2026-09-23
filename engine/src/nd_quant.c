@@ -95,9 +95,17 @@ ND_HOT void nd_fwht(float *x, uint32_t n)
      * that is exactly `x` being 8-aligned; the len == 1 stage is left scalar
      * because its "b" operand lives inside the same pair as its "a" operand. */
     if (n >= 2u && (n & (n - 1u)) == 0u && (((uintptr_t)x) & 7u) == 0u) {
-        float a = x[0], b = x[1];
-        x[0] = a + b;
-        x[1] = a - b;
+        /* The WHOLE len == 1 stage: n/2 butterflies, one per block. Shipping the
+         * first one alone was measured on device as DEVICE_OUTPUT_DIVERGED 4/17
+         * with token_delta 257 (#362) - and the kbench differential could not see
+         * it, because the bench copy looped correctly while this copy did not.
+         * Differential the code that ships, never a transcription of it. */
+        uint32_t i;
+        for (i = 0; i < n; i += 2u) {
+            float a = x[i], b = x[i + 1u];
+            x[i]           = a + b;
+            x[i + 1u]      = a - b;
+        }
         fwht_stages_pairs(x, n);
         return;
     }

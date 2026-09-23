@@ -95,6 +95,54 @@ static ND_HOT void lutb_rows(void *vc, uint32_t p0, uint32_t p1)
 
 typedef struct { float *xh; uint32_t g; float scale; } fwht_ctx;
 
+/* Shared by both paths, so the rescale text here is the shipped one verbatim. */
+static ND_HOT void fw_scale(float *restrict b4, uint32_t g, float scale)
+{
+    uint32_t j = 0u;
+
+    for (; j + 3u < g; j += 4u) {
+        float v0 = b4[j], v1 = b4[j + 1u], v2 = b4[j + 2u], v3 = b4[j + 3u];
+        b4[j] = v0 * scale; b4[j + 1u] = v1 * scale;
+        b4[j + 2u] = v2 * scale; b4[j + 3u] = v3 * scale;
+    }
+    for (; j < g; j++) b4[j] *= scale;
+}
+
+/* Two groups' transforms interleaved. nd_fwht's butterflies are a long serial
+ * chain of add/sub across stages and fwht_rows calls it once per group with
+ * nothing else in flight. Walking two groups together keeps each group's stages
+ * in its own order - stage k of a group still completes before stage k+1 of that
+ * same group - so every cell ends with the value nd_fwht would have produced:
+ * bit-exact by construction, the same disjointness argument run #378's
+ * within-stage unroll used, applied across groups instead of within one. */
+static ND_HOT void nd_fwht2(float *x0, float *x1, uint32_t n)
+{
+    uint32_t len, step, base, j;
+
+    for (len = 1u; len < n; len <<= 1) {
+        step = len << 1;
+        for (base = 0u; base + step <= n; base += step) {
+            const uint32_t half = base + len;
+            for (j = base; j + 1u < half; j += 2u) {
+                float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+                float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+
+                x0[j] = a0 + b0;          x0[j + len] = a0 - b0;
+                x0[j + 1u] = a1 + b1;     x0[j + 1u + len] = a1 - b1;
+                x1[j] = c0 + d0;          x1[j + len] = c0 - d0;
+                x1[j + 1u] = c1 + d1;     x1[j + 1u + len] = c1 - d1;
+            }
+            if (j < half) {
+                float a = x0[j], b = x0[j + len];
+                float c = x1[j], d = x1[j + len];
+
+                x0[j] = a + b; x0[j + len] = a - b;
+                x1[j] = c + d; x1[j + len] = c - d;
+            }
+        }
+    }
+}
+
 static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
 {
     const fwht_ctx *c = (const fwht_ctx *)vc;
@@ -106,24 +154,26 @@ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
     const uint32_t g      = c->g;
     const float    scale  = c->scale;
     float         *xh     = c->xh;
-    for (gi = g0; gi < g1; gi++) {
+    /* Pairs of groups transformed together, then the shipped single-group path
+     * for an odd remainder. The remainder matters: the device splits ngroup
+     * 6+6-style as 3+3 across the two cores, so a per-core count of 3 reaches
+     * this code and a paired loop without a tail would silently drop a group -
+     * a defect the host cannot see, because its nd_parallel_rows is serial and
+     * therefore always hands one core an even count. That is the #333 class
+     * (a bug in the range form that no single-row test can reach), so the tail
+     * is written first and the odd split is exercised on the host separately. */
+    for (gi = g0; gi + 1u < g1; gi += 2u) {
+        float *blk  = xh + (size_t)gi * g;
+        float *blk2 = blk + g;
+
+        nd_fwht2(blk, blk2, g);
+        fw_scale(blk,  g, scale);
+        fw_scale(blk2, g, scale);
+    }
+    for (; gi < g1; gi++) {
         float   *blk = xh + (size_t)gi * g;
         nd_fwht(blk, g);
-        /* Unrolled by 4: measured +263 % on the shipped geometry (#361 lane 2,(#361 lane 2,
-         * 10,789 -> 2,968 cycles for 6 groups of 128, bit-exact because every
-         * element is its own multiply and there is no accumulation order to
-         * move). `restrict` alone measured exactly zero (#356 lane 3), which is
-         * why the annotation is not the change - the unroll is. */
-        {
-            uint32_t j = 0u;
-            float   *restrict b4 = blk;
-            for (; j + 3u < g; j += 4u) {
-                float v0 = b4[j], v1 = b4[j + 1u], v2 = b4[j + 2u], v3 = b4[j + 3u];
-                b4[j] = v0 * scale; b4[j + 1u] = v1 * scale;
-                b4[j + 2u] = v2 * scale; b4[j + 3u] = v3 * scale;
-            }
-            for (; j < g; j++) b4[j] *= scale;
-        }
+        fw_scale(blk, g, scale);
     }
 }
 

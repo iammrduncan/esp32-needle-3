@@ -1,0 +1,51 @@
+diff --git a/engine/src/nd_sample.c b/engine/src/nd_sample.c
+index fc2dbbf..ae3879d 100644
+--- a/engine/src/nd_sample.c
++++ b/engine/src/nd_sample.c
+@@ -1,4 +1,8 @@
+ #include "nd_sample.h"
++
++#if defined(ND_PROFILE) && defined(ND_SAMPLE_NSTAT)
++unsigned nd_stat_steps, nd_stat_rows, nd_stat_max;
++#endif
+ #include "nd_quant.h"
+ 
+ #include <string.h>
+@@ -322,6 +326,15 @@ collected:
+         }
+     }
+ 
++#if defined(ND_PROFILE) && defined(ND_SAMPLE_NSTAT)
++    {
++        static uint32_t steps, rows, mx;
++        steps++; rows += n;
++        if (n > mx) mx = n;
++        nd_stat_steps = steps; nd_stat_rows = rows; nd_stat_max = mx;
++    }
++#endif
++
+     if (n == 0)
+         return (uint32_t)-1;
+     if (n > ND_SAMPLE_MAX_CAND)                 /* too many: full projection */
+diff --git a/esp32/main/main.c b/esp32/main/main.c
+index 3b3bd90..34240e6 100644
+--- a/esp32/main/main.c
++++ b/esp32/main/main.c
+@@ -307,6 +307,17 @@ static void run_inference(const char *query, int phase)
+         fflush(stdout);
+ #ifdef ND_PROFILE
+         prof_dump(dec_ms, (int)produced);
++#if defined(ND_SAMPLE_NSTAT)
++        {
++            extern unsigned nd_stat_steps, nd_stat_rows, nd_stat_max;
++            static unsigned s_seen, s_rows;
++            unsigned dsteps = nd_stat_steps - s_seen, drows = nd_stat_rows - s_rows;
++            printf("EVT cands steps=%u rows=%u mean_n=%.1f max_n=%u\n",
++                   dsteps, drows,
++                   dsteps ? (double)drows / (double)dsteps : 0.0, nd_stat_max);
++            s_seen = nd_stat_steps; s_rows = nd_stat_rows;
++        }
++#endif
+ #endif
+     }
+ 

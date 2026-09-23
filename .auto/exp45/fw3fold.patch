@@ -1,0 +1,110 @@
+diff --git a/engine/src/nd_quant.c b/engine/src/nd_quant.c
+index da48dbb..0ac5c0b 100644
+--- a/engine/src/nd_quant.c
++++ b/engine/src/nd_quant.c
+@@ -143,6 +143,82 @@ static ND_HOT void nd_fwht2(float *x0, float *x1, uint32_t n)
+     }
+ }
+ 
++
++/* Three groups per stage walk, rescale folded into the (peeled) final stage.
++ *
++ * Three is not an arbitrary width: ngroup is 6 and the device splits it 3+3, so a
++ * three-wide step is one call's entire workload and the paired and single paths below
++ * stop executing on device. It is also the width at which the transform's serial
++ * butterfly chains - the reason this phase responded to ILP at all (runs #378/#379),
++ * while the model's long reductions did not (runs #380/#381) - have three deep chains
++ * in flight instead of one.
++ *
++ * The rescale is folded into the final stage instead of run afterwards. n/2 butterflies
++ * cover all n elements exactly once, so `* scale` at the store is the same single
++ * rounding as the separate pass, and g loads plus g stores per group disappear.
++ * Earlier stages must NOT scale: their outputs feed the next stage.
++ *
++ * Valid for the same domain as nd_fwht2 (power-of-two n >= 2); n == 1 has no stage
++ * that writes anything in either form. */
++static ND_HOT void nd_fwht3s(float *x0, float *x1, float *x2, uint32_t n, float scale)
++{
++    uint32_t len, step, base, j;
++
++    /* Every stage except the last: len runs 1, 2, ... while 2*len < n. */
++    for (len = 1u; len < (n >> 1); len <<= 1) {
++        step = len << 1;
++        for (base = 0u; base + step <= n; base += step) {
++            const uint32_t half = base + len;
++            for (j = base; j + 1u < half; j += 2u) {
++                float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
++                float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
++                float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
++
++                x0[j] = a0 + b0;          x0[j + len] = a0 - b0;
++                x0[j + 1u] = a1 + b1;     x0[j + 1u + len] = a1 - b1;
++                x1[j] = c0 + d0;          x1[j + len] = c0 - d0;
++                x1[j + 1u] = c1 + d1;     x1[j + 1u + len] = c1 - d1;
++                x2[j] = e0 + f0;          x2[j + len] = e0 - f0;
++                x2[j + 1u] = e1 + f1;     x2[j + 1u + len] = e1 - f1;
++            }
++            if (j < half) {
++                float a = x0[j], b = x0[j + len];
++                float c = x1[j], d = x1[j + len];
++                float e = x2[j], f = x2[j + len];
++
++                x0[j] = a + b; x0[j + len] = a - b;
++                x1[j] = c + d; x1[j + len] = c - d;
++                x2[j] = e + f; x2[j + len] = e - f;
++            }
++        }
++    }
++
++    /* The final stage, written once with no `last` flag anywhere in it: len == n/2,
++     * one base, and between the butterflies every element is stored exactly once. */
++    len = n >> 1;
++    for (j = 0u; j + 1u < len; j += 2u) {
++        float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
++        float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
++        float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
++
++        x0[j] = (a0 + b0) * scale;        x0[j + len] = (a0 - b0) * scale;
++        x0[j + 1u] = (a1 + b1) * scale;   x0[j + 1u + len] = (a1 - b1) * scale;
++        x1[j] = (c0 + d0) * scale;        x1[j + len] = (c0 - d0) * scale;
++        x1[j + 1u] = (c1 + d1) * scale;   x1[j + 1u + len] = (c1 - d1) * scale;
++        x2[j] = (e0 + f0) * scale;        x2[j + len] = (e0 - f0) * scale;
++        x2[j + 1u] = (e1 + f1) * scale;   x2[j + 1u + len] = (e1 - f1) * scale;
++    }
++    if (j < len) {                        /* only reachable when n/2 is odd, i.e. n == 2 */
++        float a = x0[j], b = x0[j + len];
++        float c = x1[j], d = x1[j + len];
++        float e = x2[j], f = x2[j + len];
++
++        x0[j] = (a + b) * scale; x0[j + len] = (a - b) * scale;
++        x1[j] = (c + d) * scale; x1[j + len] = (c - d) * scale;
++        x2[j] = (e + f) * scale; x2[j + len] = (e - f) * scale;
++    }
++}
++
+ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
+ {
+     const fwht_ctx *c = (const fwht_ctx *)vc;
+@@ -162,7 +238,21 @@ static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
+      * therefore always hands one core an even count. That is the #333 class
+      * (a bug in the range form that no single-row test can reach), so the tail
+      * is written first and the odd split is exercised on the host separately. */
+-    for (gi = g0; gi + 1u < g1; gi += 2u) {
++    /* Three groups per stage walk for the whole per-core call: with ngroup 6 split
++     * 3+3, one three-wide step consumes everything this core was given, so the
++     * paired and single paths below run only in splits the field does not produce.
++     * The guard for an ng-wide step is `gi + ng-1 < g1`, never `gi + ng < g1` - the
++     * latter is never true when ng equals the per-core count, which is how a four-wide
++     * experiment once re-measured the accepted path without executing at all.
++     * No fw_scale() here: the final stage folded the rescale in. */
++    for (gi = g0; gi + 2u < g1; gi += 3u) {
++        float *blk  = xh + (size_t)gi * g;
++        float *blk2 = blk + g;
++        float *blk3 = blk2 + g;
++
++        nd_fwht3s(blk, blk2, blk3, g, scale);
++    }
++    for (; gi + 1u < g1; gi += 2u) {
+         float *blk  = xh + (size_t)gi * g;
+         float *blk2 = blk + g;
+ 

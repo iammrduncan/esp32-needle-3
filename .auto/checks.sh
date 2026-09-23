@@ -28,6 +28,18 @@ ctest --test-dir host/build > "$AUTO_LOG_DIR/auto_ctest.log" 2>&1 || {
 .venv/bin/python .auto/test_bench_guards.py > "$AUTO_LOG_DIR/auto_cguards.log" 2>&1 || {
     echo BENCH_GUARDS_FAILED; tail -20 "$AUTO_LOG_DIR/auto_cguards.log"; exit 1; }
 
+# The console/session guards for the same reason: they are the only thing standing
+# between "the suite completed" and "the suite measured every case". Neither was
+# wired here, and .auto/exp28/test_pairing.py had been dying on its first assertion
+# since run #346 (drain_stale() changed twice - to _line() and to returning lines -
+# with the fake never updated), i.e. a guard that had stopped checking anything for
+# ~40 runs. A check nobody runs is a check that rots.
+for guard in .auto/exp28/test_pairing.py .auto/exp28/test_retry.py; do
+    .venv/bin/python "$guard" > "$AUTO_LOG_DIR/auto_serial_guard.log" 2>&1 || {
+        echo SERIAL_SESSION_GUARD_FAILED "$guard"
+        tail -20 "$AUTO_LOG_DIR/auto_serial_guard.log"; exit 1; }
+done
+
 # No buying speed with the model: the archive, its rung, the schemas and the
 # partition layout are frozen for the whole session.
 .venv/bin/python tools/download_model.py --verify-only > /dev/null

@@ -1,0 +1,40 @@
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index fe79df6..005e288 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -385,8 +385,21 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
+                     h = (const uint16_t *)nd_cact_data(&m->c, &t);
+                     n = t.nbytes / 2;
+                     m->fp16_slot[li][SLOT[f]] = p;
+-                    for (k = 0; k < n; k++)
+-                        p[k] = nd_f16(h[k]);
++                    if (SLOT[f] == 25 && n == m->d_model * 8u) {
++                        /* cond_v: [d_model][8] in the archive, read one column at a
++                         * time by cond_rows, so store it [8][d_model]. Same pool, same
++                         * element count, same values - only the fill order differs - and
++                         * the reader's reduction order is untouched, so every sum is
++                         * bit-identical. Eight sequential 3 KB sweeps instead of eight
++                         * 32 B-stride sweeps over 24 KB. */
++                        uint32_t r, cc;
++                        for (r = 0; r < m->d_model; r++)
++                            for (cc = 0; cc < 8u; cc++)
++                                p[cc * m->d_model + r] = nd_f16(h[r * 8u + cc]);
++                    } else {
++                        for (k = 0; k < n; k++)
++                            p[k] = nd_f16(h[k]);
++                    }
+                     p += n;
+                 }
+         }
+@@ -1713,7 +1726,10 @@ static ND_HOT void cond_rows(void *vc, uint32_t c0, uint32_t c1)
+     for (ch = c0; ch < c1; ch++) {
+         float acc = 0.0f;
+         for (i = 0; i < c->dm; i++)
+-            acc += c->x[i] * c->cv[(size_t)i * 8 + ch];
++            /* cv is staged channel-major (see the fp16 pool fill): channel ch is one
++             * contiguous 3 KB row now, so this sweep is sequential. The term order and
++             * the accumulator are exactly the shipped ones, so the sum is identical. */
++            acc += c->x[i] * c->cv[(size_t)ch * c->dm + i];
+         c->dst[ch] = acc;
+     }
+ }

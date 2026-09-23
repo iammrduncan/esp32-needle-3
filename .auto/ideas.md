@@ -2611,3 +2611,70 @@ instead of rescaling `xh` cannot be bit-exact - `(cb*scale)*xh` and `cb*(xh*scal
 single roundings - so the "delete the rescale by moving it into the table" idea is dead before it is
 benchmarked. It would also be the wrong trade even if exact: the table is built once per (tensor,
 group) and reused by every row, the rescale is per token.
+
+# Run #399 window: the provenance class, and what the transform family has left (2026-09-23, ~22:20Z)
+
+## THE LANE-PROVENANCE CLASS, now closed by the runner itself
+
+Three separate failures in one window, all the same shape - a lane reported a number for code
+nobody intended:
+
+1. `needle-board run N -- cmd` **executes in worker N's checkout**, not in the caller's tree. A
+   "fusion gate" run on board 1 therefore built the run #391-era `fw3fold` engine (`engine_md5=
+   01c1638ef34c`) and reported 5.1167 - the accepted value - while I read it as fusion evidence.
+   The giveaway is in the log's own field, not in the number's plausibility.
+2. My grep proving "main is not the fusion" was a **negative probe with no positive control**: the
+   comment reads "Radix-4 stage fusion" and the loop is `for (len = 1u; len <= (n >> 3); ...)`, so
+   searching for the phrase `fused radix-4` and for `len = n;` both returned nothing on a file that
+   did contain the fusion. Fifth-plus instance of this campaign's vacuous-result family.
+3. `tmux kill-server` - explicitly forbidden in this ledger - destroyed the launch path: the next
+   three `tmux new-session` calls produced no sessions and no logs for 49 minutes. Kill panes by
+   session name, never the server.
+
+Fix, in `.auto/measure.sh` rather than in any wrapper: the runner prints
+`PROVENANCE tree=... head=... engine_md5=...` itself and exits 3 on `EXPECT_ENGINE_MD5` mismatch
+(prefix match on purpose - requiring all 32 hex characters made three lanes abort on a correct
+tree, and `PROV_BAD` needed initialising under `set -u`). The gate's logic is dry-run tested in all
+three directions with a positive control.
+
+## Two off-device closures, both caught before a board
+
+* **Fusion dose-response, first attempt, wrong:** narrowing the fused run to two stage pairs with a
+  one-line `n >> 3` -> `n >> 4` change skipped stage 32, because the accepted kernel's leftover was
+  a single `if` stage, correct only when the fused loop exits exactly one stage below the final one.
+  129,017 mismatches against the shipped `nd_fwht`. Generalising `if` into
+  `for (; len < (n >> 1); len <<= 1)` makes any fused-pair count correct, runs **zero** times on the
+  shipping path (the fused loop exits with `len == n/2`), and the 2-pair variant then verifies
+  bit-exact over 1,472,640 comparisons plus host 19/19. Same skipped-stage class as run #363.
+* **Bracket points withdrawn, not re-measured:** the 2-wide-fused-index (-0.03 %) and 1-wide-peeled-
+  final (-0.03 %) readings came from trees whose md5 I cannot now map to code I hold, so they are
+  no longer evidence in either direction. The running lanes replace them with asserted provenance.
+
+## Ranked queue (3 active + next 3)
+
+ACTIVE, all `EXPECT_ENGINE_MD5`-asserted, all host-bit-exact before flash:
+- b1 `8667e160a278` radix-4 fusion, full suite - the acceptance path (device byte-exact gate).
+- b2 `fe20a07f8fb8` fusion + true 1-wide peeled final stage - does narrowing the last pass buy
+  registers back? (the register file is the binding resource: fusing a 4th group / 2-wide index lost).
+- b3 `c9507112b7e2` fusion with TWO fused stage pairs - the dose-response point that prices the
+  third fused pair directly.
+
+NEXT THREE:
+1. If b1 gates green and reproduces, accept the fusion, then re-derive the phase map
+   (`AUTO_PROFILE=1`): `prep+lut` was 3.6 ms/token with the transform ~80 % of it, and three passes
+   became ... fewer, so the ranking of what remains (attention 35 ms, MLP 24 ms, engram 16 ms) should
+   be re-read against a new boot-bench token rather than the 197 ms one.
+2. **Quad-width fusion (four groups per walk)** - the only untested width. Field-reachable: every
+   `nd_cq_prepare` site has ngroup 6 or 24, so a per-core 12-group sweep is 3 walks of 4 with no
+   remainder. Prediction is negative (8 floats of liveness per group x 4 against 16 FPU registers,
+   and the bracket says registers bind), which is exactly why it is a cheap curve point rather than a
+   design. Verify with `.auto/exp47/test_fwht4_equiv.c` first - that oracle has now caught four
+   fast-wrong variants without a board.
+3. **Fold `nd_cq_prepare`'s copy+memset into the first fused pass** - the copy measured 1,954 of
+   58,901 cycles (3.3 %), so alone it is ~+0.07 % (sub-bar) and only worth building as the second
+   half of a bundle, per run #371's precedent.
+
+STILL OWNER-GATED / CLOSED: phi 4-bit row residency (needs ~18 KB/core, #293's assertion-level RAM),
+120 MHz (vendor-blocked #331), the console wedge (a firmware defect: the board stops answering after
+~6-17 requests per boot, unaffected by reconnects, not fixed by idle gaps - it is what blocks
+single-session canonical acceptances).

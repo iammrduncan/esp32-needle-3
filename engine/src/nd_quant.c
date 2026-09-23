@@ -96,7 +96,7 @@ static ND_HOT void lutb_rows(void *vc, uint32_t p0, uint32_t p1)
 typedef struct { float *xh; uint32_t g; float scale; } fwht_ctx;
 
 /* Shared by both paths, so the rescale text here is the shipped one verbatim. */
-static ND_HOT void fw_scale(float *restrict b4, uint32_t g, float scale)
+static __attribute__((noinline)) void fw_scale(float *restrict b4, uint32_t g, float scale)
 {
     uint32_t j = 0u;
 
@@ -115,7 +115,7 @@ static ND_HOT void fw_scale(float *restrict b4, uint32_t g, float scale)
  * same group - so every cell ends with the value nd_fwht would have produced:
  * bit-exact by construction, the same disjointness argument run #378's
  * within-stage unroll used, applied across groups instead of within one. */
-static ND_HOT void nd_fwht2(float *x0, float *x1, uint32_t n)
+static __attribute__((noinline)) void nd_fwht2(float *x0, float *x1, uint32_t n)
 {
     uint32_t len, step, base, j;
 
@@ -160,7 +160,7 @@ static ND_HOT void nd_fwht2(float *x0, float *x1, uint32_t n)
  *
  * Valid for the same domain as nd_fwht2 (power-of-two n >= 2); n == 1 has no stage
  * that writes anything in either form. */
-static ND_HOT void nd_fwht3s(float *x0, float *x1, float *x2, uint32_t n, float scale)
+static __attribute__((noinline)) void nd_fwht3s(float *x0, float *x1, float *x2, uint32_t n, float scale)
 {
     uint32_t len, step, base, j;
 

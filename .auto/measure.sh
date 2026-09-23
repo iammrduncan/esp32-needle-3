@@ -58,6 +58,30 @@ if [ -f "$AUTO_LOG_DIR/diag_repeat_ok" ] && [ -z "${AUTO_ALLOW_REPEAT:-}" ]; the
     AUTO_REPEAT_REASON=$(cat "$AUTO_LOG_DIR/diag_repeat_ok")
     export AUTO_ALLOW_REPEAT AUTO_REPEAT_REASON
 fi
+# PROVENANCE, printed by the runner itself rather than by a wrapper that could be
+# lying: a `needle-board run N -- cmd` pane executes in worker N's checkout, so a
+# lane can silently build a tree nobody intended (measured: a "fusion" gate run on
+# board 1 reported decode 5.1167 because its worker still held the run #391-era
+# fw3fold engine, engine_md5=01c1638ef34c). Set EXPECT_ENGINE_MD5 and the run
+# refuses to start on a mismatch instead of reporting a number for the wrong code.
+PROV_TREE=$(pwd)
+PROV_HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
+PROV_ENGINE=$(md5sum engine/src/nd_quant.c 2>/dev/null | cut -d" " -f1)
+echo "PROVENANCE tree=${PROV_TREE} head=${PROV_HEAD} engine_md5=${PROV_ENGINE}"
+# Prefix match on purpose: a 12-hex md5 prefix is what every ledger line quotes, and
+# requiring the full 32 characters made lanes abort on a correct tree (measured: three
+# lanes exited with PROVENANCE_MISMATCH while printing the expected 12-hex value).
+PROV_BAD=0
+if [ -n "${EXPECT_ENGINE_MD5:-}" ]; then
+    case "${PROV_ENGINE}" in
+        ${EXPECT_ENGINE_MD5}*) : ;;
+        *) PROV_BAD=1 ;;
+    esac
+fi
+if [ "${PROV_BAD}" = 1 ]; then
+    echo "PROVENANCE_MISMATCH want=${EXPECT_ENGINE_MD5} have=${PROV_ENGINE} tree=${PROV_TREE}"
+    exit 3
+fi
 SIGNATURE_SEEN=0
 grep -q "^${CURRENT_SHIPPING_SIG} " "$SIG_HISTORY" 2>/dev/null && SIGNATURE_SEEN=1
 if [ "$SIGNATURE_SEEN" = 1 ]; then

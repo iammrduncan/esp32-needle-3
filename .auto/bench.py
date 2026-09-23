@@ -94,14 +94,38 @@ def save_golden(path, results):
 
 
 def switch_think(dev, want):
-    """Set the firmware reasoning mode and wait for its ack."""
-    dev.think = want
-    dev._set_think()
-    until = time.monotonic() + 10
-    while time.monotonic() < until:
-        if dev._line().startswith('EVT think='):
-            return
-    print('WARN think ack missing')
+    """Set the firmware reasoning mode and wait for the ack that proves it took.
+
+    Two measured reasons this cannot be a single fire-and-forget write:
+    * the ack VALUE is checked, not just its presence. Run #345 recorded
+      `think_tps=5.02` - a constrained-path number - because the toggle went
+      unacknowledged and the suite carried on and measured the normal path. A
+      monitor that silently reports the wrong path is worse than a failed run.
+    * after ~15-20 requests in one attached session the board stops answering
+      `!think` at all (run #155, reproduced #346: draining 27 stale lines cleared
+      the backlog and it still would not ack), so a missing ack triggers one
+      reconnect+handshake - which clears the console backlog without resetting the
+      chip (DTR/RTS are pinned through the open) and re-establishes readiness -
+      and only then fails loudly instead of reporting a bogus think_tps.
+    """
+    def ask():
+        dev.think = want
+        dev._set_think()
+        until = time.monotonic() + 20
+        while time.monotonic() < until:
+            line = dev._line()
+            if line.startswith('EVT think='):
+                return line.split('=', 1)[1].strip()[:1] == str(int(want))
+        return False
+
+    if ask():
+        return
+    print('WARN think ack missing; reconnecting once (console fatigue, run #155)')
+    dev._reconnect()
+    dev._handshake(dev.request_timeout)
+    if ask():
+        return
+    raise SystemExit(f'THINK_ACK_MISSING want={int(want)} after reconnect')
 
 
 # ------------------------------------------------------------------- device

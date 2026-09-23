@@ -1,5 +1,5 @@
 {
- "saved_at": "2026-09-22T09:43:53",
+ "saved_at": "2026-09-23T02:43:13",
  "cases": {
   "sampling5": {
    "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
@@ -213,6 +213,44 @@
      "name": "set_timer",
      "arguments": {
       "seconds": 25
+     }
+    }
+   ]
+  },
+  "heldout_long_route": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+   "tokens": 14,
+   "calls": [
+    {
+     "name": "translate_or_write",
+     "arguments": {}
+    }
+   ]
+  },
+  "heldout_interval_one": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}},{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+   "tokens": 27,
+   "calls": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 120
+     }
+    },
+    {
+     "name": "get_status",
+     "arguments": {}
+    }
+   ]
+  },
+  "heldout_long_tools_note_only": {
+   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}}]</tool_call>",
+   "tokens": 19,
+   "calls": [
+    {
+     "name": "set_sampling_interval",
+     "arguments": {
+      "seconds": 300
      }
     }
    ]

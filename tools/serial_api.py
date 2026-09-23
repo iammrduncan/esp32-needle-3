@@ -75,6 +75,52 @@ class Device:
         self.serial.open()
         self.serial.dtr = False
         self.serial.rts = False
+        self._start_drain()
+
+    def _start_drain(self):
+        """Consume the port constantly, even when nobody is reading a line.
+
+        Both console directions are USB-Serial/JTAG, and the firmware's printf
+        blocks once its TX ring has no host willing to take the bytes. A task
+        blocked inside printf never returns to getchar(), so the board stops
+        answering EVERYTHING - measured on board 1 after the suite's largest
+        output burst (the 67-token three-call case): a non-mutating "!status"
+        with DTR/RTS pinned got 0 bytes back, and raising the per-request budget
+        to 1200 s did not move the stall by one case (run #393). So this is a
+        flow-control deadlock created by the reader, not firmware slowness. A
+        pump that never stops makes it impossible; lines are taken from the
+        buffer below instead of from the port.
+        """
+        self._rx = bytearray()
+        self._rx_lock = threading.Lock()
+        self._rx_stop = threading.Event()
+
+        def pump():
+            while not self._rx_stop.is_set():
+                try:
+                    chunk = self.serial.read(4096)
+                except Exception:
+                    return          # port closed under us: this attach is over
+                if chunk:
+                    with self._rx_lock:
+                        # Bound it: an unread board must not grow host memory
+                        # without limit. Oldest bytes go; nothing waits on them.
+                        if len(self._rx) > 8 << 20:
+                            del self._rx[:6 << 20]
+                        self._rx.extend(chunk)
+
+        self._rx_thread = threading.Thread(target=pump, daemon=True)
+        self._rx_thread.start()
+
+    def _stop_drain(self):
+        stop = getattr(self, "_rx_stop", None)
+        if stop is not None:
+            stop.set()
+            try:
+                self._rx_thread.join(timeout=2.0)
+            except Exception:
+                pass
+            self._rx_stop = None
 
     def _handshake(self, boot_timeout):
         """Attach, then re-attach quietly if the board was busy on arrival.
@@ -147,13 +193,14 @@ class Device:
         only clears bytes nobody has read yet, the driver has already delivered
         them to this process. So the backlog is drained with reads instead.
         """
+        self._stop_drain()
         try:
             self.serial.close()
         except Exception:
             pass
         self._open(self.port, self.baud)
         deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline and self.serial.readline():
+        while time.monotonic() < deadline and self._line(timeout=0.5):
             pass
         self.available = False
         self.ready_line = None
@@ -211,9 +258,21 @@ class Device:
                 return True
         return False
 
-    def _line(self):
+    def _line(self, timeout=1.0):
         # Preserve spaces in tokens. strip() corrupts the generated text.
-        line = self.serial.readline().decode("utf-8", "replace").rstrip("\r\n")
+        # Taken from the pump's buffer (see _start_drain), with the same return
+        # semantics readline had: an empty string when nothing arrives in time.
+        raw = b""
+        until = time.monotonic() + timeout
+        while time.monotonic() < until:
+            with self._rx_lock:
+                nl = self._rx.find(b"\n")
+                if nl >= 0:
+                    raw = bytes(self._rx[:nl + 1])
+                    del self._rx[:nl + 1]
+                    break
+            time.sleep(0.005)
+        line = raw.decode("utf-8", "replace").rstrip("\r\n")
         self.last_line = line
         if line and self._log_open:
             print(line, flush=True)

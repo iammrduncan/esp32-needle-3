@@ -6,7 +6,71 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
-## CURRENT STATE AND QUEUE -- 2026-09-23T10:05Z (runs #360-#366)
+## CURRENT STATE AND QUEUE -- 2026-09-23T11:20Z (runs #367-#374)
+
+**Accepted runtime: 5.0567 decode tok/s (+107.2 %)** - run #371's bundle: `sigmoidf_pair` moved into
+IRAM with `ND_HOT` (+0.18 % mean, #336/#342) plus `fwht_rows` loop-invariant load hoisting
+(+0.065 %, #365), applied as ONE change. **5.0567 on all three boards from three independent fresh
+builds, per-variant board spread exactly zero**, extended 4.985, prefill 5.3367, think 3.96, boot
+bench 5.103, min_case 4.83 (best worst case in 374 runs), 17/17 device + 19/19 host byte-exact,
+fidelity 5.341e-05, top1 10/10, `internal_free` 13,879 (-768 B), `make capture` rc=0 with all nine
+flags on this image. Disclosed marginal call: +0.198 % is inside the metric's own 0.034 % quantum of
+the 0.2 % bar, kept on zero board spread plus three agreeing secondaries - see the run's own log line.
+
+**The combination lever is now spent, and that is a measured statement.** Combining was legitimate
+because two levers worth >= 0.06 % each had been individually bar-blocked; what remains unshipped is
+`zchead` (+0.032 %), `hadascale` (0.000 %), `kvstore` (0.000 %), i.e. ~0.03 % in total, so no further
+combination clears the bar and none should be built.
+
+**Experiment 38 refuted a load-bearing diagnosis (run #374).** #364's closure blamed cache warmth for
+a +36.75 %-isolated / +0.000 %-field transform. Measured: on the operand the field actually uses
+(`fwht_rows` transforms `c->xh`, `ND_ALLOC_FAST` internal SRAM, which this part does not route through
+the data cache) a 160 KiB PSRAM eviction changes the cost by *exactly nothing* - 47,470 cycles warm and
+cold; a PSRAM operand pays only +8.98 % cold, and warm PSRAM equals internal exactly. So warmth
+explains at most ~9 points of 36.75, and zero of the field case. Two replacement rules replace the too
+coarse "a warm kbench number prices nothing": (1) for an internal-SRAM operand, cold-isolation is
+inapplicable, so a warm screen is not cache-inflated; (2) what a tight back-to-back bench loop inflates
+is *instruction mix*, so screen a per-call kernel with the field's call structure (one call per group,
+immediately followed by its consumer), not with a cache sweep.
+
+**Experiment 39 closed the last build-config axis (runs #372/#373).** `-O3` on the needle component
+(every engine file has always been `-O2`, verified in `compile_commands.json`) is **+0.032 % in
+isolation and -0.166 % stacked on the bundle** - both bases converge on 5.0483. Compiler policy and
+the campaign's hand placement are alternative policies for the same decisions, not additive levers (the
+same shape as #335's `always_inline` losing to moving the callee). Engine stays at `-O2`; the
+build-configuration family - historically the most productive cheap one - is now exhausted.
+
+**RUNNING: Experiment 40 (batch 20260923T1330L), three distinct prepare-family candidates**, each
+host-proven 19/19 byte-exact before any flash (the host compiles this same C, which is how the #363
+transcription class is caught without a board), one lever each, all bit-exact by construction because
+butterflies in one stage are disjoint pairs:
+
+| board | variant | lever |
+|---|---|---|
+| 1 | `fw2` | butterfly inner loop unrolled by 2 - #360's +17.95 %, which #364's refuted diagnosis killed |
+| 2 | `fw4` | the curve point; unroll-8 lost -28 % in the rescale, so the register-file ceiling is a known risk |
+| 3 | `fwinline` | `nd_fwht`'s body inlined into `fwht_rows` through ONE shared static-inline definition, removing a call per group (~96/token) - run #333's third category |
+
+NEXT THREE after E40: (4) log whichever of the three wins or fails and cross-board only a winner.
+(5) The transform is ~80 % of `prep+lut` (3.5 ms of a 158 ms bench token), so if `fw2` pays, price
+`fw2`+`fwinline` together - those two mechanisms are independent (grouping vs call removal) and this is
+the one remaining place where the campaign has two measured sub-bar halves of the same phase, which is
+the combination that just shipped the bundle. (6) If all three are null, `nd_fwht` is closed from every
+side and the queue is empty: what remains above the bar is owner decisions only - phi row residency
+(+0.39 % ceiling, ~18 KB/core against 13,879 B, gated on the #293 assertion-level RAM), 120 MHz
+(+3.51 %, vendor-blocked #331), and the bar itself.
+
+Harness facts paid this window: `bench_e38` is `static` with one call site so `-O2` **inlines** it and
+an `nm` symbol probe refuses a perfectly good image - for a macro-gated candidate the proof is a string
+only that body prints, plus the macro on that file's own `compile_commands.json` line; `idf.py` must run
+from the project directory and has no `--before/--after`; a lane that depends on files in another
+tree must sync and hash them itself (three refusals were my per-board manual sync, not the guard
+misfiring); `tmux new-session` inherits the *server's* environment, so lane env goes inside the pane
+via `env VAR=... cmd`; killing one stale pane session is required before a board's lock frees - never
+`kill-server`; and `measure.sh`'s exit-42 anti-repeat guard correctly refused a fourth measurement of
+an image that already had full-suite verdicts on two boards, which was manufactured work on my part.
+
+## Superseded queue -- 2026-09-23T10:05Z (runs #360-#366)
 
 **Accepted runtime: 5.0467 decode tok/s (+107.2 %)** - run #362's `fwht_rows` rescale unroll, confirmed
 on two boards. Active batch `20260923T1000L`: three distinct `nd_model.c` elementwise unrolls (board 1

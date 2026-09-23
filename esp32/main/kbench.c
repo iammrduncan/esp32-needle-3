@@ -3331,6 +3331,104 @@ static void bench_e33(void)
 /* ====================== end Experiment 33 =============================== */
 #endif
 
+#if ND_KB_EXP38
+/* Experiment 38 - how much does a warm screen overstate, and was run #364's
+ * diagnosis even right?
+ *
+ * Run #364 is the campaign's starkest method failure: the paired-butterfly
+ * transform screened +36.75 % bit-exact against the shipped nd_fwht and delivered
+ * exactly +0.000 % on two boards. The recorded diagnosis was cache warmth - the
+ * bench re-swept one block 25 times, so the transform ran in the data cache,
+ * while the field "calls nd_fwht on a freshly prepared activation". That
+ * diagnosis was never numbered, and it is worth checking, because the field
+ * operand is not PSRAM: fwht_rows transforms c->xh, which is ND_ALLOC_FAST (i.e.
+ * internal SRAM, which this part does not even route through the data cache). A
+ * PSRAM eviction sweep therefore cannot make the field's operand cold, which
+ * means "data warmth" may not be the mechanism at all.
+ *
+ * So run the shipped nd_fwht on the field shape - nd_fwht(blk, 128) six times is
+ * one nd_cq_prepare - and change only (a) which backing store the block lives in
+ * and (b) whether a 160 KiB PSRAM sweep runs between timed calls. Same function,
+ * same bytes, same call; refills happen outside the timed window because the
+ * transform is in place and applying it twice scales the data by n.
+ *
+ * Read it as a 2x2. int_cold vs int_warm is the pair the field can actually
+ * reach: if a sweep does not slow an internal-SRAM operand down, then #364's null
+ * was NOT data warmth and every warm screen must be discounted for a different
+ * reason. psram_cold vs psram_warm numbers the delivery tax on a transform over
+ * cached PSRAM, which is what a staged-operand design would pay.
+ */
+static void kb_e38_fill(const float *src, float *dst, uint32_t n)
+{
+    memcpy(dst, src, sizeof(float) * n);
+}
+
+static void bench_e38(void)
+{
+    enum { G = 128u, GROUPS = 6u, ROUNDS = 25u, EVICT = 163840u };
+    const uint32_t n = G * GROUPS;
+    float *src   = heap_caps_malloc(sizeof(float) * n, MALLOC_CAP_SPIRAM);
+    float *pbs   = heap_caps_malloc(sizeof(float) * n, MALLOC_CAP_SPIRAM);
+    float *pint  = heap_caps_malloc(sizeof(float) * n, MALLOC_CAP_INTERNAL);
+    uint8_t *evi = heap_caps_malloc(EVICT, MALLOC_CAP_SPIRAM);
+    float *ref   = heap_caps_malloc(sizeof(float) * n, MALLOC_CAP_SPIRAM);
+    uint32_t r, i, best[4], mism[4] = {0, 0, 0, 0};
+    uint64_t t0, t1, acc;
+    float sink = 0.0f, evict_acc = 0.0f;
+
+    if (!src || !pbs || !pint || !evi || !ref) {
+        printf("KB E38 FAIL alloc_failed\n");
+        free(src); free(pbs); free(pint); free(evi); free(ref);
+        return;
+    }
+    printf("KB E38 ENTER lane=coldwarm n=%u groups=%u rounds=%u evict_bytes=%u\n",
+           (unsigned)n, (unsigned)GROUPS, (unsigned)ROUNDS, (unsigned)EVICT);
+
+    /* A transform input with real structure: the field's operand is an FWHT of a
+     * prepared activation, not zeros, and zeros would let a speculative core
+     * short-circuit nothing but is at least the same values everywhere. */
+    for (i = 0; i < n; i++) src[i] = (float)((int)(i % 251u) - 125) * 0.03125f;
+
+    for (int mode = 0; mode < 4; mode++) {
+        const int psram = (mode < 2);
+        const int cold  = (mode & 1);
+        float *buf = psram ? pbs : pint;
+        best[mode] = 0xFFFFFFFFu;
+        for (r = 0; r < ROUNDS; r++) {
+            kb_e38_fill(src, buf, n);                    /* untimed */
+            if (cold) {                                  /* untimed eviction */
+                const volatile uint8_t *e = evi;
+                for (i = 0; i < EVICT; i += 64u) evict_acc += (float)e[i];
+            }
+            t0 = esp_cpu_get_cycle_count();
+            for (i = 0; i < GROUPS; i++) nd_fwht(buf + (size_t)i * G, G);
+            t1 = esp_cpu_get_cycle_count();
+            acc = (uint64_t)(t1 - t0);
+            if (acc < best[mode]) best[mode] = (uint32_t)acc;
+            /* consume every result so nothing above is dead code */
+            for (i = 0; i < n; i++) sink += buf[i];
+            if (r == 0u) memcpy(ref, buf, sizeof(float) * n);
+        }
+        /* exactness across backing stores: the same bytes in must give the same
+         * bytes out, or the comparison is between two computations. */
+        kb_e38_fill(src, buf, n);
+        for (i = 0; i < GROUPS; i++) nd_fwht(buf + (size_t)i * G, G);
+        for (i = 0; i < n; i++) if (buf[i] != ref[i]) mism[mode]++;
+        printf("KB E38 mode=%s buf=%s cycles_per_prepare=%u cycles_per_call=%u"
+               " mismatch_vs_ref=%u\n",
+               cold ? "cold" : "warm", psram ? "psram" : "internal",
+               (unsigned)best[mode], (unsigned)(best[mode] / GROUPS), (unsigned)mism[mode]);
+        fflush(stdout);
+    }
+    printf("KB E38 evict_penalty_psram=.%2u%% evict_penalty_internal=.%2u%%"
+           " sink=%g evict_acc=%g\n",
+           (unsigned)((best[1] * 100u) / best[0] - 100u),
+           (unsigned)((best[3] * 100u) / best[2] - 100u),
+           (double)sink, (double)evict_acc);
+    free(src); free(pbs); free(pint); free(evi); free(ref);
+}
+#endif /* ND_KB_EXP38 */
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -3417,7 +3515,9 @@ int kbench_run(void)
     bench_gather();
     bench_wake();
     bench_rowrange();
-#if ND_KB_EXP33
+#if ND_KB_EXP38
+    bench_e38();
+#elif ND_KB_EXP33
     bench_e33();
 #elif ND_KB_EXP32
     bench_e32();

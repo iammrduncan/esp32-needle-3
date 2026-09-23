@@ -82,7 +82,7 @@ if(NEEDLE_KBENCH)
     # a clean flash. A compile-time candidate that is never forwarded is invisible, so
     # this list is data and nothing has to be remembered: add the number here only.
     # (CMake comments are '#'; a C-style block comment here is a configure error.)
-    foreach(kb_exp 30 31 32 33 34 35 36)
+    foreach(kb_exp 30 31 32 33 34 35 36 37 38)
         set(ND_KB_EXP${kb_exp} "0" CACHE STRING "Run the Experiment 3x lane body instead of the default")
         target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP${kb_exp}=${ND_KB_EXP${kb_exp}})
     endforeach()

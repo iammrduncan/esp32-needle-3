@@ -150,7 +150,20 @@ def device_mode(args):
         print(f'PROF {name}={value}')
 
     results = {}
-    for group in args.groups.split(','):
+    # Console fatigue (runs #155 -> #345 -> #346 -> #368): after roughly 15-20
+    # requests in one attached session the board stops answering, and the run dies
+    # with a 600 s TimeoutError entering the next group. That killed three
+    # canonical measurements in a row, so bound the session instead of rescuing
+    # one symptom: every group after the first starts on a fresh attach. #346's
+    # rescue only covers the !think ack, and a wedged console mid-group takes the
+    # whole suite with it. Worst group is 10 requests, well under the observed
+    # failure count, and _reconnect keeps the chip's state (DTR/RTS stay pinned),
+    # so the primed prefixes and the warm model survive the re-attach.
+    for gi, group in enumerate(args.groups.split(',')):
+        if gi:
+            print(f'### reconnect before group={group}')
+            dev._reconnect()
+            dev._handshake(dev.request_timeout)
         switch_think(dev, group == 'think')
         tps, ptps, ok, group_tps = [], [], 0, []
         print(f'### group={group} think={int(group == "think")}')

@@ -2482,3 +2482,46 @@ RESERVED, above bar but not this loop's decision:
 - **sigmoidf_pair ND_HOT** - measured +0.18 % mean over three readings, zero
   per-variant board spread, -768 B; needs the bar moved to 0.15 % (#336/#342).
 - **120 MHz octal memory** - +3.51 %, vendor-blocked (#331) and forbidden.
+
+# Experiment 41 - interleave INDEPENDENT dependent chains (the shape that actually won)
+
+fw2 (#378, +0.461 %) is now understood narrowly: the lever pays on **serial dependency
+chains with nothing else in flight**, not on "elementwise loops" in general. That is why
+silu4 (+0.03 %, #379) and the five elementwise unrolls (#365-#370) are nulls while the
+transform's butterfly chain and its rescale paid. So the candidate generator for this
+family is: *find a long reduction, and run two or four of them at once.* Unrolling one
+reduction is forbidden (reassociation, correctly refused by #366/#367); interleaving
+independent reductions is bit-exact because each accumulator's own sequence never moves.
+
+The biggest such mass in the token is `cond_rows` (engine/src/nd_model.c): the Hadamard
+MLP's conditioning projection is 8 channels x 768-term serial sums per layer, i.e. ~49k
+dependent FMAs per decode token inside the 24 ms `hadamard` phase, and `cond_v` is stride
+8 floats so interleaving channels also makes them share cache lines. Measured on three
+boards: `cond2` (two chains), `cond4` (four), plus `fw2pair` (two FWHT groups per stage
+walk, cross-group ILP on top of the shipped within-stage 2-way unroll).
+
+## The bug the host caught, and the guard it produced
+
+The first `cond2` diverged on the host (`host_output_exact=0`, `token_delta 2020`) and the
+reason was in my own generator: the emitted accumulate line used a **literal** channel
+offset - `cv[(size_t)i * 8u + 0u]`, `+ 1u` - inside a loop over `ch`, so channels 2..7
+were computed from channels 0 and 1's columns. Nothing about the *mechanism* was wrong;
+the transcription was. Two rules came out of it:
+
+* A generated loop must be checked for index expressions that should be *relative* to the
+  loop variable. "Bit-exact by construction" describes the algebra I intended, not the
+  code I emitted; the construction has to be verified in the emitted text.
+* `.auto/exp41/test_cond_equiv.c` is now the guard: it compiles the shipped form and the
+  generated form side by side over 200 random 768x8 cases and compares `dst` bit-for-bit
+  (`cc -O2 .auto/exp41/test_cond_equiv.c -lm -o /tmp/ce && /tmp/ce`, exit 0 = equivalent).
+  It localised the defect in one run with no board and no engine build, which is the
+  cheapest diagnosis of this campaign's life: the host golden said *that* it was wrong and
+  this said *which term*.
+
+`.auto/exp41/test_odd_split.c` is the other guard, for `fw2pair`: the device splits
+ngroup=6 as 3+3, so each `nd_parallel_rows` call gets an ODD count, while the host's
+`rows_serial` always hands one core an even count - a paired-group loop with no tail is
+therefore invisible to the host goldens and corrupt on device (#333's class). The test
+sets `nd_parallel_rows` to 3+3 / 1+5 / 5+1 / 2+4 / one-group splits through the public
+`nd_cq_prepare` and requires the activation to match the serial result bit for bit; the
+correct `fw2pair` passes on 6 real tensors x 5 splits.

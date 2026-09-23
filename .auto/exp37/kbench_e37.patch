@@ -1,0 +1,133 @@
+diff --git a/esp32/main/kbench.c b/esp32/main/kbench.c
+index 5b7535e..21f35c2 100644
+--- a/esp32/main/kbench.c
++++ b/esp32/main/kbench.c
+@@ -3331,6 +3331,117 @@ static void bench_e33(void)
+ /* ====================== end Experiment 33 =============================== */
+ #endif
+ 
++#if ND_KB_EXP37
++/* Experiment 37 - the KV store's flash-mapped rounding call, priced per element.
++ *
++ * Run #368 closed this loop because the part "implements no rounding instruction
++ * at all" - true, and re-confirmed by assembler probe - but it never checked the
++ * CONVERSION instructions. Compiling `(int)x` for this target and disassembling
++ * shows GCC emits `trunc.s a2, f0, 0`, a hardware float->int truncate, while
++ * lrintf and even __builtin_floorf/__builtin_rintf turn into calls. So the
++ * rounding can be done in FLOAT by adding MAGIC = 1.5*2^23, whose ulp at that
++ * magnitude is exactly 1.0: RN(MAGIC + q) == MAGIC + rint(q), ties resolved to
++ * even by the adder, and MAGIC is removed again in INTEGER arithmetic so the
++ * compiler cannot fold it back. That is not the forbidden +0.5f-and-truncate
++ * (round-half-away, rejected at run #2e): .auto/rint/test_rint.c diffs it against
++ * lrintf over 242,863 values including every int8 tie and the non-finite classes,
++ * with zero mismatches.
++ *
++ * What this bench decides is the SIZE, which an end-to-end run cannot separate
++ * from the rest of the phase: the shipped loop is ~1.1 ms for ~1,792 elements =
++ * ~147 cycles/element for what should be a clamp and a store, and the only
++ * plausible reason is a flash-mapped newlib call per element issued from an
++ * IRAM-resident function - the callee-crossing class worth +0.18 % at run #336, at
++ * four times the call rate and with a much bigger callee.
++ *
++ * Both variants run with the FIELD's call structure - one call per 48-element row
++ * (qk_head_dim), result consumed before the next row - because run #374 measured
++ * that a tight re-swept loop inflates instruction mix rather than delivery.
++ */
++__attribute__((noinline)) static void kb_kv_ref(int8_t *dst, const float *src,
++                                                uint32_t n, float scale)
++{
++    const float r = 1.0f / scale;
++    uint32_t i;
++    for (i = 0; i < n; i++) {
++        float x = src[i], q, e;
++        if (x > -1e30f && x < 1e30f) { q = x * r; e = fmaf(-scale, q, x); q = fmaf(e, r, q); }
++        else q = x / scale;
++        if (q > 127.0f)  q = 127.0f;
++        if (q < -127.0f) q = -127.0f;
++        dst[i] = (int8_t)lrintf(q);
++    }
++}
++
++__attribute__((noinline)) static void kb_kv_magic(int8_t *dst, const float *src,
++                                                  uint32_t n, float scale)
++{
++    const float r = 1.0f / scale;
++    uint32_t i;
++    for (i = 0; i < n; i++) {
++        float x = src[i], q, e;
++        if (x > -1e30f && x < 1e30f) { q = x * r; e = fmaf(-scale, q, x); q = fmaf(e, r, q); }
++        else q = x / scale;
++        if (q > 127.0f)  q = 127.0f;
++        if (q < -127.0f) q = -127.0f;
++        if (q >= -127.0f && q <= 127.0f)
++            dst[i] = (int8_t)((int)(q + 12582912.0f) - 12582912);
++        else
++            dst[i] = (int8_t)lrintf(q);
++    }
++}
++
++static void bench_e37(void)
++{
++    enum { ROW = 48u, ROWS = 32u, ROUNDS = 15u };
++    float  *src  = heap_caps_malloc(sizeof(float) * ROW * ROWS, MALLOC_CAP_INTERNAL);
++    int8_t *a    = heap_caps_malloc(ROW * ROWS, MALLOC_CAP_INTERNAL);
++    int8_t *b    = heap_caps_malloc(ROW * ROWS, MALLOC_CAP_INTERNAL);
++    uint32_t r, row, i, best[2] = {0xFFFFFFFFu, 0xFFFFFFFFu}, mism = 0;
++    uint64_t t0, t1;
++    int32_t  sink = 0;
++
++    if (!src || !a || !b) { printf("KB E37 FAIL alloc_failed\n"); free(src); free(a); free(b); return; }
++    printf("KB E37 ENTER lane=kvround row=%u rows=%u rounds=%u\n",
++           (unsigned)ROW, (unsigned)ROWS, (unsigned)ROUNDS);
++
++    /* Shaped like the field's operands: values around the int8 range with every
++     * .5 boundary present, so the clamp and the tie behaviour are both exercised. */
++    for (i = 0; i < ROW * ROWS; i++)
++        src[i] = (float)((int)(i % 257u) - 128) + 0.5f * (float)((i % 3u) - 1);
++
++    for (int mode = 0; mode < 2; mode++) {
++        int8_t *dst = mode ? b : a;
++        best[mode] = 0xFFFFFFFFu;
++        for (r = 0; r < ROUNDS; r++) {
++            t0 = esp_cpu_get_cycle_count();
++            for (row = 0; row < ROWS; row++)
++                (mode ? kb_kv_magic : kb_kv_ref)(dst + row * ROW, src + (size_t)row * ROW,
++                                                 ROW, 1.0732422f);
++            t1 = esp_cpu_get_cycle_count();
++            if ((uint32_t)(t1 - t0) < best[mode]) best[mode] = (uint32_t)(t1 - t0);
++            for (i = 0; i < ROW * ROWS; i++) sink += dst[i];   /* consume everything */
++        }
++    }
++    for (i = 0; i < ROW * ROWS; i++) if (a[i] != b[i]) mism++;
++    printf("KB E37 rows=%u cycles_ref=%u cycles_magic=%u gain_pct=%u.%02u"
++           " byte_mismatch=%u cyc_per_elem_ref=%u.%02u cyc_per_elem_magic=%u.%02u"
++           " saving_ms_per_token_at_1792=%u.%03u sink=%d\n",
++           (unsigned)(ROWS * ROUNDS), best[0], best[1],
++           (unsigned)((best[0] * 100u) / best[1] - 100u),
++           (unsigned)(((best[0] * 10000u) / best[1]) % 100u), mism,
++           (unsigned)(best[0] / (ROWS * ROW * ROUNDS)),
++           (unsigned)((best[0] * 100u / (ROWS * ROW * ROUNDS)) % 100u),
++           (unsigned)(best[1] / (ROWS * ROW * ROUNDS)),
++           (unsigned)((best[1] * 100u / (ROWS * ROW * ROUNDS)) % 100u),
++           (unsigned)((best[0] - best[1]) * 1792u / 240000u),
++           (unsigned)((((best[0] - best[1]) * 1792u * 1000u) / 240000u) % 1000u),
++           (int)sink);
++    fflush(stdout);
++    free(src); free(a); free(b);
++}
++#endif /* ND_KB_EXP37 */
++
+ #if ND_KB_EXP38
+ /* Experiment 38 - how much does a warm screen overstate, and was run #364's
+  * diagnosis even right?
+@@ -3515,7 +3626,9 @@ int kbench_run(void)
+     bench_gather();
+     bench_wake();
+     bench_rowrange();
+-#if ND_KB_EXP38
++#if ND_KB_EXP37
++    bench_e37();
++#elif ND_KB_EXP38
+     bench_e38();
+ #elif ND_KB_EXP33
+     bench_e33();

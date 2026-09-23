@@ -34,6 +34,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <esp_attr.h>              /* IRAM_ATTR, for the callee-placement bench */
 #include <string.h>
 
 #if ND_KBENCH_GDMA
@@ -3331,6 +3332,225 @@ static void bench_e33(void)
 /* ====================== end Experiment 33 =============================== */
 #endif
 
+#if ND_KB_EXP36
+/* Experiment 36 - what does one IRAM-to-flash callee crossing actually cost?
+ *
+ * This is the denominator for the last unpriced candidate class. Run #336 moved
+ * `sigmoidf_pair` from flash into IRAM and gained +0.18 % for roughly 3,600
+ * crossings, which implies ~30 cycles per crossing but was never measured as such.
+ * The one remaining mass that pays a flash callee per call is Sinkhorn's `logf`:
+ * about 1,280 calls per decode token (8 per iteration x 20 x 8 layers), the last
+ * transcendental in the model that libm owns. Whether a locally-resident copy is
+ * worth writing depends ONLY on the crossing cost, and that number is measurable
+ * without writing the copy: two identical-shape noinline FP chains, one left where
+ * the linker puts it (flash) and one forced into IRAM, called back to back.
+ *
+ * Two honesty guards, both bought by past failures:
+ *  * identical function bodies are a garbage-collect/ICF folding risk, so the chains
+ *    use different constants and the bench PRINTS BOTH SYMBOL ADDRESSES - if they are
+ *    not in different memory regions the whole measurement is fiction (#359's rule:
+ *    prove the candidate is in the image before believing a number from it);
+ *  * the first call is reported separately from the steady-state calls, because the
+ *    field's failure mode is the cold instruction fetch, not the call instruction,
+ *    and a warm loop over one tiny function measures the cache rather than the bus
+ *    (run #374's correction that a tight bench loop inflates instruction mix).
+ */
+__attribute__((noinline)) static float kb_cross_flash(float x)
+{
+    float a = x * 1.00097656f;      /* 1 + 2^-10 */
+    a = fmaf(a, 0.99951172f, 0.00390625f);
+    a = fmaf(a, 1.00048828f, -0.00195312f);
+    a = fmaf(a, 0.99975586f, 0.00097656f);
+    a = fmaf(a, 1.00024414f, -0.00048828f);
+    a = fmaf(a, 0.99987793f, 0.00024414f);
+    a = fmaf(a, 1.00012207f, -0.00012207f);
+    a = fmaf(a, 0.99993896f, 0.00006103f);
+    a = fmaf(a, 1.00006104f, -0.00003052f);
+    return a;
+}
+
+__attribute__((noinline)) IRAM_ATTR static float kb_cross_iram(float x)
+{
+    float a = x * 1.00146484f;      /* 1 + 1.5*2^-10, deliberately different */
+    a = fmaf(a, 0.99902344f, 0.00195312f);
+    a = fmaf(a, 1.00073242f, -0.00097656f);
+    a = fmaf(a, 0.99963379f, 0.00048828f);
+    a = fmaf(a, 1.00036621f, -0.00024414f);
+    a = fmaf(a, 0.99981689f, 0.00012207f);
+    a = fmaf(a, 1.00018311f, -0.00006103f);
+    a = fmaf(a, 0.99990845f, 0.00003052f);
+    a = fmaf(a, 1.00009155f, -0.00001526f);
+    return a;
+}
+
+__attribute__((noinline)) IRAM_ATTR static float kb_cross_sink(float x) { return x; }
+
+static void bench_e36(void)
+{
+    enum { ROUNDS = 21u, CALLS = 9u };
+    float  in[CALLS];
+    uint32_t i, r, k;
+    uint32_t bestf[CALLS], besti[CALLS], bestn[CALLS];
+    float sink = 0.0f;
+
+    printf("KB E36 ENTER lane=crossing calls=%u rounds=%u\n", (unsigned)CALLS, (unsigned)ROUNDS);
+    printf("KB E36 addr flash=0x%08x iram=0x%08x nop=0x%08x  (flash is 0x42xxxxxx, IRAM 0x403xxxxx)\n",
+           (unsigned)(uint32_t)(void *)&kb_cross_flash,
+           (unsigned)(uint32_t)(void *)&kb_cross_iram,
+           (unsigned)(uint32_t)(void *)&kb_cross_sink);
+    fflush(stdout);
+    if (((uint32_t)(uint32_t)(void *)&kb_cross_flash & 0xff000000u) ==
+        ((uint32_t)(uint32_t)(void *)&kb_cross_iram  & 0xff000000u)) {
+        printf("KB E36 FAIL both_bodies_in_same_region (ICF folded them; number would be fiction)\n");
+        return;
+    }
+    for (k = 0; k < CALLS; k++) { bestf[k] = 0xFFFFFFFFu; besti[k] = 0xFFFFFFFFu; bestn[k] = 0xFFFFFFFFu; }
+
+    for (r = 0; r < ROUNDS; r++) {
+        for (k = 0; k < CALLS; k++) in[k] = (float)(k + 1) * 0.03125f + (float)r * 1e-5f;
+        for (int mode = 0; mode < 3; mode++) {
+            uint32_t *best = mode == 0 ? bestf : (mode == 1 ? besti : bestn);
+            for (k = 0; k < CALLS; k++) {
+                uint64_t t0 = esp_cpu_get_cycle_count();
+                float v = (mode == 0) ? kb_cross_flash(in[k])
+                        : (mode == 1) ? kb_cross_iram(in[k])
+                                      : kb_cross_sink(in[k]);
+                uint64_t t1 = esp_cpu_get_cycle_count();
+                sink += v;
+                if ((uint32_t)(t1 - t0) < best[k]) best[k] = (uint32_t)(t1 - t0);
+            }
+        }
+    }
+    {
+        uint32_t wf = 0, wi = 0, wn = 0;
+        for (k = 1; k < CALLS; k++) { wf += bestf[k]; wi += besti[k]; wn += bestn[k]; }
+        wf /= (CALLS - 1u); wi /= (CALLS - 1u); wn /= (CALLS - 1u);
+        printf("KB E36 first_call flash=%u iram=%u nop=%u | steady flash=%u iram=%u nop=%u"
+               " | crossing_penalty=%u cycles | body=%u cycles"
+               " | predicted_pct_for_1280_logf_crossings=.%03u sink=%g\n",
+               (unsigned)bestf[0], (unsigned)besti[0], (unsigned)bestn[0],
+               (unsigned)wf, (unsigned)wi, (unsigned)wn,
+               (unsigned)(wf > wi ? wf - wi : 0u), (unsigned)(wf > wn ? wf - wn : 0u),
+               (unsigned)((wf > wi ? (wf - wi) * 1280u * 1000u / 240000u / 197u : 0u)),
+               (double)sink);
+        fflush(stdout);
+    }
+}
+#endif /* ND_KB_EXP36 */
+
+#if ND_KB_EXP37
+/* Experiment 37 - the KV store's flash-mapped rounding call, priced per element.
+ *
+ * Run #368 closed this loop because the part "implements no rounding instruction
+ * at all" - true, and re-confirmed by assembler probe - but it never checked the
+ * CONVERSION instructions. Compiling `(int)x` for this target and disassembling
+ * shows GCC emits `trunc.s a2, f0, 0`, a hardware float->int truncate, while
+ * lrintf and even __builtin_floorf/__builtin_rintf turn into calls. So the
+ * rounding can be done in FLOAT by adding MAGIC = 1.5*2^23, whose ulp at that
+ * magnitude is exactly 1.0: RN(MAGIC + q) == MAGIC + rint(q), ties resolved to
+ * even by the adder, and MAGIC is removed again in INTEGER arithmetic so the
+ * compiler cannot fold it back. That is not the forbidden +0.5f-and-truncate
+ * (round-half-away, rejected at run #2e): .auto/rint/test_rint.c diffs it against
+ * lrintf over 242,863 values including every int8 tie and the non-finite classes,
+ * with zero mismatches.
+ *
+ * What this bench decides is the SIZE, which an end-to-end run cannot separate
+ * from the rest of the phase: the shipped loop is ~1.1 ms for ~1,792 elements =
+ * ~147 cycles/element for what should be a clamp and a store, and the only
+ * plausible reason is a flash-mapped newlib call per element issued from an
+ * IRAM-resident function - the callee-crossing class worth +0.18 % at run #336, at
+ * four times the call rate and with a much bigger callee.
+ *
+ * Both variants run with the FIELD's call structure - one call per 48-element row
+ * (qk_head_dim), result consumed before the next row - because run #374 measured
+ * that a tight re-swept loop inflates instruction mix rather than delivery.
+ */
+__attribute__((noinline)) static void kb_kv_ref(int8_t *dst, const float *src,
+                                                uint32_t n, float scale)
+{
+    const float r = 1.0f / scale;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        float x = src[i], q, e;
+        if (x > -1e30f && x < 1e30f) { q = x * r; e = fmaf(-scale, q, x); q = fmaf(e, r, q); }
+        else q = x / scale;
+        if (q > 127.0f)  q = 127.0f;
+        if (q < -127.0f) q = -127.0f;
+        dst[i] = (int8_t)lrintf(q);
+    }
+}
+
+__attribute__((noinline)) static void kb_kv_magic(int8_t *dst, const float *src,
+                                                  uint32_t n, float scale)
+{
+    const float r = 1.0f / scale;
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        float x = src[i], q, e;
+        if (x > -1e30f && x < 1e30f) { q = x * r; e = fmaf(-scale, q, x); q = fmaf(e, r, q); }
+        else q = x / scale;
+        if (q > 127.0f)  q = 127.0f;
+        if (q < -127.0f) q = -127.0f;
+        if (q >= -127.0f && q <= 127.0f)
+            dst[i] = (int8_t)((int)(q + 12582912.0f) - 12582912);
+        else
+            dst[i] = (int8_t)lrintf(q);
+    }
+}
+
+static void bench_e37(void)
+{
+    enum { ROW = 48u, ROWS = 32u, ROUNDS = 15u };
+    float  *src  = heap_caps_malloc(sizeof(float) * ROW * ROWS, MALLOC_CAP_INTERNAL);
+    int8_t *a    = heap_caps_malloc(ROW * ROWS, MALLOC_CAP_INTERNAL);
+    int8_t *b    = heap_caps_malloc(ROW * ROWS, MALLOC_CAP_INTERNAL);
+    uint32_t r, row, i, best[2] = {0xFFFFFFFFu, 0xFFFFFFFFu}, mism = 0;
+    uint64_t t0, t1;
+    int32_t  sink = 0;
+
+    if (!src || !a || !b) { printf("KB E37 FAIL alloc_failed\n"); free(src); free(a); free(b); return; }
+    printf("KB E37 ENTER lane=kvround row=%u rows=%u rounds=%u\n",
+           (unsigned)ROW, (unsigned)ROWS, (unsigned)ROUNDS);
+
+    /* Shaped like the field's operands: values around the int8 range with every
+     * .5 boundary present, so the clamp and the tie behaviour are both exercised. */
+    for (i = 0; i < ROW * ROWS; i++)
+        src[i] = (float)((int)(i % 257u) - 128) + 0.5f * (float)((i % 3u) - 1);
+
+    for (int mode = 0; mode < 2; mode++) {
+        int8_t *dst = mode ? b : a;
+        best[mode] = 0xFFFFFFFFu;
+        for (r = 0; r < ROUNDS; r++) {
+            t0 = esp_cpu_get_cycle_count();
+            for (row = 0; row < ROWS; row++)
+                (mode ? kb_kv_magic : kb_kv_ref)(dst + row * ROW, src + (size_t)row * ROW,
+                                                 ROW, 1.0732422f);
+            t1 = esp_cpu_get_cycle_count();
+            if ((uint32_t)(t1 - t0) < best[mode]) best[mode] = (uint32_t)(t1 - t0);
+            for (i = 0; i < ROW * ROWS; i++) sink += dst[i];   /* consume everything */
+        }
+    }
+    for (i = 0; i < ROW * ROWS; i++) if (a[i] != b[i]) mism++;
+    printf("KB E37 rows=%u cycles_ref=%u cycles_magic=%u gain_pct=%u.%02u"
+           " byte_mismatch=%u cyc_per_elem_ref=%u.%02u cyc_per_elem_magic=%u.%02u"
+           " saving_ms_per_token_at_1792=%u.%03u sink=%d\n",
+           /* uint32_t is `long unsigned int` for this target, so a bare uint32_t
+            * against %u is a -Werror=format error rather than a warning. */
+           (unsigned)(ROWS * ROUNDS), (unsigned)best[0], (unsigned)best[1],
+           (unsigned)((best[0] * 100u) / best[1] - 100u),
+           (unsigned)(((best[0] * 10000u) / best[1]) % 100u), (unsigned)mism,
+           (unsigned)(best[0] / (ROWS * ROW * ROUNDS)),
+           (unsigned)((best[0] * 100u / (ROWS * ROW * ROUNDS)) % 100u),
+           (unsigned)(best[1] / (ROWS * ROW * ROUNDS)),
+           (unsigned)((best[1] * 100u / (ROWS * ROW * ROUNDS)) % 100u),
+           (unsigned)((best[0] - best[1]) * 1792u / 240000u),
+           (unsigned)((((best[0] - best[1]) * 1792u * 1000u) / 240000u) % 1000u),
+           (int)sink);
+    fflush(stdout);
+    free(src); free(a); free(b);
+}
+#endif /* ND_KB_EXP37 */
+
 #if ND_KB_EXP38
 /* Experiment 38 - how much does a warm screen overstate, and was run #364's
  * diagnosis even right?
@@ -3515,7 +3735,11 @@ int kbench_run(void)
     bench_gather();
     bench_wake();
     bench_rowrange();
-#if ND_KB_EXP38
+#if ND_KB_EXP36
+    bench_e36();
+#elif ND_KB_EXP37
+    bench_e37();
+#elif ND_KB_EXP38
     bench_e38();
 #elif ND_KB_EXP33
     bench_e33();

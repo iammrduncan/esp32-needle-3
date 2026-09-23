@@ -2525,3 +2525,52 @@ therefore invisible to the host goldens and corrupt on device (#333's class). Th
 sets `nd_parallel_rows` to 3+3 / 1+5 / 5+1 / 2+4 / one-group splits through the public
 `nd_cq_prepare` and requires the activation to match the serial result bit for bit; the
 correct `fw2pair` passes on 6 real tensors x 5 splits.
+
+## The rounding/conversion distinction: `trunc.s` exists and `lrintf` does not have to (run #385, kvrint)
+
+Run #368 closed the KV store with an ISA fact: this part implements **no rounding
+instruction** - `frint.nf/z.f/xf/mf/pf`, `itrunc.s`, `quou.s` all rejected by the shipped
+assembler - and concluded the per-element flash-mapped `lrintf` call was unreachable. The
+fact was right and the conclusion was wrong, because *rounding* and *converting* are two
+different instructions. Asking the compiler rather than guessing mnemonics (compile
+`(int)x`, `lrintf(x)`, `__builtin_floorf`, `__builtin_rintf`, disassemble) shows:
+
+| expression | what GCC emits for esp32s3 |
+|---|---|
+| `(int)x` | **`trunc.s a2, f0, 0`** - one hardware instruction |
+| `lrintf(x)` | `call8` to flash-mapped newlib |
+| `__builtin_floorf(x)`, `__builtin_rintf(x)` | `call8` (no hardware floor/round) |
+
+So ties-to-even can come from the **float add** instead of a rounding instruction: with
+MAGIC = 1.5*2^23 the ulp at that magnitude is exactly 1.0, so `RN(MAGIC + q) == MAGIC +
+rint(q)` with ties resolved to even by the adder, and MAGIC is removed again in **integer**
+arithmetic where the compiler cannot reassociate it back. This is *not* the forbidden
+`+0.5f`-then-truncate (round-half-away, rejected at run #2e). Guard:
+`.auto/rint/test_rint.c` diffs `(int8_t)lrintf(q)` against the expression over 242,863
+values - every int8 value, every .5 tie approached from both sides, nextafter neighbours,
+two dense sweeps, and +-0/inf/NaN - with **0 mismatches**, and the fallback branch keeps
+non-finite inputs on the shipped call.
+
+Method worth keeping: **when an instruction-family question has already been answered once,
+ask it again with a different oracle.** The assembler probe in #368 was authoritative for
+what it tested and silently generalised to "no float->int path exists". A probe that
+returns *all negatives* is suspect on its face - a control that must pass (`add.s`,
+`l32i`, and a known-good `ee.ldf.*`) belongs in the same run, and here the controls
+themselves exposed that the `ee.*` operand syntax I used was wrong, which is a third
+instance of this session's vacuous-result family.
+
+## Do not wide-load the FP accumulate loops: measured twice in the field, paid zero
+
+`attn_heads` moves its float data with 87 `lsi` and 68 `ssi` - one scalar float per
+instruction, no `lsc`/`ssc`, and **no `fma.s`** (27 `mul.s` + 64 `add.s`, so hand-fed wide
+loads would at least be bit-exact). That looks like a free ~2x on the LSU ops of a ~15 ms
+sub-block. It is not being built, because the same mechanism has already been measured in
+the field twice: run #230's `ee.ldf.128.ip` dot lost at **-107 %** ("a 128-bit float load
+on the S3's ai engine is not one LSU operation"), and run #364's `ee.ldf.64.ip`/
+`ee.stf.64.ip` transform screened **+36.75 % bit-exact in isolation and delivered exactly
++0.000 %** on two boards - while the *plain C unroll* of the same loop, whose instruction
+count falls by far less, delivered **+0.461 %** (#378). Wide float loads are therefore the
+narrow case where fewer instructions measurably does not mean less time on this core; only
+run #356's isolated screens said otherwise, and #374 already showed isolation overstates
+instruction-mix wins. If anyone revisits this, the burden is a field measurement of the
+accumulate itself, not another kbench number.

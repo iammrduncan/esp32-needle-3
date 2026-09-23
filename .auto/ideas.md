@@ -2678,3 +2678,40 @@ STILL OWNER-GATED / CLOSED: phi 4-bit row residency (needs ~18 KB/core, #293's a
 120 MHz (vendor-blocked #331), the console wedge (a firmware defect: the board stops answering after
 ~6-17 requests per boot, unaffected by reconnects, not fixed by idle gaps - it is what blocks
 single-session canonical acceptances).
+
+## Runs #400-#401: the wedge is engine-independent, and three new transform axes are queued
+
+**Sole-board test refutes my own console-contention theory.** With every other lane stopped, the
+capture API dead and no process holding a `needle-pi` handle, the fused image answered 16 requests in
+530 s (all fast - the 1621 s sessions were just 200 s timeouts on an already-dead tail) and then stopped
+answering at case 17, exactly as it did with three lanes plus an API running. Concurrent pool traffic
+is not the mechanism. Four attempts, three engines, two gap settings: 16, 16, 17, 17 requests answered
+per boot; the wall sits at case 17-18 (`heldout_long_route` / `heldout_interval_one`) and run #395 once
+got 20, so the per-boot budget is 16-20 and a canonical 20-case gate cannot be *relied* on. The
+candidate is exonerated (the accepted image reproduces the stall at the same position) and remains
+un-accepted only because the device byte-exact gate wants all 20 cases in one session.
+
+**Harness additions, all metric-safe and fail-loud:** `.auto/diag_request_timeout_s` (a wedged suite
+reports in 27 min, not 2 h - a timed-out case fails the run, so it can never manufacture a pass), and
+`.auto/exp47/test_fwht4_equiv.c` now verifies 2-, 3- and 4-block candidates (`ND_CAND_BLOCKS`, with a
+positive control: arity 2 and 4 refuse to compile against the shipped 3-block kernel).
+
+**Three self-inflicted scheduler bugs, recorded because each cost real time:** a `%` inside a
+`printf` reason string aborted an `&&` chain so three lanes silently never launched (use heredocs);
+`tmux kill-server` destroyed the launch path for 49 minutes; and the provenance gate I added to stop
+mis-attribution itself aborted three correct lanes by demanding a full 32-hex md5 and then crashed on
+an uninitialised `PROV_BAD` under `set -u`.
+
+## Queued now (all three built, bit-exact vs the exported `nd_fwht`, host 19/19, odd-split 0/30)
+
+| id | engine md5 | axis | prediction |
+|---|---|---|---|
+| `vq` | `fa66d53645dd` | **width 4** (four groups per stage walk) - completes 1/2/3-shipped/4 | neutral-to-negative: fusing a 4th *group* already lost at radix-4 |
+| `vr3` | `9c540373a86b` | **passes 4 -> 3** via radix-8 (stages len,2len,4len per pass), 3 groups | ~+0.16 % if registers tolerate it; 8 floats/group + temporaries vs 16 FPU regs says no |
+| `vr2` | `96e994517682` | same lever at **2 groups** (register-relieved), and it becomes the primary walk for the ngroup=6 tensors | the only version that could ship for the dominant tensors |
+
+After these, the transform family is measured on every axis it has: width (1,2,3,4), stage fusion
+(2 pairs, 3 pairs, radix-8 triple), pass count (4 vs 3), rescale placement (peeled/folded/merged), and
+stage order (ascending wins). What remains above the bar is owner-only: phi row residency (~18 KB/core
+vs 12,855 B free, gated on #293's assertion-level RAM), 120 MHz (vendor-blocked, #331), and the 0.2 %
+bar itself.

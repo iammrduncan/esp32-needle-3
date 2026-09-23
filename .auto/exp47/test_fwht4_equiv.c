@@ -19,12 +19,29 @@
 #define ND_CAND nd_fwht4s
 #endif
 
+/* How many group blocks the candidate walks at once (3 = the shipped triple walk).
+ * Without this the oracle could only ever prove a 3-block kernel, which would have
+ * silently blocked the width-curve candidates (4-wide, and radix-8 at 2 and 3
+ * blocks). Reference is always the exported nd_fwht applied to each block. */
+#ifndef ND_CAND_BLOCKS
+#define ND_CAND_BLOCKS 3
+#endif
+
+#if ND_CAND_BLOCKS == 2
+#define CALL_CAND(p, n, sc) ND_CAND((p), (p) + (n), (n), (sc))
+#elif ND_CAND_BLOCKS == 4
+#define CALL_CAND(p, n, sc) ND_CAND((p), (p) + (n), (p) + 2 * (n), (p) + 3 * (n), (n), (sc))
+#else
+#define CALL_CAND(p, n, sc) ND_CAND((p), (p) + (n), (p) + 2 * (n), (n), (sc))
+#endif
+
 int main(void)
 {
     unsigned ns[] = {2, 4, 8, 16, 32, 64, 128, 256, 1024};
     uint64_t st = 0x9E3779B97F4A7C15ull;
     long cmp = 0, bad = 0;
-    float *a = malloc(sizeof(float) * 3u * 1024u), *b = malloc(sizeof(float) * 3u * 1024u);
+    float *a = malloc(sizeof(float) * ND_CAND_BLOCKS * 1024u),
+         *b = malloc(sizeof(float) * ND_CAND_BLOCKS * 1024u);
 
     for (unsigned i = 0; i < sizeof(ns) / sizeof(ns[0]); i++) {
         uint32_t n = ns[i];
@@ -32,20 +49,20 @@ int main(void)
         for (unsigned si = 0; si < sizeof(scales) / sizeof(scales[0]); si++) {
             float scale = scales[si];
             for (int rep = 0; rep < 64; rep++) {
-                for (uint32_t k = 0; k < 3u * n; k++) {
+                for (uint32_t k = 0; k < ND_CAND_BLOCKS * n; k++) {
                     st = st * 6364136223846793005ull + 1442695040888963407ull;
                     /* Values that stress cancellation: sums that land near zero. */
                     a[k] = (float)((int32_t)(st >> 40) % 2001 - 1000) * 0.001f;
                 }
                 if (n == 2u) a[0] = -a[1];                       /* exact cancellation */
-                memcpy(b, a, sizeof(float) * 3u * n);
+                memcpy(b, a, sizeof(float) * ND_CAND_BLOCKS * n);
 
-                ND_CAND(b, b + n, b + 2 * n, n, scale);        /* candidate */
-                for (uint32_t gg = 0; gg < 3u; gg++) {            /* reference */
+                CALL_CAND(b, n, scale);                        /* candidate */
+                for (uint32_t gg = 0; gg < ND_CAND_BLOCKS; gg++) {            /* reference */
                     nd_fwht(a + (size_t)gg * n, n);
                     for (uint32_t j = 0; j < n; j++) a[(size_t)gg * n + j] *= scale;
                 }
-                for (uint32_t k = 0; k < 3u * n; k++) {
+                for (uint32_t k = 0; k < ND_CAND_BLOCKS * n; k++) {
                     float u = b[k], v = a[k];
                     cmp++;
                     if (!(u == v || (isnan(u) && isnan(v)))) bad++;

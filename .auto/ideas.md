@@ -2278,3 +2278,56 @@ printed on a 250-step cadence, and a single `nd_dump genp` run is 23-35 steps - 
 looked like "the code never ran" while it was a threshold no real process reaches. Also
 `bench.py` captures the generator's stdout, so engine-side `printf` diagnostics never appear in
 its log; run `host/build/nd_dump` directly to see them.
+
+## Experiment 26 - the request-path table at last, and a 1.7 % block that is neither the rows nor the prepare (run #343, board 3, no shipping change)
+
+`measure.sh`'s log has always carried only the *boot bench* table. Reason, now fixed rather than
+assumed: `serial_api.Device.complete()` reads with `_line_quiet()`, and `prof_dump()` prints the
+request block *after* `EVT done`, so every per-request `EVT prof` line the firmware ever emitted was
+discarded by the harness. `.auto/prof_request.py` attaches to an already-primed board (no reflash,
+~40 s), makes the reader echo, and drives real requests; `.auto/lane_prof.sh` + `.auto/prof_harvest.sh`
+build/flash the profiled image and run it. A candidate counter in the same image (`.auto/exp26/nstat.patch`)
+puts `n` and the phase in one boot.
+
+| ms/token | boot bench | tools request (5.08 tps) | route request (4.79 tps) |
+|---|---|---|---|
+| whole block | 158.7 | 176.0 | 208.2 |
+| proj2bit | 86.2 | 99.0 | 110.8 |
+| attn-stage | 99.9 | 108.4 | 132.5 |
+| prep+lut | 3.6 | 4.1 | 4.6 |
+| **sample** | 0.0 (bench never samples) | **4.5** | **7.6** |
+|  - of which `logits4` | 0.0 | **3.8** | **7.1** |
+| candidate rows | - | mean_n **6.7**, max 68 | mean_n **3.5**, max 68 |
+
+Three things follow, all measured on one image:
+
+1. **The device reproduces the host's `n`** (6.7 vs the host's 6.8), so run #341's closure of the
+   n-scaled sampler work stands on device evidence, not host inference.
+2. **`logits4` is not the projection.** 6.7 rows at the cycles/row measured in kbench for *this same
+   tensor and kernel* (2,885,800 cycles / 512 rows, two-core = 5,636 wall cycles/row) is 37.8k cycles
+   = **0.16 ms**, and one `nd_cq_prepare` is ~0.22 ms (this table's own `prep+lut` 3.6 ms over ~16
+   calls). So ~**3.4 ms of a 3.8 ms bracket - 1.7 % of a request token - is unattributed inside
+   `nd_model_logits_subset`**. This is now the largest unexplained block in the token, and the only
+   lead above the 0.2 % bar. `.auto/exp26/split_lg4.py` prints prepare and gather per call to
+   localise it.
+3. Sampler arithmetic excluding the projection = `sample - logits4` = **0.7 / 0.5 ms**, which
+   independently reproduces run #149's ~0.4 ms for piece lookups and `token_ok` walks.
+
+**The mechanism worth writing down before the measurement:** both suspects go through
+`nd_parallel_rows`, and this call is the *only* one per token whose job is tiny while the worker may
+be parked (the GEMV splits arrive back-to-back with the worker hot). A semaphore wake that is free
+when the peer is spinning costs a scheduler round trip when it is blocked, and with the 100 Hz tick
+(run #240) that is bounded by a tick, not by microseconds. If either suspect is the wake, the fix is
+one guard in the shared helper - run jobs of `<= K` units serially on the calling core - which is
+bit-exact by construction (per-row accumulation order does not move; `gather_rows` and `fwht_rows`
+were audited pure-per-row in the #162 shared-state audit), and the host is unaffected because its
+`nd_parallel_rows` is already `rows_serial`. The cheap pre-check is a kbench wake-latency microbench
+(idle worker vs hot worker, 1..8 units), because that number prices the fix without a flash.
+
+**Also closed here, for two geometry facts:** run #339's "+97.68 %, worth ~+1.4 %" gather-on-pair-LUT
+screen compared different functions. The embedding is **4-bit** (8192x768, group 128 - run #340's
+probe) and the pair table holds 16 entries per pair slot, i.e. exactly a *2-bit* pair's combination
+count; a 4-bit pair needs 256. So its 417/512 one-ULP "mismatches" were never a reduction-order
+question, and the 4-bit gather's only kernel lever is the plain-load row walker already shipped for
+phi (#333), worth ~0.02 ms at n=6.7 = **+0.01 %**. Gather delivery is closed four ways now:
+residency (#340), tier pointer (#341), n (#341), kernel bit-width (this run).

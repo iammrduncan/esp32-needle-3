@@ -40,7 +40,22 @@ the campaign's hand placement are alternative policies for the same decisions, n
 same shape as #335's `always_inline` losing to moving the callee). Engine stays at `-O2`; the
 build-configuration family - historically the most productive cheap one - is now exhausted.
 
-**RUNNING: Experiment 40 (batch 20260923T1330L), three distinct prepare-family candidates**, each
+**POOL CONTAMINATION FOUND AND FIXED (run #377), and it is a class, not an incident.** Experiment
+39 applied `-O3` by appending to the *worker's* `esp32/components/needle/CMakeLists.txt` and no lane
+removed it, so every lane that subsequently ran on boards 2 or 3 measured candidate + `-O3`. Affected
+verdicts: run #376 (`fw4`) and run #375 (`fwinline`) are both confounded - the 6,144 B heap figure
+belongs to `-O3`, not to the unroll, and `fwinline`'s -0.166 % is `fwinline+(-O3)` (which equals
+run #373's `o3bundle` reading exactly, i.e. it added nothing under -O3; clean at -O2 it is untested and
+re-queued). The accepted bundle's triple reading (batch 20260923T1145L) predates the -O3 edit and is
+unaffected. Fixed by restoring both workers and extending `.auto/board_config_check.sh` to hash
+`esp32/components/needle/CMakeLists.txt`, `esp32/main/CMakeLists.txt` and `.auto/bench.py` against main
+for all three boards (`BUILD_FILE_DRIFT`), because `sdkconfig` has had a drift guard since #300 while an
+edited CMakeLists had none. Standing rule: when two runs of *different* code agree on a number that is
+supposed to be incidental, suspect shared state before believing the agreement.
+
+**RUNNING: batch 20260923T1430L** - board 1 `silu4` (SiLU 4 elements per iteration, host 19/19
+byte-exact; the next point on the pairing curve that shipped +0.200 % at #290, on the phase with the
+most remaining non-GEMV mass), boards 2 and 3 clean `fw2` re-confirmations at -O2 after the withdrawal., each
 host-proven 19/19 byte-exact before any flash (the host compiles this same C, which is how the #363
 transcription class is caught without a board), one lever each, all bit-exact by construction because
 butterflies in one stage are disjoint pairs:

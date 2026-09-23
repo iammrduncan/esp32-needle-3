@@ -179,6 +179,37 @@ def device_mode(args):
                       f'of {len(CASES[group])} in group={group}; byte-exactness here '
                       f'covers these cases only, not the suite')
         for case in sel:
+            if os.environ.get("AUTO_REATTACH_EACH") or os.path.exists(".auto/diag_reattach_each"):
+                # DIAGNOSTIC for the mid-suite console wedge (#155, #345, #389-#395):
+                # the board stops answering at roughly the same POSITION in the suite
+                # regardless of candidate, image, board or request budget. Re-attaching
+                # per CASE separates per-connection state (USB CDC / our reader) from
+                # accumulated firmware state: if a fresh connection per case finishes
+                # all 20 cases, the wedge belongs to the connection and canonical runs
+                # get a workaround. Prompts, goldens, order and the firmware are
+                # untouched, so the metric itself is unaffected - this changes only
+                # session management. Note the group-boundary reconnect above already
+                # exists; this is the per-case version of it.
+                dev._reconnect()
+                dev._handshake(dev.request_timeout)
+                switch_think(dev, group == 'think')
+                print(f'NOTE reattach before case={case["id"]}')
+                # MEASURED WARNING (run #396): this path is NOT metric-neutral. With
+                # it on, the same accepted image read primary 5.1033 against 5.1167
+                # under canonical session management, i.e. -0.23 % = the size of the
+                # keep bar. Each extra attach makes the firmware emit a think-ack and
+                # a STATE line, and console emission is real CPU time on this part.
+                # Diagnostic only: NEVER use it for a speed verdict.
+            gap = float(os.environ.get("AUTO_CASE_GAP_S") or 0)
+            if gap:
+                # DIAGNOSTIC for the mid-suite wedge (#155,#345,#389-#396). Run #396
+                # excluded the connection: 17 fresh attaches, 16 cases, and it still
+                # wedged at the same position. Remaining split: console TX backlog
+                # (a throughput effect, so an idle gap drains it and the suite
+                # finishes) vs accumulated firmware state (a gap changes nothing).
+                # The firmware times its own decode, so an idle gap between requests
+                # cannot change decode_tps - this is metric-safe by construction.
+                time.sleep(gap)
             r = dev.complete(case['input'], phase=case['phase'])
             # A blank expectation means "any grammar-legal, successfully executed
             # call is fine"; an exact list must match name and arguments.

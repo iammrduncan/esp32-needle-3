@@ -1451,6 +1451,185 @@ static void bench_gdma(uint32_t bufsize)
 }
 #endif /* ND_KBENCH_GDMA */
 
+/* ---------------------------------------------------------------- exp27 ----- */
+/* Two screens that were missing at the moment they mattered.
+ *
+ * (1) WAKE LATENCY. rows_dual_core()'s comment in main.c prices the cross-core
+ *     handshake at ~15 us, but that was measured back-to-back with the worker hot.
+ *     nd_cq_prepare splits only ngroup = 8 FWHT groups, and run #343's per-call
+ *     timing put one prepare at 0.156 ms with ~12 prepares per decode token, so the
+ *     question "is a small job cheaper run serially on the calling core" is decided
+ *     entirely by what a *parked* worker costs to wake - a scheduler round trip
+ *     (~3.6k cycles at 15 us, so serial wins for an 8-unit job) or a tick (this is a
+ *     100 Hz build, ~2.4M cycles, so nothing small should ever be split at all).
+ *     Measure hot and parked, because the ledger's 15 us is only the hot case.
+ *
+ * (2) MULTI-ROW CURSOR. Run #333's first integrated build of the 4-bit row walker
+ *     diverged (5/17 byte-exact, token_delta 175) while measuring FASTER, because
+ *     nd_gemv4_rows_tie1()'s row epilogue re-stepped packed and norms that its word
+ *     loop had already advanced a whole row - and the isolation screen called the
+ *     kernel once per row, where the CALLER does that stepping, so no single-row
+ *     test could see it. This is the test whose absence cost that build: the range
+ *     kernel over R rows against R single-row calls, row for row, on real archive
+ *     bytes. Both forms build their nd_gemv4_ctx exactly as
+ *     gemv_rows_offset_asm() does, so a mismatch here is a kernel defect and not a
+ *     harness skew.
+ */
+#define KB_ROW_RDS  15u
+
+static volatile uint32_t s_kb_wake_sink;
+
+static void kb_wake_fn(void *vc, uint32_t a, uint32_t b)
+{
+    (void)vc;
+    s_kb_wake_sink += b - a;
+}
+
+static void bench_wake(void)
+{
+    static const uint32_t units[5] = { 2u, 4u, 8u, 16u, 64u };
+    uint32_t ser[5], hot[5], park[5];
+    size_t   u, r;
+
+    for (u = 0; u < 5u; u++) ser[u] = hot[u] = park[u] = 0xFFFFFFFFu;
+    for (r = 0; r < KB_ROW_RDS; r++) {
+        for (u = 0; u < 5u; u++) {
+            uint32_t n = units[u], c0, cy;
+
+            c0 = esp_cpu_get_cycle_count();
+            kb_wake_fn(0, 0, n);
+            cy = esp_cpu_get_cycle_count() - c0;
+            if (cy < ser[u]) ser[u] = cy;
+
+            c0 = esp_cpu_get_cycle_count();
+            nd_parallel_rows(kb_wake_fn, 0, n);
+            cy = esp_cpu_get_cycle_count() - c0;
+            if (cy < hot[u]) hot[u] = cy;
+
+            /* Let the worker block on s_go, then wake it with real work. */
+            vTaskDelay(pdMS_TO_TICKS(3));
+            c0 = esp_cpu_get_cycle_count();
+            nd_parallel_rows(kb_wake_fn, 0, n);
+            cy = esp_cpu_get_cycle_count() - c0;
+            if (cy < park[u]) park[u] = cy;
+        }
+    }
+    for (u = 0; u < 5u; u++)
+        printf("KB WAKE units=%u serial=%u split_hot=%u split_parked=%u "
+               "wake_hot=%u wake_parked=%u\n",
+               (unsigned)units[u], (unsigned)ser[u], (unsigned)hot[u],
+               (unsigned)park[u],
+               (unsigned)(hot[u]  > ser[u] ? hot[u]  - ser[u] : 0u),
+               (unsigned)(park[u] > ser[u] ? park[u] - ser[u] : 0u));
+}
+
+/* The 4-bit phi tensors: CQ, 4 bits, group 128, at least 8 output rows. */
+static int find_row4_tensor(nd_tensor *t)
+{
+    uint32_t i;
+
+    for (i = 0; i < s_c.n; i++) {
+        if (nd_cact_tensor(&s_c, i, t) != 0)
+            continue;
+        if (t->dtype == ND_DT_CQ && t->bits == 4u && t->group == 128u &&
+            t->shape[0] >= 8u && nd_cq_groups(t) >= 2u)
+            return (int)i;
+    }
+    return -1;
+}
+
+static void kb_row4(nd_gemv4_ctx *a, const uint8_t *packed, const uint16_t *norms,
+                    const float *xh, const float *cb, float *y, uint32_t row,
+                    uint32_t nrows, uint32_t rowbytes, uint32_t ngroup)
+{
+    a->packed0  = packed + (size_t)row * rowbytes;
+    a->norms0   = norms + (size_t)row * ngroup;
+    a->xh       = xh;
+    a->cb       = cb;
+    a->y0       = y + row;
+    a->ngroup   = ngroup;
+    a->g        = 128u;
+    a->rowbytes = rowbytes;
+    a->normstep = ngroup * 2u;
+    a->nrows    = nrows;
+}
+
+static void bench_rowrange(void)
+{
+    nd_tensor         t;
+    const uint8_t    *packed;
+    const uint16_t   *norms;
+    const float      *cb;
+    uint8_t          *blob_p = 0;
+    float            *xh = 0, *yr = 0, *yo = 0;
+    uint32_t          in_pad, ngroup, rowbytes, out, R, i, r;
+    uint32_t          bad = 0, first = 0xFFFFFFFFu, s = 0x5EED1234u;
+    nd_gemv4_ctx      a;
+
+    if (find_row4_tensor(&t) < 0) {
+        printf("KB ROWRANGE SKIP reason=no_4bit_group128_tensor\n");
+        return;
+    }
+    in_pad   = nd_cq_in_pad(&t);
+    ngroup   = nd_cq_groups(&t);
+    rowbytes = nd_cq_row_bytes(&t);
+    out      = t.shape[0];
+    packed   = (const uint8_t *)nd_cact_data(&s_c, &t);
+    norms    = (const uint16_t *)(const void *)(packed + (size_t)out * rowbytes);
+    cb       = nd_cact_codebook(&s_c, t.bits);
+
+    R = out < 24u ? out : 24u;
+    blob_p = (uint8_t *)heap_caps_malloc((size_t)t.nbytes, MALLOC_CAP_SPIRAM);
+    xh     = (float *)ND_ALLOC(sizeof(float) * in_pad);
+    yr     = (float *)ND_ALLOC(sizeof(float) * out);
+    yo     = (float *)ND_ALLOC(sizeof(float) * out);
+    if (!blob_p || !xh || !yr || !yo) {
+        printf("KB ROWRANGE SKIP reason=alloc out=%u in_pad=%u nbytes=%u\n",
+               (unsigned)out, (unsigned)in_pad, (unsigned)t.nbytes);
+        heap_caps_free(blob_p); heap_caps_free(xh);
+        heap_caps_free(yr); heap_caps_free(yo);
+        return;
+    }
+    memcpy(blob_p, packed, t.nbytes);
+    for (i = 0; i < in_pad; i++) {
+        s = s * 1664525u + 1013904223u;
+        xh[i] = 0.02f * (float)((int)(s >> 20) % 511) - 5.1f;
+    }
+    /* The three chunk sizes a caller can legitimately hand the kernel: one row
+     * (what the isolation screen did), a half split, and a whole one-core sweep.
+     * The comparison is always range-form against R single-row calls. */
+    {
+        uint32_t chunks[3] = { 1u, (R / 2u) ? (R / 2u) : 1u, R };
+
+        for (i = 0; i < 3u; i++) {
+            memset(yr, 0x5a, sizeof(float) * out);
+            memset(yo, 0xa5, sizeof(float) * out);
+            kb_row4(&a, blob_p, norms, xh, cb, yr, 0u, R, rowbytes, ngroup);
+            nd_gemv4_rows_tie1(&a);
+            for (r = 0; r < R; r++) {
+                kb_row4(&a, blob_p, norms, xh, cb, yo, r, 1u, rowbytes, ngroup);
+                nd_gemv4_rows_tie1(&a);
+            }
+            for (r = 0; r < R; r++)
+                if (memcmp(&yr[r], &yo[r], 4) != 0) {
+                    if (bad == 0) first = r;
+                    bad++;
+                }
+            printf("KB ROWRANGE out=%u in_pad=%u ngroup=%u rowbytes=%u chunk=%u "
+                   "rows=%u mismatch=%u",
+                   (unsigned)out, (unsigned)in_pad, (unsigned)ngroup,
+                   (unsigned)rowbytes, (unsigned)chunks[i], (unsigned)R,
+                   (unsigned)bad);
+            if (bad) printf(" first_r=%u ref=%.9g got=%.9g",
+                            (unsigned)first, yo[first], yr[first]);
+            printf("\n");
+            bad = 0;
+        }
+    }
+    heap_caps_free(blob_p); heap_caps_free(xh);
+    heap_caps_free(yr); heap_caps_free(yo);
+}
+
 int kbench_run(void)
 {
     const esp_partition_t      *part;
@@ -1535,6 +1714,8 @@ int kbench_run(void)
 #endif
     bench_div();
     bench_gather();
+    bench_wake();
+    bench_rowrange();
 
     for (i = 0; i < KB_NSHAPES; i++)
         bench_shape(&SHAPES[i]);

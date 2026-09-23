@@ -8,10 +8,15 @@ to a board that is already booted and primed (a profiled image - no reflash need
 makes the reader echo lines instead of swallowing them, and runs one tools request and
 one route request through the real API call path.
 
-Run #158's caveat still applies: prof_dump() does not zero nd_prof, so every dump is
-cumulative over the boot bench plus all requests so far in this boot. Read the dump for
-`sample`/`logits4` (which the bench cannot produce at all) and take the difference
-between two dumps for a per-request increment.
+CRITICAL READING RULE (this cost three mis-readings: #158, #166's 5.7 ms, and this
+cycle's "3.8 ms projection"): prof_dump() does NOT zero nd_prof, and it divides the
+CUMULATIVE total by the CURRENT request's token count. So a phase's printed number is
+not that request's per-token cost - it is (bench + every request so far) / this
+request's tokens, which grows monotonically and can exceed the token itself. Only the
+per-call lines this harvester prints (EVT lg4, EVT emit) are immune; sum those per
+request with the awk recipe in .auto/prof_harvest.sh. Anything read off the phase
+table must be differenced against the previous dump AND multiplied by that dump's
+token count to recover an increment.
 
 Usage, inside `needle-board run N` so $SERIAL_PORT is this board's console:
     python3 .auto/prof_request.py "tools prompt" "route prompt"

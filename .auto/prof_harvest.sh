@@ -30,7 +30,9 @@ rm -rf esp32/build-prof                 # a poisoned cache cannot be reconfigure
 grep -q -- '-DND_PROFILE' esp32/build-prof/compile_commands.json || {
     echo PROFILE_FLAG_MISSING; exit 1; }
 ( cd esp32 && idf.py -B build-prof -p "$FLASH_PORT" flash ) >> "${LOG}.build" 2>&1
-echo "PROFILED_FLASH_OK bin=$(md5sum esp32/build-prof/needle3.bin | cut -c1-12)"
+# The app binary is named after the project (needle_demo.bin), not needle3.bin -
+# hard-coding the old name made this line print an empty hash on every run.
+echo "PROFILED_FLASH_OK bin=$(md5sum esp32/build-prof/*.bin | awk '{print substr($1,1,12)}' | tr '\n' ',')"
 
 # The request-path table is NOT in measure.sh's log: serial_api.Device's complete()
 # reads with _line_quiet(), which swallows the EVT prof block printed after EVT done.
@@ -39,6 +41,14 @@ sleep 45                                 # let the priming finish after the flas
 .venv/bin/python .auto/prof_request.py \
     "What is the heap high water mark and the current sampling interval?" \
     "Translate good morning into German" > "$LOG" 2>&1 || true
-grep -E '^###|EVT done|EVT cands|EVT prof (sample|logits4|whole block|attn-stage|proj2bit|prep|tok-)|ERR ' \
+# EVT lg4 / EVT emit are the per-call lines the split and emit diagnostics print.
+# They MUST be in this filter or the lane log shows only the (cumulative) phase
+# table and the whole run looks like it produced nothing - the data is in $LOG,
+# but a lane is read through its lane log. Sum them per request with:
+#   awk '/^### request/{if(n)printf "%s calls=%d prep=%.2f gather=%.2f\n",tag,n,p,g; tag=$0;n=0;p=0;g=0}
+#        /EVT lg4/{n++;for(i=1;i<=NF;i++){if($i~/^prep=/){split($i,a,"=");p+=a[2]}
+#                              if($i~/^gather=/){split($i,b,"=");g+=b[2]}}}
+#        END{if(n)printf "%s calls=%d prep=%.2f gather=%.2f\n",tag,n,p,g}' "$LOG"
+grep -E '^###|EVT done|EVT cands|EVT lg4|EVT emit|EVT prof (sample|logits4|whole block|attn-stage|proj2bit|prep|tok-)|ERR ' \
     "$LOG" || true
 echo "HARVEST_DONE board=$BOARD"

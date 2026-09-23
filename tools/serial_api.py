@@ -218,6 +218,32 @@ class Device:
             print(line, flush=True)
         return line
 
+    def drain_stale(self, window=1.0):
+        """Discard console bytes that arrived before we asked anything.
+
+        The firmware has no request/response framing (see _request_state), so any
+        line still sitting in the queue when a request or toggle is written will be
+        read back as the START of this reply - or, for a toggle, echoed as a torn
+        line the REPL never answers. bench.py runs its whole suite on one attach, so
+        one extra/missing `END` shifts EVERY later case by one: measured in run #345
+        a route prompt came back answered with tools-schema calls its own grammar
+        forbids, and with this drain the same three prompts answered their own schema
+        (run #346). Draining with reads - not reset_input_buffer, which only clears
+        bytes nobody has read yet - before the write cannot touch our own answer,
+        because it has not been asked for yet. Returns lines dropped; the caller
+        warns when nonzero so a desync cannot pass as a clean run.
+
+        A fixed window, deliberately: settle-to-quiet (quiet=1.5 s, budget=8 s) was
+        tried on the same suite in run #346 and regressed it - 17 cases and a request
+        timeout instead of 20/20 - so keep this short and let the toggle pay it.
+        """
+        dropped, deadline = 0, time.monotonic() + window
+        while time.monotonic() < deadline:
+            if not self.serial.readline():
+                break
+            dropped += 1
+        return dropped
+
     def _line_quiet(self):
         """A read whose reply is ours, not the caller's boot log."""
         log_open, self._log_open = self._log_open, False
@@ -227,6 +253,14 @@ class Device:
             self._log_open = log_open
 
     def _set_think(self):
+        # Same reason complete() drains: the toggle's ack is read by a DIFFERENT
+        # reader (bench.py's switch_think waits for `EVT think=`), and an undrained
+        # tail from the previous answer is what made that ack "missing" (run #345's
+        # enlarged suite) - so the mode never got set and the think number silently
+        # measured the constrained path instead. One guard here covers every caller.
+        stale = self.drain_stale()
+        if stale:
+            print(f"WARN drained {stale} stale line(s) before the think toggle")
         self.serial.write(f"!think {int(self.think)}\n".encode())
         self.serial.flush()
 
@@ -249,6 +283,12 @@ class Device:
             raise ValueError("unknown inference phase")
         with self.lock:
             self._require_ready()
+            stale = self.drain_stale()
+            if stale:
+                # Loud, not silent: a nonzero count means the last response was not
+                # drained, which is exactly how run #345's cases answered the wrong
+                # schema. Surfaces in bench.py's log instead of shifting the suite.
+                print(f"WARN drained {stale} stale line(s) before this request")
             start = time.monotonic()
             self.serial.write((b"!route " if phase == "route" else b"") + prompt.encode() + b"\n")
             self.serial.flush()

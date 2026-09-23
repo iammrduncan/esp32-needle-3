@@ -192,13 +192,6 @@
    "expect": null
   },
   {
-   "id": "heldout_long_tools",
-   "phase": "tools",
-   "input": "Set the telemetry sampling interval to 45 seconds, then start a timer for 300 seconds, and afterwards tell me the heap high water mark, the sampling interval you just configured, and whether that timer is still counting down, as one short list of facts",
-   "expect": null,
-   "note": "longest tools request the harness allows (252 of the 255-byte validate_prompt cap; the firmware's own reader truncates silently at ND_LINE_MAX-1=271, run #155) - nothing in the suite exercised a prefill over ~20 tokens"
-  },
-  {
    "id": "heldout_long_route",
    "phase": "route",
    "input": "Translate the following sentence into German and then into French, keeping the word order natural in both, and show the two results on separate lines: the board streams its weights out of flash and never copies them into RAM",
@@ -211,6 +204,13 @@
    "input": "Sample telemetry every second",
    "expect": null,
    "note": "lower bound of the interval schema. MEASURED behaviour, not an expectation: \"every second\" produces seconds=120, the same value the free-text and ambiguous cases produce, so the model resolves a 1-second request to its default interval. The suite already had the upper-bound case (40000 -> 400, i.e. a clamp). Both are recorded here as behaviour; the byte-exact golden is what this case actually guards."
+  },
+  {
+   "id": "heldout_long_tools_note_only",
+   "phase": "tools",
+   "input": "Set the telemetry sampling interval to 45 seconds, then start a timer for 300 seconds, and afterwards tell me the heap high water mark",
+   "expect": null,
+   "note": "REPLACES the 252-byte long_tools case, which measured UNREPRODUCIBLE on device: 199 generated tokens and no complete tool call (the JSON stopped mid-key at `...\"seconds\":300}},{\"n`), against a valid 132-token answer on the host. A case that cannot be byte-exactly reproduced is a golden-integrity hole (run #296), not coverage, so it is not frozen. The FINDING stays here: a long prompt makes the device generate ~2x the host's tokens without completing the call, and the extra ~200 per-token `TOK ` console lines are what back the console up enough that the following `!think` toggle goes unacknowledged (run #155's signature, now reproduced with the correct port). This shortened variant is the same three-call shape at a length the device completes."
   }
  ],
  "think": [

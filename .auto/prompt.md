@@ -39,6 +39,34 @@ load GEMV4 assembly, forced-inline C `dot_group`, and the wide-load register-
 fill-order/correctness probe or corrected wide-load kernel. Do not allocate an
 unchanged-control lane for this discovery batch.
 
+## PERFORMANCE WORK CONTINUES -- OPERATOR DIRECTIVE 2026-09-23
+
+The owner explicitly rejects the later self-declared "stop condition" and wants
+continued performance experimentation. Run #345/#346 closes the response-pairing,
+generation-limit, think-ack, and expanded-golden work. Preserve that completed
+fix once, then stop expanding prompts, goldens, verification machinery, canonical
+readings, or measurement-authority prose unless a concrete performance candidate
+cannot be measured without a fix. Correctness work is not the active research
+objective now.
+
+Keep all three boards occupied by **distinct performance hypotheses**. If an
+end-to-end candidate is not ready, run a focused device microbenchmark or ABI/
+instruction probe for that lane; an idle board is not acceptable while a
+measurable hypothesis exists. Start the next three lanes immediately. High-value
+directions include independent scheduling/fusion experiments around the dominant
+CQ2 work: (A) fuse or concurrently schedule the engram key/value CQ2 projections,
+(B) batch/interleave independent Q/K/V/gate CQ2 projections across cores instead
+of paying sequential barriers, and (C) test a multi-row/two-stream CQ2 assembly
+schedule that can hide PSRAM latency or amortize row overhead. These are starting
+directions, not analytical closures: screen them on real archive bytes, enforce
+bit equality, and replace a disproven lane with a new performance hypothesis.
+
+Do not declare the campaign complete merely because the current phase table is
+attributed or a predicted gain is below the old 0.2% bar. Measurement, not prose,
+retires a runnable idea. Within ten minutes of reading this directive, either
+three board jobs must be live with non-empty logs, or the log must name a concrete
+per-lane build/hardware blocker and immediately substitute another experiment.
+
 The accepted shipping image is **5.0117 decode tok/s** on the frozen workload, with 17/17 device
 and 16/16 host byte-exact output, token delta 0, fidelity 5.341e-05, top1 10/10, extended 4.9390,
 think 3.93, prefill 5.2867, min case 4.79, and 15,215 bytes internal free. The speed crossing came

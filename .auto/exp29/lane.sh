@@ -12,7 +12,7 @@ set -uo pipefail
 
 L=${1:?usage: lane.sh 1|2|3}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-BD=build-e29-${EXP30:-0}-$L   # separate dir per experiment: a reused CMakeCache
+BD=build-e29-${EXP30:-0}${EXP31:-0}${EXP32:-0}-$L   # separate dir per experiment: a reused CMakeCache
                                    # silently re-flashes the previous image
 OUT=${LANE_OUT:-/tmp/e29-lane$L-board${NEEDLE_BOARD:-?}.log}
 WIN=${KB_WINDOW:-200}
@@ -23,7 +23,7 @@ WIN=${KB_WINDOW:-200}
     cd "$ROOT/esp32" || exit 1
     rm -rf "$BD"
     idf.py -B "$BD" -DNEEDLE_KBENCH=ON -DND_KBENCH_ASM=ON -DND_KB_LANE="$L" \
-         -DND_KB_EXP30="${EXP30:-0}" -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
+         -DND_KB_EXP30="${EXP30:-0}" -DND_KB_EXP31="${EXP31:-0}" -DND_KB_EXP32="${EXP32:-0}" -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
     rc=$?
     echo "build_rc=$rc"
     [ $rc -ne 0 ] && { grep -E "error:|Error" "$OUT.build.log" | head -10; exit 1; }

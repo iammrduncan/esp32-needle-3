@@ -77,4 +77,10 @@ if(NEEDLE_KBENCH)
     # buildable from the same tree byte-for-byte.
     set(ND_KB_EXP30 "0" CACHE STRING "Run the Experiment 30 lane instead of Experiment 29")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP30=${ND_KB_EXP30})
+
+    set(ND_KB_EXP31 "0" CACHE STRING "Run the Experiment 31 lane instead")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP31=${ND_KB_EXP31})
+
+    set(ND_KB_EXP32 "0" CACHE STRING "Run the Experiment 32 lane instead")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KB_EXP32=${ND_KB_EXP32})
 endif()

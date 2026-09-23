@@ -2374,3 +2374,40 @@ temperature timing retune on this flash model with `ESP_ERR_NOT_SUPPORTED`, #331
 RAM (+8,248 B, #293) now has no collectable buyer, because the residency idea it was meant to fund was
 shown to need 3.59 MB/token against a flat 13.90 % tax (#330). What is left for this loop is coverage,
 gate hardening, and honest disclosure runs.
+
+## Ranked runnable queue after Experiment 31 (pipeline discipline: 3 active + next 3)
+
+ACTIVE (batch 20260923T0606L, one per board, all bit-exact by construction):
+- **31A** shipping's 1:1 tier mapping vs a packed use-ordered layout, same bytes,
+  same buffer class, real q/k/v/gate bytes, plus the archive gap table between the
+  four tensors. This is the integration gate on run #350's +0.89 %: if the archive
+  places them contiguously the win evaporates and the layout family closes; if
+  there are gaps, packing is worth pricing end to end.
+- **31B** attention P.V accumulate, dim-major vs the shipped position-major
+  read-modify-write, verified cell-by-cell. ~15 ms/token is the largest unmeasured
+  sub-block inside the 35.3 ms head split.
+- **31C** `nd_cq_prepare` split into copy / FWHT / scale / whole-call. Run #344
+  priced the call at 0.156 ms and ~2 cycles/op but never split it, so the TIE-FWHT
+  idea had no denominator. This says whether it has one.
+
+NEXT THREE (prepared, each gated on an active-lane number):
+4. **Packed use-ordered tier (integration).** Only if 31A shows >=0.3 %. Design is
+   already understood: replace the one big span memcpy with a per-tensor copy into
+   64 B-aligned packed offsets plus a small {archive_off, nbytes, psram_off} table
+   that `nd_tier_ptr` binary-searches. It is memory-POSITIVE: the packed copy is
+   the tier's 7,848,512 B of content, not the 12 MB span, so it frees ~4 MB PSRAM.
+   Copy order becomes the per-token read order, which is the part #206's
+   "copy order does not matter" never tested (it permuted the copy, not the layout).
+5. **TIE/vector FWHT in `nd_cq_prepare`.** Only if 31C says the FWHT is the
+   majority of the call. Butterflies are add/sub in a fixed order, so a vectorised
+   version is bit-exact; wide float loads on aligned fp32 arrays are exactly the
+   case #335's nibble-identity defect does NOT touch (that was the 2-bit decoder).
+6. **P.V accumulate integration.** Only if 31B shows >=2 % on the phase.
+
+RESERVED, above bar but not this loop's decision:
+- **phi 4-bit row residency** - measured ceiling +9.3 % of ~8.3 ms = ~+0.39 %,
+  needs ~18 KB/core against 14,903 B of internal heap, so it waits on the owner's
+  assertion-level decision (#293, +8,248 B).
+- **sigmoidf_pair ND_HOT** - measured +0.18 % mean over three readings, zero
+  per-variant board spread, -768 B; needs the bar moved to 0.15 % (#336/#342).
+- **120 MHz octal memory** - +3.51 %, vendor-blocked (#331) and forbidden.

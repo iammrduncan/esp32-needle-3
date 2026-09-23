@@ -23,7 +23,7 @@ WIN=${KB_WINDOW:-200}
     cd "$ROOT/esp32" || exit 1
     rm -rf "$BD"
     idf.py -B "$BD" -DNEEDLE_KBENCH=ON -DND_KBENCH_ASM=ON -DND_KB_LANE="$L" \
-         -DND_KB_EXP30="${EXP30:-0}" -DND_KB_EXP31="${EXP31:-0}" -DND_KB_EXP32="${EXP32:-0}" -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
+         -DND_KB_EXP30="${EXP30:-0}" -DND_KB_EXP31="${EXP31:-0}" -DND_KB_EXP32="${EXP32:-0}" -DND_KB_EXP33="${EXP33:-0}" ${KBDEFS:-} -DNEEDLE_PROFILE=OFF build > "$OUT.build.log" 2>&1
     rc=$?
     echo "build_rc=$rc"
     [ $rc -ne 0 ] && { grep -E "error:|Error" "$OUT.build.log" | head -10; exit 1; }
@@ -32,7 +32,7 @@ WIN=${KB_WINDOW:-200}
     # that really is in the image (run #347 false alarm; the map has .text.bench_fused
     # and the console prints KB FUSE, which is the stronger evidence anyway: a probe
     # is verified by its output, not by symbol presence).
-    NB=$(xtensa-esp32s3-elf-nm "$BD/needle_demo.elf" 2>/dev/null | grep -c bench_fused || true)
+    NB=$(xtensa-esp32s3-elf-nm "$BD/needle_demo.elf" 2>/dev/null | grep -c "${SYM:-bench_fused}" || true)
     [ "$NL" = 0 ] && NL=$(grep -o "ND_KB_LANE=$L" "$BD/project_description.json" | wc -l)
     echo "lane_macro_on_compile_line=$NL bench_fused_in_elf=$NB"
     img="$BD/needle_demo.bin"

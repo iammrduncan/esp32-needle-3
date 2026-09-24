@@ -77,15 +77,25 @@
  * separate stream from the index stream, and NF16 sits at the bottom of every
  * group, so its load latency lands as a bubble between groups. */
 	.macro	NF16V v, fpd, t1, t2
-	extui	\t1, \v, 10, 5
-	extui	\t2, \v, 15, 1
-	extui	\v,  \v, 0, 10
-	slli	\v,  \v, 13
-	addi	\t1, \t1, 112
+	/* FP16 -> FP32 for a POSITIVE ORDINARY halfword, five instructions instead
+	 * of ten. Moving exponent and mantissa together with one shift and adding
+	 * exact: adding the bias difference (127 - 15 = 112, i.e. 0x38000000) into
+	 * the exponent field gives (h<<13) + 0x38000000 == ((e+112)<<23)|(m<<13),
+	 * i.e. the value 2^(e-15) * 1.m that the halfword means. Exact because m<<13
+	 * cannot carry into the exponent field, and e+112 stays in 113..142 - clear
+	 * of the 255 that would be infinity.
+	 * The sign bit must be zero or it lands in the exponent - nd_lut2_asm_ok()
+	 * checks that, plus exponent 1..30, per tensor, once, memoised. Verified
+	 * over all 65,536 encodings in .auto/exp80/test_rebias.c: on the 30,720
+	 * in-domain halfwords these bits equal the old ten-instruction result and
+	 * the true IEEE value (h=0x3c00 -> 0x3f800000); everywhere they differ the
+	 * predicate rejects the halfword. The old form split the fields
+	 * (extui/extui/extui) and rejoined them with two ors, which is where the
+	 * five extra instructions went. */
+	movi	\t1, 112
 	slli	\t1, \t1, 23
-	slli	\t2, \t2, 31
-	or	\v,  \v, \t1
-	or	\v,  \v, \t2
+	slli	\v,  \v, 13
+	add.n	\v,  \v, \t1
 	wfr	\fpd, \v
 	.endm
 

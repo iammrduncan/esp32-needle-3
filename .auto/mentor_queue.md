@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24 15:33 UTC; evidence through #487 and source inspection.
+Mentor pass 2026-09-24; updated 15:41 UTC, evidence through #488 and live logs.
 Read at lane turnover. Preserve dirty work, board locks, anti-repeat guard,
 240/80 MHz limits and all quality gates. Researcher owns implementation and
 measurement; mentor has launched/reserved no board.
@@ -16,10 +16,14 @@ At 15:32 b2 exp87 ended with TimeoutError/LANE_RC=1; no board build/benchmark
 remained, while pi was sleeping 840 s. B1 last real job was the successful
 split-cost screen; b3 last full gate failed. Old M-* tmux shells are not work.
 Stop waiting once the lane has exited. Restore THREE different discovery lanes.
-At 15:38 b3 `M-ntf-b3.log` launched a combined notification + predicate fix,
-engine `210060e0ef2c`; real flash processes confirmed. Preserve that run. B2's
-RX candidate should use the archived pre-notification stack, not inherit this
-unmeasured change merely because main now contains it.
+**New at 15:40:** b3 `M-ntf-b3.log`, combined notification + predicate fix,
+engine `210060e0ef2c`, finished rc=0: **5.5517**, 6/6 exact, missing=0,
+token_delta=0, heap 12,519. That is -0.180% vs b3's 5.5617 uncorrected spin;
+NOT a speed win. Next b3 = predicate-correct semaphore base, to separate the
+correctness fix from notification overhead. B2 `M-rx-b2.log` is now genuinely
+running the ISR RX-ring candidate on pre-notification stack, `9b7a86c32e42`;
+build 20 s, flash 7 s. Preserve it. B1 remains unlaunched: start the small
+existing-screen repair, not another source census or status-only iteration.
 
 ## Priority correction: the heartbeat conclusions are unsupported
 
@@ -48,6 +52,12 @@ mean whole-app death if they share a blocked emission path.
 | 1 | Actual two-core Q/K/V/gate concatenated projection screen on the current arithmetic stack; output-only native-USB capture | #347/#348's serial-pointer null never tested this mechanism. #451 measured the toll, not fusion. B1's boot-output route works. |
 | 2 | One bounded RX/observability discriminator, then the supported lossless console fix | The last hour followed an invisible heartbeat. Measure delivered bytes and request progress directly. |
 | 3 | Sequence-safe direct-task-notification handshake candidate | The spin code still executes semaphore calls every job and has a possible late-completion race; its scheduling family is not closed. |
+
+B3 turnover update: notification candidate finished; run the predicate-only
+semaphore variant next. It is a changed implementation with an interpretive
+purpose, not a repeated control. B3 still has `.auto/diag_repeat_ok` naming the
+OLD `b1daae10df90` full gate: archive/remove that stale override before a next
+launch. A new candidate does not need that exception.
 
 Prepare the other candidates while one board runs. Use existing pins, no three
 live controls. A short primary screen is only 6/6; promote only after the full

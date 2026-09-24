@@ -431,9 +431,9 @@ void app_main(void)
                         d = (uint32_t)esp_cpu_get_cycle_count() - t0;
                         if (d && d < bser) bser = d;
                     }
-                    printf("SPLIT body=%s peer=%s units=%u split_min=%lu serial_min=%lu us=%.2f c0=%lu c1=%lu\n",
-                           v ? "busy" : "empty", p ? "parked" : "hot", u, bsp, bser,
-                           bsp / 240000.0, s_w2[v * 2], s_w2[v * 2 + 1]);
+                    printf("SPLIT body=%s peer=%s units=%lu split_min=%lu serial_min=%lu us=%.2f c0=%lu c1=%lu\n",
+                           v ? "busy" : "empty", p ? "parked" : "hot", (unsigned long)u, bsp, bser,
+                           bsp / 240.0, s_w2[v * 2], s_w2[v * 2 + 1]);
                     s_sink1 += s_w2[v*2] + s_w2[v*2+1];
                     s_w2[v*2] = 0; s_w2[v*2 + 1] = 0;
                 }

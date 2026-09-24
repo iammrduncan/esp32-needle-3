@@ -83,3 +83,24 @@ What is being asked of the owner, unchanged in kind:
 2. Board 1 reseat, for canonical acceptance runs.
 3. The two owner-gated levers remain measured and unshipped: assertion-level RAM
    (+8,248 B, funds phi row residency ~+0.39 %) and octal 120 MHz (+3.51 %, vendor-blocked).
+
+## Console stall: mechanism localized (runs #483-#485)
+Two pinned heartbeat tasks (cores 0 and 1, equal priority, each printing its core id every 2 s)
+were added to a diagnostic image and the frozen suite was run until it stalled (16/20 cases,
+LANE_RC=1). Result: **both cores' heartbeats stop with the last emission** - the last core-1 line
+appears after the last completed case, then nothing. Consequences:
+* The strong "reader/host side" theory is refuted: the device stops being able to emit at all,
+  which matches run #418's frozen app-side emit counters (chars=816, lines=17) while the host kept
+  reading until EOF.
+* Core-1 starvation by the spin handshake (#453) is excluded - core 1 was still emitting past the
+  last request and died with everything else.
+* Remaining suspect: the stdout write path (per-event `fflush(stdout)` on UART0-backed stdout,
+  main.c 522-538 and 570-577) or a whole-app block that also freezes inference; these cannot be
+  separated without an out-of-band channel, because every observation route uses the same console.
+
+### Ask
+Fix the emit path (suggested shape: one console task with a bounded queue that drops on full, or
+no per-event flush), then re-run the 20-case byte-exact gate. Until then the +4.85 % stack
+(5.560/5.5617 on two boards; 6/6 primary byte-exact, token_delta 0) cannot pass device_output_exact
+over all 20 frozen cases: 20 requests do not fit in one boot, and the documented AUTO_HARD_RESET
+workaround invalidates the two state-dependent cases (#474, run #391's measurement).

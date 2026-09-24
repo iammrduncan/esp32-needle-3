@@ -13,7 +13,20 @@ ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
 speed/timer interaction, NOT solely the unaccepted stack; open question for
 mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
 (loop-form axis closed), #635 composition cross-board confirmed.
-LIVE at 23:42: b1 FULL 20-case gate of the SHIPPABLE-BASE composition (bundle5+B4W+DOT8W+SELRES+ring, engine 177bd44997fa, primary read 5.4067=+1.952 pct on the ACCEPTED base #638; full gate uses the documented repeat allowance with reason; log M-b1cmpG.log). b2+b3 idle carrying the seed-era composition (10c74c756ee5, 5.7467 two-board, capture green #637). b1 = late-ring accepted stack (803f6fe390e3,
+ALL IDLE at 23:48 - both acceptance trees FULLY GATED:
+- SHIPPABLE BASE (#639): bundle5 + attention family + RX ring = 5.4083
+  (+1.973 pct), ext 5.3377 (+2.12 pct best on accepted base), think 4.26,
+  min 5.20, ALL 20 cases complete (ring holds), 18/20 delta 52 = only the
+  two demo-timer goldens, host 19/19, heap 5679. Tree lives on b1
+  (177bd44997fa). ONE-COMMIT path if owner disposes the pair.
+- SEED-ERA (#635/#637): 5.7467 two-board + capture green. Lives on b2+b3
+  (10c74c756ee5).
+Owner owes: disposition of heldout_interval_one + heldout_long_tools_note_only
+(device-only, timer-state-dependent, pass on host in every image since #589).
+Campaign discovery state: attention family converged (width 4 PV / 8 QK,
+pairing, selective rescale, counted-loop and A3-fusion forms closed); no
+engineer-side candidate above 0.2 pct remains inside the documented maxima.
+Next: hourly mentor refresh; pool stays idle-clean meanwhile. b1 = late-ring accepted stack (803f6fe390e3,
 ring + B4W on bundle5: 20/20 cases complete, primary 5.365 = +1.163 pct on the
 ACCEPTED base, 18/20 delta52 same frozen pair). b2+b3 = confirmed composition
 (10c74c756ee5, 5.7467 both boards, gate done #635). PV-COUNT #636 DISCARDED

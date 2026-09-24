@@ -2864,3 +2864,24 @@ instead it is the third independent confirmation of #292's rule (after #292 itse
 a branch around `nd_expf_pair` costs more than the Horner latency it recovers, even in a loop as
 small as a 4x4 Sinkhorn sweep. The exp-pairing family is finished - attention softmax, attention
 gate, SiLU and the conditioning softmax are paired or too small to matter.
+
+## asmemo: the per-call eligibility walk was worth +2.20 % (runs #436-#437)
+
+`lut2_asm_usable` remembered ONE `(blob, rows)` verdict; a decode token visits 44 distinct field
+blobs, so `nd_lut2_asm_ok` re-walked its norms before nearly every projection - 130,560 immutable
+PSRAM halfword reads per token, on the calling core, before any row was dispatched. Memoised per
+tensor (64 open-addressed slots, key blob+rows+ngroup+g, cleared by `nd_model_close`):
+
+* board 2 **5.4200**, board 1 **5.4200** - identical to the digit, zero board spread;
+* prefill 5.7167 (+2.27 %), `min_case` 5.17, `gen_tokens` 99, `internal_free` 12,103 (-1,264 B).
+* Not yet accepted: a 20-case gate session is running on board 3. Bundle with `fusion-r5`
+  (+0.660 %, independent mechanism) is the next measurement after acceptance.
+
+Two lessons that generalise. (1) A census of *call relocations* is not a census of *per-call work*:
+the campaign's "library-call surface exhausted" conclusion was right about calls and blind to a walk
+inside a wrapper, and the kbench screens selected their function pointer outside the timing loop, so
+no isolated number ever contained the cost. Price a wrapper, not just a kernel. (2) A negative grepped
+from a summary is not a fact - the mentor read the wrapper's source. And the two closures this window
+retired (the 23-cycle scheduler floor, and "sub-bar levers cannot compose further") were both cited
+for months; the first because `kbench` never installs `nd_parallel_rows`, the second because
+bundle5 beat the sum of its parts.

@@ -3037,3 +3037,17 @@ Base = board2/esp32/main/main.c (has the late lossless RX ring, builds clean). I
 5. Only then write .auto/expect_engine_md5 from the built tree and run ONE 20-case session.
 Expected: decode ~5.58 without the trace; 20/20 byte-exact once the owner settles
 heldout_interval_one + heldout_long_tools_note_only (diverge on both boards, demo-timer state).
+## Closed at the post-notification stack (runs #558, #564) — do not re-screen
+
+* Split granularity: `rows_dual_core` guard `half < 2` -> `< 1` read 5.5817 vs 5.58 (neutral).
+  `nd_model.c` has exactly one threshold (`n >= 512`, already splits the n=768 emit); the
+  prepared de-split variant has the opposite predicted sign post-spin and stays unrun.
+* Spin budgets: `ND_CALLER_SPIN` 600 -> 2000 read 5.58 vs 5.58 (neutral). Both axes are now
+  bracketed: after spin+lean notifications the residual handshake cost is the notification path
+  itself, and these work units are too small for either knob to matter. Any further scheduling
+  work must change WHICH loops are co-scheduled, not wait-loop parameters or unit size.
+* `make capture` is still owed on the acceptance tree. Constraint found while checking:
+  `make capture` runs `demo/capture.py`, which drives the model through `needle-api` on
+  127.0.0.1:8081 - i.e. the single-board `/dev/ttyACM*` aliases (board 1), so capturing the
+  acceptance image means installing that tree on board 1 first, not pointing the target at a
+  worker. Do that as a deliberate baseline change on board 1, never as a splice.

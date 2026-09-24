@@ -6,6 +6,13 @@ This section is the source of truth for choosing work. It overrides older
 "converged", "verification only", and "nothing left" notes elsewhere in the
 repository. Read `.auto/mimimodel-experiments.md` completely before editing.
 
+The hourly senior mentor maintains `.auto/mentor_queue.md` as a live source of
+outside research, novel experiment ideas, and priority changes. Read it at every
+lane turnover and incorporate its strongest runnable directions into the active
+queue. It does not cancel an experiment already building or running, and measured
+evidence may override it, but do not silently ignore it: record why a suggested
+direction was selected, deferred, transformed, or retired.
+
 ## CURRENT STATE AND QUEUE -- 2026-09-23T12:35Z (runs #375-#382)
 
 **Accepted runtime: 5.1050 decode tok/s (+109.1 %)** - run #379: two FWHT groups transformed in one

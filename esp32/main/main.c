@@ -62,9 +62,7 @@ static nd_prefix *s_prefixes[2];
  * read disjoint weight slices and write disjoint outputs, so no locking is
  * needed beyond the start/done handshake. */
 
-static TaskHandle_t s_worker;                      /* created by worker_start */
-static volatile TaskHandle_t s_waiter;             /* who issued the current job */
-enum { s_notify = 1 };                             /* notifications, not semaphores */
+static SemaphoreHandle_t s_go, s_done;
 /* Run #452: the semaphore is kept for the SLEEPING case only. Measured on device
  * (one nd_parallel_rows split, helper really is rows_dual_core, board 1, boot
  * capture): a give/take round trip costs 3,973 cycles with the peer already
@@ -79,9 +77,8 @@ enum { s_notify = 1 };                             /* notifications, not semapho
  * Ordering is the whole hazard, so the payload is published BEFORE the sequence
  * number and everything the peer reads is volatile; a compiler barrier keeps the
  * stores on that side. Correctness does not depend on the spin at all: the worker
- * signals a task notification after every job, but correctness comes from the
- * caller rechecking s_done_seq after EVERY wake, so a lost or late signal can
- * only delay the release, never cause an early one or re-run a dead descriptor. */
+ * still gives s_done after every job, and the caller drains any stale token
+ * before publishing so a binary semaphore can never be pre-accounted. */
 static volatile nd_row_fn s_fn;
 static volatile void     *s_ctx;
 static volatile uint32_t  s_r0, s_r1;
@@ -96,13 +93,6 @@ static volatile uint32_t  s_seq, s_done_seq;
 static void worker_task(void *arg)
 {
     uint32_t seen = 0;
-        /* ND_NOTIFY: completion is the SEQUENCE predicate, never the wake source.
-     * A semaphore give can land after the caller already observed s_done_seq,
-     * and that stale token then satisfies the NEXT job's blocking take while
-     * that job is still running - so the waiter loop below rechecks s_done_seq
-     * after every wake and the notification is only a hint. Signalling moves to
-     * task notifications (one sender per direction, pdTRUE = clear on take, so
-     * there is no stale-token class left to drain). */
     for (;;) {
         uint32_t spin = 0;
         while (s_seq == seen && spin++ < ND_WORKER_SPIN)
@@ -111,12 +101,14 @@ static void worker_task(void *arg)
             seen = s_seq;
             s_fn((void *)s_ctx, s_r0, s_r1);
             s_done_seq = seen;
-            if (s_notify) xTaskNotifyGive(s_waiter);
-            /* Nothing to drain: the notification is cleared by the waiter's own
-             * take (pdTRUE) and the waiter's release is the sequence predicate,
-             * so a stale signal cannot pre-account the next job. */
+            xSemaphoreGive(s_done);       /* keeps the blocking caller honest */
+            /* The caller always posts s_go, so a job taken by the spin path
+             * leaves a token behind. Drain it: otherwise the next blocking Take
+             * returns at once, and the sequence-number guard below is the only
+             * thing stopping a re-run of a job whose stack ctx is long gone. */
+            xSemaphoreTake(s_go, 0);
         } else {
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            xSemaphoreTake(s_go, portMAX_DELAY);
             if (s_seq != seen) {          /* a spurious wake does no work: the
                                            * descriptor is a single slot, and
                                            * re-running one would read a ctx the
@@ -125,7 +117,7 @@ static void worker_task(void *arg)
                 s_fn((void *)s_ctx, s_r0, s_r1);
                 s_done_seq = seen;
             }
-            if (s_notify) xTaskNotifyGive(s_waiter);
+            xSemaphoreGive(s_done);
         }
     }
 }
@@ -137,44 +129,36 @@ static void rows_dual_core(nd_row_fn fn, void *ctx, uint32_t nrows)
     /* Below this the handshake costs more than the work it saves. Attention
      * splits only 8 heads at a time, but each head is ~10K MACs, far above the
      * ~15 us handshake. */
-    if (half < 2 || !s_worker) {
+    if (half < 2 || !s_go) {
         fn(ctx, 0, nrows);
         return;
     }
     const uint32_t job = s_seq + 1u;
-    /* ND_NOTIFY: this task is the only receiver, and clearing on take leaves no
-     * stale-token class. The waiter handle is published BEFORE the descriptor. */
-    s_waiter = xTaskGetCurrentTaskHandle();
-    while (ulTaskNotifyTake(pdTRUE, 0) > 0u)
-        ;
+    xSemaphoreTake(s_done, 0);            /* drop any token from the last job */
     s_fn  = fn;                           /* payload first, ... */
     s_ctx = ctx;
     s_r0  = half;
     s_r1  = nrows;
     __asm__ volatile("" ::: "memory");
     s_seq = job;                          /* ... then the publication */
-    if (s_worker) xTaskNotifyGive(s_worker);   /* only wakes it if it blocked */
+    xSemaphoreGive(s_go);                 /* only wakes it if it did block */
     fn(ctx, 0, half);
     uint32_t spin = 0;
     while (s_done_seq != job && spin++ < ND_CALLER_SPIN)
         ;
-    /* Completion is the sequence predicate, rechecked after EVERY wake: a lost or
-     * mis-ordered notification can only delay this loop, never release it early,
-     * so a delayed give for job j can no longer satisfy job j+1. */
-    while (s_done_seq != job)
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    if (s_done_seq != job)
+        xSemaphoreTake(s_done, portMAX_DELAY);
 }
 
 static void worker_start(void)
 {
+    s_go   = xSemaphoreCreateBinary();
+    s_done = xSemaphoreCreateBinary();
     /* 8 kB, not the 4 kB this ran on before attn_heads learned to stage a KV
      * pair: the staged rows put 1.4 kB of frame on whichever core attends, and
      * at 4 kB the profiled build overflowed it and never reached EVT ready. */
-    /* Stored only after the task exists, and nd_parallel_rows is installed after
-     * that, so a split can never publish a job to a peer that does not exist. */
-    BaseType_t ok = xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
-                            configMAX_PRIORITIES - 2, &s_worker, 1);
-    if (ok != pdPASS) { s_worker = NULL; return; }
+    xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
+                            configMAX_PRIORITIES - 2, NULL, 1);
     nd_parallel_rows = rows_dual_core;
 }
 

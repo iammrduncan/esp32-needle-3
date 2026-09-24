@@ -228,3 +228,34 @@ Third board, same provenance 61861dd9886c: board 3 reads decode 5.6133 vs its ow
 therefore +0.599 / +0.627 / +0.597 pct on three boards against their own clean controls - a 0.03 pct
 spread on the delta, so the gain is the kernel, not a board. This lane also printed the first green
 DEVICE_GATE_OK_RESTRICTED, the restricted-run byte-exact gate added after #595's red falsification.
+
+
+## 2026-09-26 23:38Z — the attention family proposal (supersedes the seed-only packet)
+
+PROPOSAL: DOT8W+SELRES composed on B4W (paired-head shared-V P.V at four-cell
+width; eight-column QK dot body; selective rescale sweeps with dispatch outside
+the dimension loop). Engine provenance 10c74c756ee5 on the seed-era base;
+source /root/board-pool/preserved/b1-recipeB/nd_model.c.cmp-d8sr.
+
+Evidence: decode 5.7467 on board 3 (screen) AND board 2 (full gate) - byte-
+identical metric on two boards; +2.41 pct over each board's seed pin (5.6117/
+5.6133), +1.52 pct over the seed-era acceptance tree. EXTENDED 5.6631 (best
+measured), think 4.46, min_case 5.51, boot bench 5.819, internal_free 4,823.
+Host 19/19 byte-exact, fidelity 5.341e-05, top1 10/10. Behavioural capture
+CAP_RC=0 on this image (7/7 scenarios). Device 18/20, token_delta 52: the two
+boot-state-dependent demo-timer goldens only - identical to the seed's own
+gate, adds no new failure.
+
+ATTRIBUTION (new): the same two goldens fail on the ACCEPTED bundle5 base when
+ONLY B4W's attention diff is added (run #633: bundle5+B4W+lossless RX ring,
+all 20 cases complete, primary 5.365 = +1.163 pct on the shippable base). The
+two cases PASS on host for every image (host 19/19). So the failures are
+device-only and track timer/interval state, not arithmetic. The lossless RX
+ring also FIXES the campaign-long 17-requests-per-boot console wedge.
+
+DECISIONS OWED: (a) disposition of the two goldens (re-baseline, replace with
+state-independent cases, or keep as blockers); (b) ring transport fix adoption
+(main.c + esp_driver_uart REQUIRES - measured neutral-to-small boot cost,
+fixes a real product defect); (c) if (a) resolves, whether to take the seed-
+era stack (fastest, 5.7467) or the accepted bundle5 base plus attention family
+plus ring (shippable base, running now on board 1 as 177bd44997fa).

@@ -13,7 +13,7 @@ ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
 speed/timer interaction, NOT solely the unaccepted stack; open question for
 mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
 (loop-form axis closed), #635 composition cross-board confirmed.
-ALL IDLE at 23:48 - both acceptance trees FULLY GATED:
+ALL IDLE at 23:55 - both acceptance trees FULLY GATED. Composition 3rd-board full gate #640: 5.7467 third identical read, ext 5.6646 best, 18/20 same pair. LIVE now: capture of the SHIPPABLE-BASE ring tree on b1 (tests the ring through the needle-api console path - CAP-b1cmp.log).
 - SHIPPABLE BASE (#639): bundle5 + attention family + RX ring = 5.4083
   (+1.973 pct), ext 5.3377 (+2.12 pct best on accepted base), think 4.26,
   min 5.20, ALL 20 cases complete (ring holds), 18/20 delta 52 = only the

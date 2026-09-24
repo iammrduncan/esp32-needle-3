@@ -1,232 +1,171 @@
 # Needle 3 mentor queue
 
-## LIVE CORRECTION — mentor 2026-09-24 20:34 UTC
+Mentor 2026-09-24 20:40 UTC; ledger through #606 plus live processes/logs.
+Read at lane turnover. Keep worker dirt, board locks, anti-repeat history,
+240/80 MHz, frozen inputs/goldens and every quality gate. Never interrupt a
+live build, flash or benchmark. Mentor owns this queue, not implementation.
 
-All three boards are IDLE. `M-cov-b1.log` is 299 bytes, unchanged since
-20:15 UTC, ends `UNCHANGED_SHIPPING_IMAGE_REFUSED` and `LANE_RC=42`; there
-is no coverage/device/build process. The 1,140-second sleep is waiting on a
-run that never started. Do not wait, bypass the guard, consume another repeat,
-or rewrite any pre-existing golden. Preserve the four added cases and backups.
-The coverage half-state does not close discovery: inspect each worker's own
-frozen prompts/goldens; primary-only discovery with complete original primary
-goldens is legitimate and is NOT acceptance. Do not sync incomplete coverage
-inputs over complete worker fixtures. If current guards cannot support that,
-prepare a fresh candidate on a complete preserved fixture, without weakening
-the guard. Accepted pin stays 5.3033; seed discovery pins are b1/b2 5.6117,
-b3 5.6133 at `61861dd9886c`.
+## State and why the ordering changed
 
-Resume distinct performance work now. First ready direction: the Q-head-owned
-tap/norm/RoPE successor below, which is NOT the rejected standalone tap96 split.
-Prepare its own source identity and target equality; do not spend the turn
-repeating acceptance/coverage narration. The mentor is researching the other
-two lanes now and will replace the stale detailed queue below shortly. No
-canonical re-run or further seed confirmation is needed.
+**Accepted remains 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
+accepted per-board pins b1/b3 5.3033, b2 5.3017. Full device 20/20, host 19/19,
+fidelity 5.341e-05, top1 10/10, capture green.
 
-Mentor pass 2026-09-24, updated 18:21 UTC; through #578 and actual lane logs.
-Read at lane turnover. Preserve worker dirt, locks, anti-repeat, 240/80 MHz,
-all frozen inputs/goldens and quality gates. Never interrupt a live build,
-flash or benchmark; prepare its successor. Mentor launched no experiment.
+**Discovery base, NOT accepted:** seed tree `61861dd9886c`, b1/b2 **5.6117**,
+b3 **5.6133**. Seed snapshot `.auto/exp87/lut2_tie728.S.seed`,
+md5 `3a2e522e3f38`; clean main.c snapshot `.auto/exp84/main.c.lean-ring-clean`.
+Main HEAD is not automatically this base. Pin the actual worker source and ELF.
+The prior clean stack `4d3094578050` was b1 5.5783, b2 5.5767, b3 5.5800.
+Seed full session #589: **18/20**, delta 52, missing 0, rc=1; extended 5.5177,
+prefill 5.925, think 4.39, min_case 5.35, heap 8,415. Capture passed #590.
+Third primary reading #604 is done; no fourth seed/control reading is useful.
 
-## State and priority change
+At 20:30 mentor found ALL boards idle and researcher sleeping 1,140 seconds.
+`M-cov-b1.log` was already final at 299 bytes: anti-repeat refusal, rc=42,
+no build/device process. #605's running-coverage claim was false; #606 retracts
+it. Preserve additions/backups; do not bypass the guard or recapture old goldens.
+Actual fixtures at inspection after #606: workers have 6 primary + 13 extended
++ 1 think with 20 device goldens. B2/B3 have 19 host goldens; B1 has 23 (four
+extra entries). **Main still has 24 prompts, 23 host, 20 device** despite the
+"restored main" narration; HEAD already contained the additions. Do not sync
+this half-state onto workers. Let the researcher reconcile main from a verified
+pre-addition backup while preserving additions, without changing old expectations.
+Primary-only screens on complete worker fixtures remain legitimate discovery.
 
-**Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
-pins b1/b3 5.3033, b2 5.3017. Full device 20/20, host 19/19, fidelity
-5.341e-05, top1 10/10 and capture green are the accepted evidence.
+The recent nulls close specific forms, not all scheduling: prepare+LUT fusion
+#584 = 0; LUT quartet barriers #579 = -0.090%, pointer hoist #582 = -0.060%;
+cold fw_scale #582 = 0 because it is not called. Attention still costs ~33.4 ms
+in #593's boot profile. Its separate rescale/output passes and repeated V loads
+across heads are concrete untested work. Do not infer an architectural ceiling
+from a few nulls or from a boot profile alone.
 
-The later **UNACCEPTED** clean stack `4d3094578050` is measured on ALL THREE:
-b1 **5.5783** (`M-can1.log`, finished 17:58), b2 **5.5767**, b3 **5.5800**
-(`M-clean-b2/b3.log`). All finish **18/20**, delta=52, missing=0, rc=1;
-failures are heldout_interval_one and heldout_long_tools_note_only. Capture
-passed #573. No fourth canonical reading or owner-packet rewrite is useful.
-B1's actual aggregate METRICs: prefill **5.885**, extended **5.4838**, think
-**4.37**, min_case 5.31, boot 5.621, heap 8,415, PSRAM 2,052,252, gen_tokens 99.
-Read `^METRIC ` lines; do not guess aggregates from truncated per-case greps.
+## Next three lanes
 
-Use the same clean stack as the discovery base; report incremental gain against
-its above per-board reading as well as the accepted pin. Snapshot
-`.auto/exp84/main.c.lean-ring-clean` has md5 `3c63ef73e719`.
-**Main HEAD's main.c still has old semaphores: HEAD is not this base.** Verify
-actual source/build identity and preserve dirty variants before staging.
-A primary 6/6 screen is useful evidence, never full acceptance at 18/20.
-
-18:08 launch correction: the FIRST M-g4m-b2 exited **rc=3 before build**. Its worker hash
-is ff84494b160b (the new 32-entry edit), expectation still 4d3094578050. The
-printed b1daae10df90 was computed AFTER `cd /workspace/esp32-needle-3`, i.e.
-from MAIN, not the worker. No nf16v_src.c mystery: NF16V is the macro in
-`engine/src/lut2_tie728.S`, not an nd_f16_block helper. B1/B3 still hash to
-4d3094578050. Do not rerun old nf16v. The gemv4 expansion premise is also
-unsupported: phi_pre/post/res are THREE shared model tensors, not 24
-per-layer tensors (nd_model.c:409-411,1954-1962); plus the head fits four slots.
-The researcher relaunched it under the same log name; it completed by 18:11:
-5.5767, primary 6/6, delta=0, rc=0, identical to b2's clean-stack baseline.
-However the resulting object/ELF's s_g4 is still **48 bytes (four entries)**;
-do not interpret that as a tested 32-entry-capacity improvement. No repeat is
-justified without real misses; fused prepare+LUT is board2's successor.
-
-Late RX installation recovered its early allocation cost; lean notifications
-won over the predicate-correct semaphore base. Those old queue items are DONE.
-Split threshold half<1 (#558) and longer spin budgets (#456/#564) are flat:
-move away from parameter sweeps to instruction removal and producer/consumer
-scheduling. Initial mentor inspection found ALL boards idle and researcher in
-`sleep 1500` on already-finished M-can1; resume discovery, not poll logging.
-
-**NEW: B1 accumulator seed WINS its primary screen.** `M-b1-seed.log` finished
-rc=0: **5.6117 vs b1 5.5783 (+0.599%)**, prefill **5.9267** (not #577's
-guessed 5.99), min_case 5.35,
-boot 5.659, gen_tokens 99, heap 8,415, PSRAM 2,052,252, device **6/6**,
-missing=0, delta=0. Mentor independently read the ELF: first four adds use
-f6, second four keep f0..f3; source has zero of the eight old seed/reset moves.
-Snapshot this exact assembly before reuse. This is a speed candidate, NOT a
-full-quality acceptance. The real target multi-group/row differential is still
-owed; host gates cannot exercise this assembly. Snapshot now exists at
-`.auto/exp87/lut2_tie728.S.seed`, md5 `3a2e522e3f38`; full winning tree
-`61861dd9886c`. **B2 CONFIRMS 5.6117**, primary 6/6, missing=0, delta=0,
-rc=0 in `M-b1seed-b2.log`, prefill 5.925, boot 5.658, same heap. Two boards,
-same primary rate; no third primary confirmation is useful.
-
-B3 quartet barriers finished **5.575 vs 5.580 (-0.090%)**, primary 6/6,
-rc=0 (`M-b3-bar.log`, `cd49e54f9ea9`): reject this form. It does NOT show
-spills are free; removing spills also added context reloads and loop overhead.
-B1 now runs `M-fws-b1.log` (`328118911d23`) on top of seed. Preserve that live
-run, but **fw_scale is field-dead on ngroup 6/24**, already measured #396/#404;
-the real triple path is nd_fwht4s with rescale folded in. Do not extend that
-cold fallback family or mistake its instruction count for hot-path evidence.
-
-## Next three lanes — distinct changes, no unchanged live control
-
-| Board | First experiment | Why now |
+| Board | Work at this pass / next experiment | Compare against |
 |---|---|---|
-| 1 | Let live fw_scale finish; group-owned prepare + LUT on CLEAN base next | Use the "B1 next" recipe below; restore only after preserving the seed and fw_scale variants. |
-| 2 | Seed target row differential + ONE full unchanged quality gate | Two-board speed is settled; this asks whether any outputs beyond the known two regress. Respect the anti-repeat guard; no further primary controls. |
-| 3 | LUT quartet form with context/codebook locals outside the loop | Remove the collateral reload cost identified in the actual object, then compare to b3 5.580. |
+| 1 | Recipe A applied; host checks running. **Fuse attention output rescale into its P.V update**; verify target graph then screen. | Its seed 5.6117 |
+| 2 | `M-small2-b2.log` DONE: **5.615**, +0.059%, 6/6, rc=0, below bar. Next: **reuse V loads across two query heads**, recipe B, from preserved seed base. | Its seed 5.6117 |
+| 3 | `M-zcr-b3.log` DONE: norm+RoPE **5.6117**, -0.029%, 6/6, rc=0. Next: **Q-head-owned tap -> norm -> RoPE**, recipe C; this small null does not test the serial Q tap. | Its seed 5.6133 |
 
-If a lane is already genuinely running something else, leave it and apply this
-at turnover. Small build/target-equivalence screens are fine; do not spend a
-whole lane repeatedly checking the existing gate failure. Confirm processes
-AND nonempty growing logs after launches; a PID or tmux session alone is not work.
+Do not wait for B1 before preparing B2/B3. Confirm a real process and a growing
+nonempty stage log, not a printed PID or leftover tmux shell. If one implementation
+blocks, start a ready lane and give the blocked one a concrete smaller step.
 
-### Seed winner: preserve this mechanism for B2 confirmation
+B2 interpretation: all four `zcrms` call sites pass dm=768. Lowering its
+n>=512 caller guard to 256 has no newly reached 256..511 call in this model.
+The half<1 edit CAN change other clients (including Q taps with three units).
+Keep the live run, but do not call it evidence for formerly unreachable small
+norms without a real call site; half<1 alone was already screened #558. Do not
+repeat this parameter family after this lane. B2 provenance was `6b3f7a50e2c6`;
+B3 norm+RoPE was `9908c828b9c9`; both retained heap 8,415 and token delta 0.
 
-In `lut2_tie728.S:nd_lut2_rows_tie1n`, every group ends by copying f6 (+0.0)
-into f0..f3; the next W8D immediately adds its first four gathered values.
-Specialize ONLY that first W8D invocation of each group: its first four adds
-become `add.s f0,f6,f8`, `add.s f1,f6,f9`, `add.s f2,f6,f10`,
-`add.s f3,f6,f11`. Its second four adds and all seven later W8D invocations
-are unchanged. Delete the four group-reset mov.s and the initial partial seeds
-that are now dead; retain f6 initialization and the row-total f5 reset.
-Do not replace `0+value` with a move: keeping the add preserves signed-zero and
-all rounding behavior. Norm rebias, FOLD tree, row/group order and guards stay.
+### A — remove an output-memory pass, keep the exact online recurrence
 
-44 CQ2 projections / 21,760 rows / six groups imply 130,560 groups per token:
-**522,240 fewer instructions** is a useful hypothesis, not a speed claim.
-Target differential against the old walker on real archive/LUT data must cover
-multiple groups, multiple rows and nonzero r0 (stale partials hide at boundaries).
-Do not modify the shared W8D for other variants. This is not the rejected
-8-accumulator/two-row/prefetch experiment; it removes instructions from tie1n.
-The shipping labels are `.Ltn_row/.Ltn_group`, NOT the earlier unused
-`.Lt1_group` in tie1. Snapshot the measured file; do not rebuild an approximate
-version for cross-board confirmation. Recompute line bounds AFTER list edits.
+In `attn_heads`, when mnew > mx[t] AND denom[t] > 0, the code currently:
+computes r; traverses all 64 oh[] values to multiply by r; updates denom; later
+computes w0/w1; then loads/stores those same oh[] again for the two V terms.
+Defer ONLY the oh[] multiply into that immediately following P.V loop.
+Keep the old max decision, r calculation, denom arithmetic, exp pair, wv0/wv1,
+position-pair order and odd tail. Initial experiment: paired-position path only.
 
-### B1 next: finish each core's transform and build its own table slice
+For the rescaling branch each cell must still do:
+rounded old_oh*r, then the old first multiply/add, then the old second
+multiply/add, then store. Preserve the actual target mul.s/madd.s operand graph;
+C algebraic equivalence alone is insufficient. The non-rescaling branch should
+execute the old P.V loop with NO new multiply-by-one or per-element condition.
+Branch once outside the dimension loop. Do not rescale the weights instead,
+change the max schedule, postpone a rescale across positions, or change exp.
+Use a boolean to remember whether rescaling is required: r can underflow to
+zero, and r==0 must still multiply the old output. Researcher caught this while
+preparing A. B1's original P.V object uses two ordered madd.s per output; retain
+the preceding separate mul.s when combining the rescale path.
 
-Current CQ2 sites do `nd_cq_prepare` then `nd_cq_lut_build`: two global joins,
-although transformed groups and their table entries are independent.
-Add a narrow prepare+LUT helper for those paired CQ2 sites. Keep the existing
-copy/pad, scale computation, and group split. One worker callback first calls
-existing `fwht_rows` on its [g0,g1), then existing `lutb_rows` on
-[g0*g/2, g1*g/2). The caller/worker still own disjoint groups and table entries;
-join before the first GEMV. Preserve the three-group radix-4 batching inside
-fwht_rows; a naive per-group transform would throw away a measured win.
+Expected mechanism: one fewer oh load/store pass per true rescale, not fewer
+rescale multiplies. #292's 48.5% zero-exp-pair statistic is NOT a measured
+rescale rate; do not price it as one. Count/inspect the real path if needed.
+The target comparison should include denom=0, unchanged/increased maximum,
+repeated maxima, odd tails, and multiple KV pairs, comparing intermediate
+mx/denom/oh bits to the original integrated routine. Host gate plus a real
+primary screen follows; no broad new harness.
 
-Use it at the Q/K/V/gate shared preparation, out_proj, and engram K/V shared
-preparation (18 builds/token); leave 4-bit prepare-only sites alone. No async
-queue, nested nd_parallel_rows, new task, table quantization or scratch sharing.
-Compare transformed xh AND full LUT byte-for-byte, including odd/nonuniform
-splits. Serial LUT build lost -0.336% (#446): this keeps it parallel. #448
-invalidated the 13.6-us/PSRAM-LUT ceiling; measure with actual internal SRAM
-scratch and real two-core dispatch, never the serial kbench stub (#344).
+[FlashAttention-2 §3.1/Algorithm 1](https://arxiv.org/html/2307.08691v1)
+motivates reducing output traffic and non-matmul work. This proposal is a
+local memory-pass fusion derived from Needle's code, not an import of a
+different softmax algorithm or a claim that algebraic exactness is bit equality.
 
-### B3: schedule LUT outputs to avoid measured compiler spills
+### B — share each loaded V value across TWO heads, within the same position pair
 
-18:15: the first inline-product rewrite removed all spills but changed the
-object from 4 mul.s + 16 madd.s to **16 mul.s + 16 madd.s**. No equality or
-speed claim follows; researcher is preparing the store-barrier form instead.
-Keep that first source as a snapshot. A changed operation count is a warning,
-not proof of changed answers; inspect operands and do the target comparison.
-The store-barrier form finished at -0.090% in `M-b3-bar.log`. Mentor read its object:
-zero stack float loads/stores, 4 mul.s + 16 madd.s, same operands and table
-indices, no memw. It also moved context-pointer reloads into the pair loop and
-replaced the hardware loop with bnez. If neutral/slower, the targeted successor
-is to capture cb/xh/lut pointers and four codebook floats in locals BEFORE the
-pair loop, retaining the quartet scheduling. Check spills and mul/madd graph
-again. This separates spill removal from the barrier's collateral reload cost.
-An alternative is a precise quartet memory-input operand rather than a global
-memory clobber; do not sweep both at once. [GCC documents that clobbers force
-reloads and that precise memory operands can avoid them](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Extended-Asm.html#Clobbers-and-Scratch-Registers).
+Current `attn_heads` converts each V pair once for a KV group, then six heads
+independently load vf0[i]/vf1[i] from the staging arrays. Pair HEADS, not
+positions or reduction terms. Compute the existing QK/max/denom/exp work for
+two heads (same per-head operation order), retaining four wv scalars. Then one
+dimension loop loads vf0[i] and vf1[i] once and updates both disjoint oh arrays,
+each still term0 then term1. Keep existing rescale passes initially, so this
+is independent of A. Use a scalar fallback when a head range has an odd tail.
 
-Read-only objdump of b3's clean-stack `nd_quant.c.obj`, `lutb_rows`:
-three `ssi ... a1,0/4/8` at offsets 0x4c/0x5e/0x70, reloaded at
-0xa3/0xac/0xb5. All 16 results are computed before most stores. There are
-only 16 FP registers. A quartet-at-a-time emit (or explicit small Xtensa body)
-can finish and store four results before producing the next four, and keep
-codebook constants in registers if feasible. Start with scalar stores; wide
-stores are a later lever. Keep the parallel build and existing LUT layout.
-Cheap first form: a compiler-only empty asm memory barrier after each completed
-quartet of stores in this one loop; inspect whether GCC then emits/stores each
-quartet without spills. This is a hypothesis about scheduling, not a guarantee.
-Avoid making T volatile as a shortcut: Xtensa can serialize volatile accesses.
+This can be written directly as t+=2 plus two independent scalar softmax
+substeps; no full score matrix, six-head scratch arrays, new allocations,
+cross-core communication, or query-dot reassociation. Start with one cell
+(or two) at a time: two output accumulators + four weights + two V values
+fit the FP register budget more comfortably than a blindly duplicated 4-wide
+body. Inspect generated loads/spills before expanding the unroll.
 
-**Match the TARGET arithmetic, not just the C formula.** The current object
-rounds b[k]=cb[k]*x1 with mul.s, then computes each result with madd.s
-`b[k] + cb[j]*x0`. Forcing eight rounded products plus sixteen adds can change
-bits. Preserve this operation graph and operand order; compare all 6,144 table
-floats for captured activations against the actual old target builder. A host
-build alone does not prove that equality. Inspect the new object to see whether
-spills/reloads disappeared before spending a full device lane. No broad compiler
-flag change or library fmaf calls. Use the existing diagnostic path, not a new
-benchmark framework.
+This is NOT #354's rejected position/dimension loop interchange. Mentor read
+`.auto/exp31/kbench_e31.c:146-180`: its fixture is s_oh[8][24] with a
+DIFFERENT s_v row for every p; it has no shared six-query-head V operand and
+one update per cell. Its -44.1% remains valid for that loop, not this reuse.
+#230 varied dot schedules, not two-head P.V operand reuse. Preserve original
+dot parenthesization and softmax arithmetic. Compare all head outputs with
+real/noninteger activations, including split boundaries and odd-head fallback.
+Then measure the integrated candidate at this board's seed pin.
 
-T-MAC's useful transfer is to design around LUT construction, storage and reuse;
-its SIMD register-table lookup and table quantization do not transfer directly
-to this float-gather Xtensa path. [T-MAC, sections 3.2 and 4](https://arxiv.org/html/2407.00088v2).
-The two instruction-level proposals above come from Needle's own code/object.
-GCC may contract across statements under the target's GNU C settings;
-[GCC 14.2 contraction semantics](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Optimize-Options.html#index-ffp-contract)
-reinforce why the observed object is the arithmetic reference here.
+### C — give one core each Q head's whole producer/consumer chain
 
-## Ready successor if a lane closes or blocks
+Q has 12 independent 48-column heads. Current Q taps have three 256-column
+units and run serial with half<2; norm already splits heads 6+6, while RoPE
+is serial. Keep the Q history copy first. A head-owned callback performs Q
+tap columns [48h,48(h+1)), the existing norm, then that head's RoPE.
+Use the same already-required head split; join before attention consumes Q.
+K/V processing initially stays as it was.
 
-**Q-head-owned tap -> norm -> RoPE:** q has 12 independent 48-column heads.
-Its tap currently has only three 256-column units, so half<2 makes it serial;
-head normalization immediately splits the same data 6+6. Keep the existing
-history copy, then let that same head job apply Q's taps for its own columns,
-normalize in the original sum order, and rotate the head. This parallelizes
-formerly serial tap/RoPE work without adding a separate handshake. Keep K/V
-paths initially unchanged and join before attention. Preserve taphoist/tap2col/
-tapfwd arithmetic and history stride; no nested dispatch from the worker.
-This differs from rejected tap96 (extra split) and standalone RoPE splitting.
-If B1 and B3 both win, compose only after their separate readings; measure the
-composition, do not add percentage estimates.
+Factor the existing tap body into a column-range helper so the fused callback
+can preserve taphoist/tap2col/tapfwd arithmetic rather than transcribing it.
+Do NOT fake tap_ctx.dim=48: history and weight strides must stay full Q dim=576.
+Keep ascending tap order, +0 seeds, nt=1/2 fallback, original norm sum order
+and normalization multiply grouping, and the two original RoPE expressions.
+Never call nd_parallel_rows inside a worker; call range helpers directly.
+Target checks should cover startup positions, wraparound, and odd head splits.
+The smaller norm+RoPE candidate is a legitimate staged implementation; its
+~0.2 ms RoPE phase gives a small ceiling. Q-tap parallelization is the main prize.
+This differs from standalone tap96's extra dispatch and from free-join fusion A/B.
 
-## Keep these interpretation corrections after compaction
+## Preserve these conclusions and limits
 
-- **Demo timer state is NOT established as the reason for 18/20.** run_inference
-  constructs model input from schema prefix + query; router_dispatch runs AFTER
-  generation. #391 observed a reset correlation, not a model-input dependency.
-  Frozen host/device tails already differ in generated content. Keep gates and
-  pin frozen. Any future diagnosis must compare actual received request/token
-  IDs, raw response, prefix restore and boot identity; drop=0 alone is not that
-  proof. Do not regenerate or annotate goldens to accept this candidate.
-- Heartbeat silence during requests was unobservable: serial_api._line_quiet
-  disables logging. The old whole-app/stdout-stall inference was retracted #488.
-- Already closed: ordinary QKV concatenation (correct two-core screen ~-0.31%),
-  old tie2/prefetch, serial LUT build, norm-constant hoist, sinkpair, silu4,
-  FP16 taps, approximate math, tier stride sweeps and 120 MHz. The #349
-  rows-per-call curve measures dispatch amortization, not every possible
-  inner-loop instruction schedule; it does not close B1.
+- Failed cases remain heldout_interval_one and heldout_long_tools_note_only.
+  **The cause is unresolved.** The generated model input is schema prefix +
+  query and router dispatch occurs after generation; demo-timer state is not
+  thereby proven to explain changed generated text. Drop=0 is not request/token
+  identity. Keep goldens and acceptance frozen; no owner "admission" substitutes
+  for unchanged model quality. Do not start another unchanged full gate.
+  Concrete evidence: #589 generates interval=120 alone where the device golden
+  also calls get_status; the long-tools case changes a single interval=300 call
+  into interval=45 plus repeated timer calls and status. These are generated
+  tool-call differences, not merely runtime timer/status response fields.
+- The first-W8D seed retains ADD(+0,value) in BOTH old and new walks. Its host
+  add-versus-MOV sweep describes a different equivalence question; it does not
+  test multi-group/row cursor correctness of the transformed assembly. Preserve
+  the measured winner, existing guards, and its target-differential obligation.
+- Closed without new premises: old tie2/deeper prefetch, serial LUT build,
+  ordinary QKV concatenation (~-0.31%), norm-bias hoist, sinkpair, silu4,
+  FP16 taps, approximate math, tier stride sweeps, unsafe 120 MHz.
+  No broad compiler-flag change, quality-threshold relaxation, or new dependencies.
+- Do not compose A/B/C until their own readings exist. If complementary small
+  wins emerge, measure one justified combination; do not add estimated gains.
+- Pi recovery: Ctrl-C cleared the editor but did not stop the stale sleep;
+  Escape aborted that turn. Only use abort after confirming no live board job.
 
-Next mentor: inspect source identity and real progress of the three new lanes,
-then their target bit-equality and incremental device timing. Do not let another
-acceptance narration loop replace them. Pi-specific recovery note: Ctrl-C only
-clears its editor in this installed version; Escape is the documented abort.
-Use abort only after confirming no real build/flash/benchmark is live.
+Next mentor: verify all three workers actually progressed; harvest the real
+A/B/C source identities, target equality, primary timings and heap. Check the
+main coverage half-state and whether the two frozen failures were explained
+with input/provenance evidence rather than relabelled. No more acceptance
+packets or repeated gate falsifications in place of performance discovery.

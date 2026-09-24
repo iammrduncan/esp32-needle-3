@@ -92,7 +92,7 @@ static inline float nd_expf(float x)
     p = p * f + 1.0f;
 
     bits = (uint32_t)(k + 127) << 23;  /* 2^k */
-    memcpy(&scale, &bits, 4);
+    __builtin_memcpy(&scale, &bits, 4);
     return p * scale;
 }
 
@@ -141,8 +141,8 @@ static inline void nd_expf_pair(float x0, float x1, float *r0, float *r1)
 
     b0 = (uint32_t)(k0 + 127) << 23;
     b1 = (uint32_t)(k1 + 127) << 23;
-    memcpy(&sc0, &b0, 4);
-    memcpy(&sc1, &b1, 4);
+    __builtin_memcpy(&sc0, &b0, 4);
+    __builtin_memcpy(&sc1, &b1, 4);
     *r0 = p0 * sc0;
     *r1 = p1 * sc1;
 }

@@ -86,7 +86,13 @@ fi
 # refuses to start on a mismatch instead of reporting a number for the wrong code.
 PROV_TREE=$(pwd)
 PROV_HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
-PROV_ENGINE=$(cat engine/src/nd_quant.c engine/src/*.S 2>/dev/null | md5sum | cut -d" " -f1)
+# The field used to hash only nd_quant.c and the .S files, which meant an nd_model.c-only
+# candidate - the shape of most of this campaign's engine work - was NOT covered by the
+# assertion, and a stale worker holding old nd_model.c would have printed the expected value.
+# Measured: a profiled build that changed nd_model.c + nd_model.h + main.c printed the
+# pre-split hash and then failed against a correctly-computed expectation, which is how the
+# narrow field was found. Hash everything the engine compiles, plus the app.
+PROV_ENGINE=$(cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c 2>/dev/null | md5sum | cut -d" " -f1)
 echo "PROVENANCE tree=${PROV_TREE} head=${PROV_HEAD} engine_md5=${PROV_ENGINE}"
 # Prefix match on purpose: a 12-hex md5 prefix is what every ledger line quotes, and
 # requiring the full 32 characters made lanes abort on a correct tree (measured: three

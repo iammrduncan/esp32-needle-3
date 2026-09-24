@@ -130,3 +130,26 @@ notifications (+0.33..0.36 %, two boards). **5.580 / 5.5817 decode** vs the pin
 **Ask:** regenerate or annotate those two goldens (owner-level: they are the
 quality oracle), then one 20-case session on lean-notifications + late RX ring
 without the diagnostic prints is expected to read 20/20 and re-pin ~5.58.
+
+## 2026-09-25 final: acceptance tree measured on two boards, gate reads 18/20 as expected
+
+Tree (prov `dfa32cefae65`, snapshot `.auto/exp84/main.c.lean-ring`): asmemo -> radix-4 fusion ->
+nf16v -> spin handshake -> sequence-predicate completion -> lean task notifications -> late
+lossless console RX ring (diagnostic removed).
+
+| metric | board 2 | board 3 | pin (5.3033) |
+|---|---|---|---|
+| decode_tps | **5.575** | **5.5783** | 5.3033 |
+| min_case | 5.31 | 5.32 | 5.07 |
+| boot bench | 5.621 | — | 5.343 |
+| internal_free | 8,415 | — | 13,367 |
+| device byte-exact | 18/20 | running | 20/20 |
+
+Speed +5.14 %/+5.17 %. Host 19/19 byte-exact, fidelity 5.341e-05 unchanged, `token_delta` on the
+two failures 52. **The two failures are `heldout_interval_one` and `heldout_long_tools_note_only`**
+— reproduced on two boards and on three engines; they encode the firmware demo timer/sampling
+counters (run #391). Cost of the console ring: one metric tick (-0.09 %) and 4,271 B internal.
+
+**One ask unblocks the re-pin:** re-capture or annotate those two goldens. Then one session on
+this exact tree should read 20/20 and the pin moves 5.3033 -> ~5.575. Nothing else in the campaign
+is above the 0.2 % keep bar inside the documented maxima and the byte-exact gate.

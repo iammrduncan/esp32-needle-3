@@ -6,12 +6,34 @@ state_dir=/home/mbench01/.local/state/needle3-hourly-mentor
 prompt="$repo/.auto/hourly_mentor.md"
 codex_bin=/home/mbench01/.local/bin/codex
 lock=/tmp/needle3-hourly-mentor.lock
+last_start_file="$state_dir/last_start_epoch"
+interval_seconds=9000
+
+force=0
+case "${1:-}" in
+    "") ;;
+    --force) force=1 ;;
+    *) echo "usage: $0 [--force]" >&2; exit 2 ;;
+esac
 
 mkdir -p "$state_dir"
 exec 8>"$lock"
 if ! flock -n 8; then
     exit 0
 fi
+
+now_epoch=$(date +%s)
+if [ "$force" -eq 0 ] && [ -r "$last_start_file" ]; then
+    IFS= read -r last_start_epoch < "$last_start_file"
+    if [[ "$last_start_epoch" =~ ^[0-9]+$ ]] && \
+       [ "$now_epoch" -lt $((last_start_epoch + interval_seconds)) ]; then
+        exit 0
+    fi
+fi
+
+epoch_tmp="$last_start_file.tmp.$$"
+printf '%s\n' "$now_epoch" > "$epoch_tmp"
+mv "$epoch_tmp" "$last_start_file"
 
 stamp=$(date '+%Y%m%dT%H%M%S%z')
 log="$state_dir/$stamp.log"
@@ -20,8 +42,8 @@ last="$state_dir/latest.md"
 
 {
     echo "mentor_start=$(date --iso-8601=seconds)"
-    deadline_epoch=$(($(date +%s) + 900))
-    timeout --signal=INT --kill-after=10s 13m "$codex_bin" exec \
+    deadline_epoch=$((now_epoch + 1800))
+    timeout --signal=INT --kill-after=10s 25m "$codex_bin" exec \
         --color never \
         --model gpt-6-astra \
         --sandbox danger-full-access \
@@ -40,10 +62,11 @@ last="$state_dir/latest.md"
             timeout --signal=TERM --kill-after=5s "${remaining}s" "$codex_bin" exec resume \
                 --model gpt-6-astra \
                 --config 'approval_policy="never"' \
+                --config 'sandbox_mode="danger-full-access"' \
                 --config 'model_reasoning_effort="max"' \
                 --output-last-message "$last_tmp" \
                 "$session_id" \
-                "Two minutes remain before the hard hourly deadline. Wrap up immediately: stop new research and tool exploration, write your best current priorities to .auto/mentor_queue.md, send any necessary concise steering to the live researcher, and return the compact report."
+                "Five minutes remain before the hard scheduled-pass deadline. Wrap up now: stop starting new research and tool exploration, consolidate your best current priorities in .auto/mentor_queue.md, send any necessary concise steering to the live researcher, and return the compact report before time expires."
             rc=$?
         else
             echo "mentor_wrap_error=unable_to_resume session_id=${session_id:-missing} remaining_seconds=$remaining"

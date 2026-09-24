@@ -1,0 +1,1 @@
+condT+cond2: channel-major cond_v staging plus two independent accumulator chains interleaved in cond_rows. Guard: test_pair_equiv.c

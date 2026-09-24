@@ -181,3 +181,44 @@ Board 1 reflashed to that provenance (FLASH_RC=0), driven through its API: `make
 CAP_RC=0 with all nine verification comparisons true and zero false (routes, tools, two-pass local
 execution, no external calls, telemetry, sampling interval, timer expiry). API stopped afterwards;
 no serial-api child retains the console.
+
+## Seed stack (acceptance tree + first-W8D seed) - complete evidence, awaiting admission
+
+Provenance 61861dd9886c = 4d3094578050 plus engine/src/lut2_tie728.S (md5 3a2e522e3f38, snapshotted at
+.auto/exp87/lut2_tie728.S.seed). Mechanism: in nd_lut2_rows_tie1n the first W8D of each group seeds
+f0..f3 from the existing +0.0 register with add.s, so the four per-group reset mov.s and the dead
+pre-row seeds disappear - 4 instructions x 130,560 groups/token, arithmetic unchanged.
+
+| evidence | value |
+|---|---|
+| decode, board 2 (clean base) | 5.6117 (+0.627 % over that board's 5.5767) |
+| decode, board 1 (clean base) | 5.6117 (+0.599 % over that board's 5.5783) |
+| primary byte-exact | 6/6 on both boards, token_delta 0 |
+| full 20-case session (board 1) | 18/20, missing 0, delta 52 - only heldout_interval_one + heldout_long_tools_note_only |
+| extended / think / prefill / min_case (board 1, own reading) | 5.5177 / 4.39 / 5.925 / 5.35 (board acceptance 5.4838 / 4.37 / 5.585 / 5.31) |
+| boot bench, internal_free | 5.658, 8,415 |
+| make capture | CAP_RC=0, all verification flags true, zero false |
+| fidelity probe, host goldens | 5.341e-05, 19/19 |
+
+Rejected on this base while measuring: fused prepare+LUT (0.000 
+## Seed stack (acceptance tree + first-W8D seed) - complete evidence, awaiting admission
+
+Provenance 61861dd9886c = 4d3094578050 plus engine/src/lut2_tie728.S (md5 3a2e522e3f38, snapshotted
+at .auto/exp87/lut2_tie728.S.seed). Mechanism: in nd_lut2_rows_tie1n the first W8D of each group
+seeds f0..f3 from the existing +0.0 register with add.s, so the four per-group reset mov.s and the
+dead pre-row seeds disappear - 4 instructions x 130,560 groups per token, arithmetic unchanged.
+
+| evidence | value |
+|---|---|
+| decode, board 2 (clean base) | 5.6117, +0.627 pct over that board's 5.5767 |
+| decode, board 1 (clean base) | 5.6117, +0.599 pct over that board's 5.5783 |
+| primary byte-exact | 6/6 on both boards, token_delta 0 |
+| full 20-case session, board 1 | 18/20, missing 0, delta 52 - only heldout_interval_one and heldout_long_tools_note_only |
+| extended / think / prefill / min_case, board 1 own reading | 5.5177 / 4.39 / 5.925 / 5.35 vs that board's acceptance 5.4838 / 4.37 / 5.585 / 5.31 |
+| boot bench, internal_free | 5.658, 8415 |
+| make capture | CAP_RC=0, all verification flags true, zero false |
+| fidelity probe, host goldens | 5.341e-05, 19/19 |
+
+Rejected on this base while measuring: fused prepare+LUT (0.000 pct), lutb_rows live-range edits
+(-0.090 and -0.060 pct), split granularity and spin budgets (neutral). Closed off-device: 4-bit
+per-group seeding (+0.005 pct), tie1n per-row reseed (+0.05 pct), fw_scale live ranges (cold path).

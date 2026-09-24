@@ -10,11 +10,11 @@ sleep >20 s in this harness; harvest lanes from their logs.
 **Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`. Unaccepted
 discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
 
-| Board | State (22:50 UTC) | Next |
+| Board | State (22:54 UTC) | Next |
 |---|---|---|
-| 1 | **Composed v2** (B4W pairing + A3 rescale-fusion, hoisted 4-way flag dispatch, engine `114c679790d8`, host 19/19 byte-exact) SCREENING now (M-comp2-b1). | If v2 > B4W same-board -> gate it; else B4W stands alone and A3-fusion closes. |
-| 2 | **B4W screen 5.6967 (+1.516%)**, session best. Full 20-case GATE running (M-b4wgate-b2, allowance used). | After gate: free board for next distinct candidate. |
-| 3 | **B4W cross-board screen** running (M-b4w-b3, own pin 5.6133). | B read here 5.6417-equiv; B4W source snapshot md5 12e36b116902. |
+| 1 | B4W restored (engine `51ea5246142e`), **full gate running** (M-b4wgate-b1, fresh signature). | B4W breadth on 2nd board. |
+| 2 | **B4W screen 5.6967 (+1.516%)**; full gate running (M-b4wgate-b2, allowance used; extended 5.615 already = best ext ever measured, vs B 5.5554 / A3 5.5538). | After gate: next distinct candidate (NOT pairing width again). |
+| 3 | **B4W screen 5.6983 (+1.516%)** = margin reproduced exactly. Now screening **B8W** (8-cell paired body, engine `baeda26700d6`, host green). | If B8W > B4W, width axis still open; else B4W is the form. |
 
 **Confirmed candidates (unaccepted):**
 - **A3**: 5.6467 on b2 AND b3 (+0.62%/+0.60%), full 20-case gate = 18/20, the
@@ -30,10 +30,13 @@ discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
 - **B4W** (B's paired body at four-cell width; the two-cell width was an
   unmeasured register-pressure guess): 5.6967 on b2 (+1.516 %), every case up,
   heap same 5343. Session-best. objdump spill worry NOT realised.
-- **Composed A3+B v1** (per-cell doA?/doB? selects): REJECTED -0.38 % vs B same
-  board; objdump showed 142 IN-LOOP BRANCHES, zero spills. Per-cell flag
-  branching is the poison. v2 (hoisted 4-way dispatch over a macro body) is
-  screening on b1 as the composed-B4W+A3 test.
+- **Composed A3+B v1** (per-cell doA?/doB? branches): REJECTED (142 in-loop
+  branches, -0.38 % vs B). **v2** (hoisted 4-way macro dispatch): REJECTED at
+  5.615 (+0.059 %, ~1.4 % below B4W). A3-fusion x pairing is CLOSED - the wins
+  are mutually exclusive layouts. No third fusion form.
+- **B4W is THE candidate**: screens 5.6967 (b2) / 5.6983 (b3), margin +1.516 %
+  on both pins, gate in progress on b1+b2. Acceptance will still hit the seed's
+  frozen 18/20 pair - same disposition rule as A3: report, no waiver.
 
 ## Hard rules learned this session
 

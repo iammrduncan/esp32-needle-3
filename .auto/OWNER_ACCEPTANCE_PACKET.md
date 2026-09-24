@@ -174,3 +174,10 @@ Runner asserted the same provenance on both boards; snapshot `.auto/exp84/main.c
 (md5 `3c63ef73e719`, ELF verified RXQ-free). Neither the speed nor the divergence is board-specific,
 and the compared console stream carries no diagnostic lines. Mentor queue items B1-B3 predate this
 stack and are superseded; its item 3 ("frozen host/device tails already disagree") is corroborated.
+
+## Behavioural capture green on the acceptance image (prov 4d3094578050)
+
+Board 1 reflashed to that provenance (FLASH_RC=0), driven through its API: `make capture` gave
+CAP_RC=0 with all nine verification comparisons true and zero false (routes, tools, two-pass local
+execution, no external calls, telemetry, sampling interval, timer expiry). API stopped afterwards;
+no serial-api child retains the console.

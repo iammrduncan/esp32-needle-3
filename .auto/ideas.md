@@ -3051,3 +3051,58 @@ heldout_interval_one + heldout_long_tools_note_only (diverge on both boards, dem
   127.0.0.1:8081 - i.e. the single-board `/dev/ttyACM*` aliases (board 1), so capturing the
   acceptance image means installing that tree on board 1 first, not pointing the target at a
   worker. Do that as a deliberate baseline change on board 1, never as a splice.
+
+# 2026-09-26: where the campaign stands at 5.6117, and what would reopen each closed family
+
+Accepted pin is still 5.3033 (owner's). The measured stack is the acceptance tree
+`4d3094578050` (5.5767/5.5783/5.5800 on three boards) plus the first-W8D seed in
+`nd_lut2_rows_tie1n` = provenance `61861dd9886c`, reading **5.6117 on two boards**
+(+0.627 % and +0.599 % against each board's own clean control), 18/20 byte-exact with
+only the two boot-state-dependent demo goldens failing on all three boards, extended
+5.5177, think 4.39, prefill 5.925, min_case 5.35, capture green, host 19/19, fidelity
+5.341e-05. It awaits owner admission, not more measurement.
+
+Phase map re-derived on the seed image (profiled, boot bench, ~177 ms block):
+proj2bit 80.7 ms (45.6 %), attention 33.4, hadamard 21.7, engram 15.2, sinkhorn 3.0,
+rope 0.2, confpool/sample 0.0. The dominant phase GREW in share while shrinking in ms,
+which is what happens when everything else gets cheaper faster.
+
+## Measured closures added in this window (do not re-screen)
+
+* Split granularity `half < 2 -> < 1`: 5.5817 vs 5.58 = neutral (#558).
+* `ND_CALLER_SPIN` 600 -> 2000: 5.58 vs 5.58 = exactly zero (#564). Both axes bracketed;
+  after spin + lean notifications the residual handshake cost is the notification path.
+* Fused prepare+LUT (one join instead of two at 18 sites): 5.6117 vs 5.6117 = zero (#584).
+  Joins are free now, so "pay the toll fewer times" has no value left.
+* `lutb_rows` live-range editing, both directions: quartet barriers -0.090 %, pointer +
+  codebook hoist -0.060 % (#579/#582). Spill count is not a proxy for this metric.
+* Cold-path screens (`fw_scale` in-place RMW): 5.6117 vs 5.6117 because the shipping
+  ngroup 6/24 path uses `nd_fwht4s` with the rescale folded. Cold code cannot move the
+  metric; excluded from here on.
+* Off-device, priced not built: 4-bit per-group seeding +0.005 % (576 groups/token),
+  tie1n per-row group-counter reseed +0.05 % (one instruction x 21,760 rows).
+
+## What would legitimately reopen a family
+
+* **2-bit GEMV**: only a change to what is stored. 2 instructions per weight is
+  8 extui + 8 addx4 + 8 lsi + 8 add.s per 32-bit index word = 16 weights, and the seed
+  win removed the last four non-accumulate instructions per group. 4-weights-per-lookup
+  needs a 256-entry slot (measured -38 %, the table stops fitting) and a 16x build cost.
+* **Delivery**: the 13.90 % cold PSRAM tax on every 2-bit pass is real and uncollectable
+  at 3.59 MB/token; 120 MHz would buy 3.51 % of the token and is vendor-blocked (#331).
+* **Attention**: four schedules measured for the QK dot, exp pairing shipped, P.V order
+  measured twice. Reopening needs a different algorithm, which is a quality change.
+* **Hadamard**: `kron_apply` saturated at 4x2 / 8 columns; the transform is measured on
+  width (1/2/3/4), stage fusion, pass count, rescale placement and stage order.
+* **The bar itself**: four independent levers (split granularity, spin budgets, fused
+  joins, live ranges) now measure zero at this stack, which is the strongest evidence
+  that the remaining headroom is not in scheduling.
+
+## Harness/gate state (all three boards carry this)
+
+`measure.sh` fails a restricted run on byte-exact divergence (`DEVICE_OUTPUT_DIVERGED_
+RESTRICTED`), proven by a deliberate tie1n mis-seed that printed 0/6 and exited 1
+(#595/#598). `checks.sh` runs `.auto/exp87/test_seed_equiv.c`, which characterises the
+seed transformation over 4.18M fp32 values and fails if the difference set grows beyond
+{-0.0, signaling NaN} - and an add-from-zero is NOT a move for exactly those two classes,
+which is a rule for every future "seed from a zero register" idea.

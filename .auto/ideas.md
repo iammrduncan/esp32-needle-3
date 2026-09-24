@@ -3021,3 +3021,19 @@ sessions - and a reset mid-suite invalidates canonical order, so plan for one bo
   fix is a bounded/deferred emit; if both legs die together the whole app is blocked (scheduler/mutex),
   which reopens the spin-handshake question with real evidence. The JTAG harvest route already exists
   (run #451 captured boot-only output on that leg).
+
+## Acceptance tree: three-way handshake merge (do it with edits, not regex) - #509/#510
+Base = board2/esp32/main/main.c (has the late lossless RX ring, builds clean). In order:
+1. Delete the RXQ trace: the `unsigned rx_drop = 0;` decl, the `else rx_drop++;`, and the
+   `{ /* #494 input trace ... fflush(stdout); }` block. Verify `grep -c 'RXQ\|rx_drop'` == 0.
+2. Predicate fix: caller's `if (s_done_seq != job)` + blocking take becomes `while (...)`.
+3. Notifications: publish `s_waiter = xTaskGetCurrentTaskHandle()` per job (deadlock-safe),
+   `xSemaphoreGive(s_go)` -> `xTaskNotifyGive(s_worker)`, caller take -> `ulTaskNotifyTake(pdTRUE, portMAX_DELAY)`,
+   both worker `xSemaphoreGive(s_done)` sites -> `xTaskNotifyGive(s_waiter)`, delete the three
+   `Take(...,0)` drains, delete `s_go`/`s_done` decls+create, capture `&s_worker` in xTaskCreate,
+   and change the `half < 2 || !s_go` guard to `!s_worker`.
+4. ASSERT `grep -c xSemaphore` == 0 before anything else (a half-converted handshake compiles
+   and deadlocks; a green build proves nothing) and build locally.
+5. Only then write .auto/expect_engine_md5 from the built tree and run ONE 20-case session.
+Expected: decode ~5.58 without the trace; 20/20 byte-exact once the owner settles
+heldout_interval_one + heldout_long_tools_note_only (diverge on both boards, demo-timer state).

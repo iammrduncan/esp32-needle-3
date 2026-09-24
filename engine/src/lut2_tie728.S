@@ -99,6 +99,21 @@
 	wfr	\fpd, \v
 	.endm
 
+/* Run #451: the same conversion with the bias constant held in an address
+ * register for the whole kernel, so the group loop pays three instructions per
+ * norm instead of five (and ten before that). a9 is free from the moment the
+ * prologue has multiplied the norms cursor - the table base and ngroup live in
+ * frame slots, not registers - and W8D only touches a10..a15, so hoisting costs
+ * no liveness anywhere in the row or group loop. The value still has to be a
+ * POSITIVE ORDINARY halfword; nd_lut2_asm_ok() decides that per tensor, once,
+ * and memoises it, and NF16V (the self-contained form that keeps the sign) stays
+ * available for kernels that do not park the constant. */
+.macro	NF16VH v, fpd, cst
+	slli	\v,  \v, 13
+	add.n	\v,  \v, \cst
+	wfr	\fpd, \v
+	.endm
+
 /* Fold one row's four partials into its running total, in C's order. */
 	.macro	FOLD s0, s1, s2, s3, acc, nf
 	add.s	\s0, \s0, \s1
@@ -623,6 +638,8 @@ nd_lut2_rows_tie1n:
 	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
 	slli	a14, a14, 1
 	add.n	a6, a6, a14
+	movi	a9, 112				/* NF16VH constant, once per call: */
+	slli	a9, a9, 23			/* 127-15 = 112 into the exponent field */
 	l32i	a14, a2, C_ROWBYTES
 	mull	a13, a3, a14			/* packed += r0*rowbytes */
 	add.n	a5, a5, a13
@@ -659,7 +676,7 @@ nd_lut2_rows_tie1n:
 	W8D	a10, 0,   f0, f1, f2, f3
 	W8D	a11, 512, f0, f1, f2, f3
 	addi	a4, a4, 0x400
-	NF16V	a8, f4, a10, a11
+	NF16VH	a8, f4, a9
 	FOLD	f0, f1, f2, f3, f5, f4
 	mov.s	f0, f6				/* the next group starts from 0 */
 	mov.s	f1, f6

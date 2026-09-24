@@ -222,3 +222,9 @@ dead pre-row seeds disappear - 4 instructions x 130,560 groups per token, arithm
 Rejected on this base while measuring: fused prepare+LUT (0.000 pct), lutb_rows live-range edits
 (-0.090 and -0.060 pct), split granularity and spin budgets (neutral). Closed off-device: 4-bit
 per-group seeding (+0.005 pct), tie1n per-row reseed (+0.05 pct), fw_scale live ranges (cold path).
+
+Third board, same provenance 61861dd9886c: board 3 reads decode 5.6133 vs its own clean 5.5800
+(+0.597 pct), device 6/6 byte-exact, token_delta 0, boot bench 5.657, LANE_RC=0. The proposal is
+therefore +0.599 / +0.627 / +0.597 pct on three boards against their own clean controls - a 0.03 pct
+spread on the delta, so the gain is the kernel, not a board. This lane also printed the first green
+DEVICE_GATE_OK_RESTRICTED, the restricted-run byte-exact gate added after #595's red falsification.

@@ -28,6 +28,18 @@ ctest --test-dir host/build > "$AUTO_LOG_DIR/auto_ctest.log" 2>&1 || {
 .venv/bin/python .auto/test_bench_guards.py > "$AUTO_LOG_DIR/auto_cguards.log" 2>&1 || {
     echo BENCH_GUARDS_FAILED; tail -20 "$AUTO_LOG_DIR/auto_cguards.log"; exit 1; }
 
+# The seed-win equivalence guard, wired here because the host goldens CANNOT see the
+# assembly path (the host compiles the C fallback), so this is the only host-side
+# evidence that nd_lut2_rows_tie1n's add-from-zero seeding is bit-exact. It sweeps the
+# fp32 space and fails if the difference set is anything other than {-0.0, sNaN}, and
+# fails outright if the compiler is missing - a check that passes when its tool is
+# absent is the failure mode this campaign has been bitten by four times (#300, #530).
+if ! command -v cc >/dev/null 2>&1; then echo C_GUARD_NO_COMPILER; exit 1; fi
+cc -O2 -ffp-contract=off .auto/exp87/test_seed_equiv.c -lm -o "$AUTO_LOG_DIR/seed_equiv" 2>&1 || {
+    echo SEED_EQUIV_BUILD_FAILED; exit 1; }
+"$AUTO_LOG_DIR/seed_equiv" > "$AUTO_LOG_DIR/auto_seed_equiv.log" 2>&1 || {
+    echo SEED_EQUIV_FAILED; tail -10 "$AUTO_LOG_DIR/auto_seed_equiv.log"; exit 1; }
+
 # The console/session guards for the same reason: they are the only thing standing
 # between "the suite completed" and "the suite measured every case". Neither was
 # wired here, and .auto/exp28/test_pairing.py had been dying on its first assertion

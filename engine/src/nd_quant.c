@@ -537,8 +537,18 @@ ND_HOT void nd_cq_gemv_prepared(const nd_cact *c, const nd_tensor *t, const void
     ctx.g        = t->group;
     ctx.bits     = t->bits;
     ctx.rowbytes = rowbytes;
-
+#if ND_GEMV4_ASM
+    /* The all-rows path (the full-vocabulary head, once per request) satisfies the same
+     * guard the phi projections pass, so ask it. `base` is explicit because the generic
+     * walker ignores it while the assembly walker resolves i -> tensor row through it;
+     * anything the guard rejects keeps the generic walker, unchanged. */
+    ctx.base = 0u;
+    nd_parallel_rows(gemv4_asm_usable(&ctx, blob, out) ? gemv_rows_offset_asm
+                                                      : gemv_rows_generic,
+                     &ctx, out);
+#else
     nd_parallel_rows(gemv_rows_generic, &ctx, out);
+#endif
 }
 
 ND_HOT void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,

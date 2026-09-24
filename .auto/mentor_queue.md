@@ -13,10 +13,21 @@ ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
 speed/timer interaction, NOT solely the unaccepted stack; open question for
 mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
 (loop-form axis closed), #635 composition cross-board confirmed.
-LIVE: b3 PV-COUNT screen (M-pvc-b3, engine bc092db383cd — counted pointer-walk
-P.V body on the composition; harvest LANE_RC at EOF). b1 idle carrying the
-late-ring tree (803f6fe390e3, ring in CMake esp_driver_uart). b2 idle carrying
-the composition (gate done; harvest done).
+ALL BOARDS IDLE CLEAN at 23:33. b1 = late-ring accepted stack (803f6fe390e3,
+ring + B4W on bundle5: 20/20 cases complete, primary 5.365 = +1.163 pct on the
+ACCEPTED base, 18/20 delta52 same frozen pair). b2+b3 = confirmed composition
+(10c74c756ee5, 5.7467 both boards, gate done #635). PV-COUNT #636 DISCARDED
+(-0.38 pct): counted pointer-walk harmful on both hot loops; loop-form axis
+CLOSED (-0.18 / 0.00 / +0.53-via-extended-LEND only).
+
+NEXT discovery candidates on the composition (ranked):
+1. composed-v3: SELRES's 3-case dispatch x A3 rescale-fusion INTO the paired
+   PV loop (only for the both-rescale case). v2 (B4W+A3 4-way dispatch) died
+   with code bloat; SELRES's 3-case structure is the measured-good skeleton and
+   A3 alone was +0.62 pct. Host-byte-exact gate + objdump branch-count check
+   BEFORE flashing (in-loop selects are the known poison).
+2. If v3 fails: family holds at 5.7467; remaining value is owner disposition
+   of the frozen pair + the ring transport fix (both owned by the owner).
 STILL OWED: composition b3 gate is the b2-confirmed twin (skip or run at
 mentor's call); outline-attempt parked; owner: frozen-pair disposition blocks
 all acceptance incl. the ring-transport finding.

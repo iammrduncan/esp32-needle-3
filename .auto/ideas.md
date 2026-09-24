@@ -2801,3 +2801,20 @@ engine is a ROM library call with argument setup and FP spills. Priced on the de
 - **NOT a retry:** #231 (exponent-field insertion instead of the bitcast) lost to the SLOW memcpy
   baseline, so it loses harder against the fast one - named here so nobody re-opens it on the
   theory that expbc changed its premise.
+
+## 2026-09-24 evening - the wfr reserve (#exp61), prepared while three suites run
+
+Prepared `.auto/exp61/apply_wfr.py`: an `nd_f32_from_bits()` helper that uses Xtensa `wfr f, r` for
+the three exponent-scale bitcasts instead of the 4-byte copy, keeping `p * scale` untouched. Not
+run #231 (that changed the arithmetic). Cross-compiler probe: `wfr f0, a2` assembles, and the
+`__builtin_memcpy` form really does lower to `s32i.n` + `lsi`.
+
+Measured caveat that bounds the expected gain: the ACCEPTED `nd_model.c.obj` already contains 222
+`wfr` instructions, so GCC already uses the direct transfer where registers allow. The candidate
+moves it to 239 `wfr` / 235 `lsi` / 636 `s32i` (from 248/651) - i.e. it converts ~17 spill-and-
+reload expansions, and the allocator spilled those for a reason (pressure). So price it, do not
+assume it; if it is null, the remaining ~50 cycles per conversion is not the transfer and the
+conversion-cost thread closes.
+
+Follow-up if wfr is null: the conversion floor is the branchy exponent test plus the accumulate in
+the consumer, so the next question is the *consumer's* loop shape, not the bitcast.

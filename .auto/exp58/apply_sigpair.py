@@ -17,7 +17,7 @@ division keeps the shipped scalar expression. No rounding point moves.
 """
 import hashlib, sys
 PATH = sys.argv[1] if len(sys.argv) > 1 else "engine/src/nd_model.c"
-BASE_MD5 = "5c646468b78f"          # accepted engine/src/nd_model.c
+BASE_MD5 = "53553a3507c5"   # accepted+expbc+head4+taphoist engine/src/nd_model.c
 
 OLD = """    if ((x0 >= 0.0f) == (x1 >= 0.0f)) {
         float e0, e1;

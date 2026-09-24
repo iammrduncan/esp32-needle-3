@@ -1,5 +1,54 @@
 # Needle 3 mentor queue
 
+## Immediate mentor redirect — 2026-09-24 23:03 UTC
+
+B4W is a **discovery winner, not an acceptance proposal** while the frozen gate
+is 18/20. Owner permission cannot replace unchanged quality. Shipping stays
+5.3033. Stop reserving B1 for confirmations or waiting for admission.
+
+- **B1 now: B4W attention transplant onto accepted bundle5 `2c79104`.** This is
+  a NEW performance candidate with a quality-passing ancestor, not another
+  control. Mentor verified accepted / main / preserved `nd_model.c.seed` are
+  byte-identical (`0d639424f636`), so the B4W-only model diff is portable. Preserve
+  all worker dirt first; assemble this candidate in an isolated tree or from
+  exact preserved inputs, never reset a dirty worker. Keep frozen complete
+  fixtures, harness guards and safe clocks. Run host gate, then this candidate's
+  full 20-case screen once; compare with that board's bundle5 pin. Do not quietly
+  carry the unaccepted quant/assembly/scheduler stack into this transplant.
+- **B2 FINPAIR and B3 DOT8W:** leave live jobs alone. They are valid incremental
+  experiments on B4W; compare with same-board B4W 5.6967 / 5.6983, not just seed.
+  Do NOT rebuild FINPAIR on seed merely for a measurement ladder, repeat B4W
+  for noise, or complete an A3 board matrix. Existing references suffice.
+- **New turnover evidence: DOT8W FINISHED at 5.7283 on B3** versus B4W
+  5.6983 = +0.526%; 6/6 restricted exact, delta 0, heap 4823, LANE_RC=0.
+  FINPAIR finished at 5.6967 on B2 = exactly null. Harvest both; do not wait.
+  B2's next slot is DOT8W's one cross-board FULL gate (fresh tree for B2),
+  while B1 transplants B4W and B3 tests the independent QK schedule below.
+- **B3 next: QK two-column operand tile on B4W, not wider unrolling.** Mentor
+  inspected the exact B4W B1 ELF (22:54 build, attn_heads size 0x186b). The QK
+  loop 0x4037c4dc..0x4037c575 spills/reloads f13 through a1+0x460 EACH four-column
+  iteration (ssi 0x4037c4fc, lsi 0x4037c510); it ends in bnez. Thus the earlier
+  no-spill observation for P.V does NOT describe QK. Try one two-column tile
+  holding qA0/qA1/qB0/qB1 and k00/k01/k10/k11, updating all four scalar sums
+  before fetching the next tile. Maintain the original per-sum pair grouping
+  and ascending column order; target graph is mul(second product), madd(first
+  product), then add to sum, not fusing across the pair/sum boundary. No fast
+  math. Four sums + eight operands leave room for temporaries in 16 FP regs.
+  Inspect actual spills, loaded K reuse and loop form, then screen vs B3 B4W.
+  This is a register-lifetime experiment motivated by a measured spill, not a
+  declaration that attention is exhausted and not a 16-wide sweep.
+- Source precision for B1: **main HEAD is NOT bundle5** (main provenance
+  b1daae10df90); only nd_model.c is identical. Extract engine/esp32 sources
+  from git object `2c79104`, retaining the current hardened harness/frozen
+  complete fixtures. Hash files in the canonical glob order, not ls-tree
+  alphabetic order: src/*.c, src/*.S, include/*.h, main/*.c. B1 bundle5 pin is
+  5.3033. Do not expand harness/coverage or wait on another authority discussion.
+
+The accepted-base transplant can both recover a shippable gain and determine
+whether the two frozen failures follow the inherited stack. An 18/20 transplant
+still fails: record it without changing goldens or declaring boot-state causation.
+
+
 Mentor 2026-09-24 20:54 UTC + session-3 updates through #616 and lane logs.
 Keep worker dirt, locks, anti-repeat history, 240/80 MHz, frozen goldens and
 all quality gates. Never interrupt a live build/flash/benchmark. No foreground

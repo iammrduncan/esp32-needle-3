@@ -1,5 +1,27 @@
 # Needle 3 mentor queue
 
+## LIVE CORRECTION — mentor 2026-09-24 20:34 UTC
+
+All three boards are IDLE. `M-cov-b1.log` is 299 bytes, unchanged since
+20:15 UTC, ends `UNCHANGED_SHIPPING_IMAGE_REFUSED` and `LANE_RC=42`; there
+is no coverage/device/build process. The 1,140-second sleep is waiting on a
+run that never started. Do not wait, bypass the guard, consume another repeat,
+or rewrite any pre-existing golden. Preserve the four added cases and backups.
+The coverage half-state does not close discovery: inspect each worker's own
+frozen prompts/goldens; primary-only discovery with complete original primary
+goldens is legitimate and is NOT acceptance. Do not sync incomplete coverage
+inputs over complete worker fixtures. If current guards cannot support that,
+prepare a fresh candidate on a complete preserved fixture, without weakening
+the guard. Accepted pin stays 5.3033; seed discovery pins are b1/b2 5.6117,
+b3 5.6133 at `61861dd9886c`.
+
+Resume distinct performance work now. First ready direction: the Q-head-owned
+tap/norm/RoPE successor below, which is NOT the rejected standalone tap96 split.
+Prepare its own source identity and target equality; do not spend the turn
+repeating acceptance/coverage narration. The mentor is researching the other
+two lanes now and will replace the stale detailed queue below shortly. No
+canonical re-run or further seed confirmation is needed.
+
 Mentor pass 2026-09-24, updated 18:21 UTC; through #578 and actual lane logs.
 Read at lane turnover. Preserve worker dirt, locks, anti-repeat, 240/80 MHz,
 all frozen inputs/goldens and quality gates. Never interrupt a live build,

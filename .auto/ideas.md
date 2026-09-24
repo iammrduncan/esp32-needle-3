@@ -2996,3 +2996,21 @@ re-priced with the NEW toll, and their sign may flip positive:
    .auto/exp82/nd_model.c.desplit1 (zcsplit serial for n<1536) now has the OPPOSITE predicted
    sign and should not be run before the bundle.
 Gate still owed: M-gate-b3.log (20 cases) is the only thing between the stack and a re-pin at ~5.56.
+
+## Coverage run recipe (#467, executes atomically - do NOT split it)
+Four pre-validated held-out shapes (host-proven grammar-legal, 14-23 tokens, 34-47 B):
+free-text description -> set_sampling_interval(60); "Translate guten Morgen into French"
+-> set_timer(1500); "Log a temperature probe reading of 21.5 degrees" -> (21); open-ended
+status -> get_status. Steps, one board window (~35-40 min):
+1. append to `extended` in .auto/prompts.json (additions only; primary is sha256-pinned and
+   checks.sh refuses any edit to it).
+2. regenerate HOST goldens (host is the quality authority) and require
+   host_output_exact == host cases AND host_golden_missing == 0 from checks.sh.
+3. one device session in CANONICAL ORDER with AUTO_SAVE=1 and the FULL group set - the
+   partial-save guard refuses anything else, and run #395 showed tail goldens only
+   reproduce in canonical order. A missing device golden makes measure.sh exit with
+   DEVICE_GOLDEN_INCOMPLETE, so steps 1-3 must land in the same commit; never commit 1 alone.
+4. re-run the pre-existing 20 cases and prove none drifted, then commit prompts+goldens
+   together with the host/device missing counters at zero in the commit message.
+Wedge caveat: a boot answers 16-17 requests, so step 3 may need AUTO_HARD_RESET between
+sessions - and a reset mid-suite invalidates canonical order, so plan for one boot per save.

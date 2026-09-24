@@ -3014,3 +3014,10 @@ status -> get_status. Steps, one board window (~35-40 min):
    together with the host/device missing counters at zero in the commit message.
 Wedge caveat: a boot answers 16-17 requests, so step 3 may need AUTO_HARD_RESET between
 sessions - and a reset mid-suite invalidates canonical order, so plan for one boot per save.
+- **NEXT (exp87, out-of-band console discriminator):** configure `CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y`
+  plus a heartbeat that uses `esp_rom_printf` (secondary leg, bypasses the newlib/VFS stdout path the
+  harness reads). Drive the suite to the stall on the primary console; if the JTAG leg keeps printing
+  heartbeats while UART0 emission is dead, the fault is local to the primary console write path and the
+  fix is a bounded/deferred emit; if both legs die together the whole app is blocked (scheduler/mutex),
+  which reopens the spin-handshake question with real evidence. The JTAG harvest route already exists
+  (run #451 captured boot-only output on that leg).

@@ -211,6 +211,30 @@
    "input": "Set the telemetry sampling interval to 45 seconds, then start a timer for 300 seconds, and afterwards tell me the heap high water mark",
    "expect": null,
    "note": "REPLACES the 252-byte long_tools case, which measured UNREPRODUCIBLE on device: 199 generated tokens and no complete tool call (the JSON stopped mid-key at `...\"seconds\":300}},{\"n`), against a valid 132-token answer on the host. A case that cannot be byte-exactly reproduced is a golden-integrity hole (run #296), not coverage, so it is not frozen. The FINDING stays here: a long prompt makes the device generate ~2x the host's tokens without completing the call, and the extra ~200 per-token `TOK ` console lines are what back the console up enough that the following `!think` toggle goes unacknowledged (run #155's signature, now reproduced with the correct port). This shortened variant is the same three-call shape at a length the device completes."
+  },
+  {
+   "id": "heldout_free_describe",
+   "phase": "tools",
+   "input": "Describe what happens when the cache is full",
+   "expect": []
+  },
+  {
+   "id": "heldout_translate_de",
+   "phase": "route",
+   "input": "Translate guten Morgen into French",
+   "expect": []
+  },
+  {
+   "id": "heldout_probe_reading",
+   "phase": "tools",
+   "input": "Log a temperature probe reading of 21.5 degrees",
+   "expect": []
+  },
+  {
+   "id": "heldout_status_open",
+   "phase": "tools",
+   "input": "What is happening right now",
+   "expect": []
   }
  ],
  "think": [

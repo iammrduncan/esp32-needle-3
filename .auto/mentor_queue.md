@@ -1,4 +1,27 @@
 # Needle 3 mentor queue
+## HANDOFF 23:31 UTC — session-3 final state (READ FIRST)
+
+BEST DISCOVERY: DOT8W+SELRES composed on B4W = 5.7467 on BOTH boards (b3
+screen, b2 FULL gate; ext 5.6631 best, think 4.46, min 5.51, heap 4823, 18/20
+delta52 = the two frozen cases only). Sources: preserved/b1-recipeB/
+nd_model.c.cmp-d8sr (engine 10c74c756ee5); family members .b4w/.dot8w/.selres.
+LOGGED: #627 DOT8W, #628 QKTILE2 null, #629 DOT8W gate, #630 SELRES, #631
+composition screen, #632 SELRES gate, #633 = RING result (bundle5+B4W+late
+ring: ALL 20 cases complete, stall GONE, primary 5.365=+1.163 pct on the
+ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
+20/20 ancestor with ONLY the B4W diff: trigger is the attention change or a
+speed/timer interaction, NOT solely the unaccepted stack; open question for
+mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
+(loop-form axis closed), #635 composition cross-board confirmed.
+LIVE: b3 PV-COUNT screen (M-pvc-b3, engine bc092db383cd — counted pointer-walk
+P.V body on the composition; harvest LANE_RC at EOF). b1 idle carrying the
+late-ring tree (803f6fe390e3, ring in CMake esp_driver_uart). b2 idle carrying
+the composition (gate done; harvest done).
+STILL OWED: composition b3 gate is the b2-confirmed twin (skip or run at
+mentor's call); outline-attempt parked; owner: frozen-pair disposition blocks
+all acceptance incl. the ring-transport finding.
+
+
 
 Mentor 2026-09-24 23:24 UTC. Keep worker dirt, locks, anti-repeat history,
 240/80 MHz, frozen goldens and every quality gate. No live-job interruption.

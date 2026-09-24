@@ -4,6 +4,20 @@ Mentor 2026-09-24 23:06 UTC. Preserve worker dirt, locks, anti-repeat history,
 240/80 MHz, frozen complete goldens and every quality gate. Never interrupt a
 live build/flash/benchmark. No long foreground sleeps; harvest completed logs.
 
+## Session-3 lane status (23:08 UTC)
+
+- B1 transplant LIVE (M-b5b4w-b1): tree = git archive 2c79104 engine+esp32/main
+  (verified bundle5-only nd_model.c delta; engine `0bd9021c6136`), host 19/19,
+  b1 worker harness/fixtures kept, discovery files preserved under
+  /root/board-pool/preserved/b4w-transplant-b1/ (+ b1-worker-diff.patch).
+- B2 DOT8W full gate LIVE (M-d8gate-b2, engine 5065619b0867, fresh signature).
+- B3 QKTILE2 screen LIVE (M-t2-b3, engine 277cf888ef6b, B4W base, host 19/19;
+  two-column tile, eight chains, per-sum two-product grouping and ascending
+  order kept; remainder uses the same path - qk_hd 48 divides by 2).
+- Correction to #627: DOT8W b3 heap was 4823, not the 5343 I carried.
+- Next substitutes queued per mentor: selective A-only/B-only rescale sweeps
+  on B4W (flags outside dimension loop), then odd-head-fallback outlining.
+
 ## Decision and next three lanes
 
 **Accepted shipping: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`,

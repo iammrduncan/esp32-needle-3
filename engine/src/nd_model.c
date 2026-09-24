@@ -1149,9 +1149,29 @@ static ND_HOT void tap_rows(void *vc, uint32_t b0, uint32_t b1)
     const tap_ctx *c = (const tap_ctx *)vc;
     uint32_t        i, j, dim = c->dim;
     uint32_t        lo = b0 * 256, hi = (b1 * 256 < dim) ? b1 * 256 : dim;
+    uint32_t        nt = c->taps <= c->pos + 1u ? c->taps : c->pos + 1u;
+
+    /* The valid tap count and the history rows are fixed for the whole call, but the
+     * shipped loop derived `(pos - j) % taps` and the row address per column - a
+     * remainder per tap per column. Resolve them here; the column loop below then only
+     * loads, multiplies and adds. `nt` is exactly the shipped `j < taps && j <= pos`. */
+    if (nt == 3u) {
+        const float *h0 = c->hist + (size_t)( c->pos        % c->taps) * dim;
+        const float *h1 = c->hist + (size_t)((c->pos - 1u)  % c->taps) * dim;
+        const float *h2 = c->hist + (size_t)((c->pos - 2u)  % c->taps) * dim;
+        const float *w0 = c->w, *w1 = c->w + dim, *w2 = c->w + 2u * dim;
+        for (i = lo; i < hi; i++) {
+            float value = 0.0f;
+            value += w0[i] * h0[i];
+            value += w1[i] * h1[i];
+            value += w2[i] * h2[i];
+            c->proj[i] = value;
+        }
+        return;
+    }
     for (i = lo; i < hi; i++) {
         float value = 0.0f;
-        for (j = 0; j < c->taps && j <= c->pos; j++) {
+        for (j = 0; j < nt; j++) {
             uint32_t prior = (c->pos - j) % c->taps;
             value += c->w[(size_t)j * dim + i] *
                      c->hist[(size_t)prior * dim + i];

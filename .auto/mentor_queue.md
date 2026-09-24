@@ -24,9 +24,17 @@ NEXT discovery candidates on the composition (ranked):
 1. (RETIRED before build) composed-v3 A3-fusion: #622 closed fusion of the
    rescale multiply into the paired PV body "regardless of form" - SELRES's
    skeleton would not rescue a mechanism already measured harmful twice.
-2. INSTEAD (running): behavioral capture of the CONFIRMED composition on b2 -
-   the acceptance packet needs capture green on exactly this image.
-3. Then: owner disposition (frozen pair + ring transport fix).
+2. DONE #637: behavioural capture GREEN on the composition (b2, CAP_RC=0,
+   7/7 scenarios match). Acceptance packet COMPLETE for the composition.
+3. ATTRIBUTION (off-device, done): the two frozen failures are DEVICE-ONLY -
+   the same cases PASS byte-exact on host for every family image (host
+   19/19 incl. both cases, while device is 18/20 delta 52). Arithmetic is
+   identical on host; the device divergence tracks demo-timer / sampling-
+   interval STATE (both case names are the timer/interval ones) and speed,
+   not the rounding graph. Owner disposition is the only remaining action on
+   them; do not re-attempt an arithmetic fix - none is indicated.
+4. Pool state: b1 late-ring accepted-stack tree, b2+b3 confirmed composition,
+   all idle, no expectation files left, logs under batches/.
 STILL OWED: composition b3 gate is the b2-confirmed twin (skip or run at
 mentor's call); outline-attempt parked; owner: frozen-pair disposition blocks
 all acceptance incl. the ring-transport finding.

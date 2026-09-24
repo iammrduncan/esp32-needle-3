@@ -820,5 +820,32 @@
         "timer_fired_count": 0
       }
     }
-  ]
+  ],
+  "after": {
+    "device": "esp32-s3",
+    "schema": "agent-watch-v2",
+    "layers": 8,
+    "model_bytes": 16155796,
+    "uptime_ms": 195018,
+    "free_internal_bytes": 7391,
+    "free_psram_bytes": 21924,
+    "sample_period_s": 10,
+    "samples": 11,
+    "last_sample_uptime_ms": 194881,
+    "last_sample_free_internal_bytes": 7779,
+    "timer_status": "expired",
+    "timer_remaining_ms": 0,
+    "timer_fired_count": 1
+  },
+  "verification": {
+    "routes_match": true,
+    "tools_match": true,
+    "requests_succeeded": true,
+    "no_external_calls": true,
+    "local_has_two_passes": true,
+    "external_stops_at_selection": true,
+    "telemetry_progressed": true,
+    "sampling_interval_applied": true,
+    "timer_expired": true
+  }
 }

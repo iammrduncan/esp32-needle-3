@@ -78,12 +78,25 @@ fi
 # refuses to start on a mismatch instead of reporting a number for the wrong code.
 PROV_TREE=$(pwd)
 PROV_HEAD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
-PROV_ENGINE=$(md5sum engine/src/nd_quant.c 2>/dev/null | cut -d" " -f1)
+PROV_ENGINE=$(cat engine/src/nd_quant.c engine/src/*.S 2>/dev/null | md5sum | cut -d" " -f1)
 echo "PROVENANCE tree=${PROV_TREE} head=${PROV_HEAD} engine_md5=${PROV_ENGINE}"
 # Prefix match on purpose: a 12-hex md5 prefix is what every ledger line quotes, and
 # requiring the full 32 characters made lanes abort on a correct tree (measured: three
 # lanes exited with PROVENANCE_MISMATCH while printing the expected 12-hex value).
 PROV_BAD=0
+# File form, same lesson as the repeat marker two blocks above: EXPECT_ENGINE_MD5 was env-only,
+# so every .auto/expect_engine_md5 written this session was never read and the assertion was
+# human-reviewed rather than machine-enforced. A knob whose documented file form silently does
+# nothing is worse than no knob, because it manufactures confidence. Accept either location.
+if [ -z "${EXPECT_ENGINE_MD5:-}" ]; then
+    if [ -s "$AUTO_LOG_DIR/expect_engine_md5" ]; then
+        EXPECT_ENGINE_MD5=$(head -c 64 "$AUTO_LOG_DIR/expect_engine_md5" | tr -d ' \n')
+        export EXPECT_ENGINE_MD5
+    elif [ -s .auto/expect_engine_md5 ]; then
+        EXPECT_ENGINE_MD5=$(head -c 64 .auto/expect_engine_md5 | tr -d ' \n')
+        export EXPECT_ENGINE_MD5
+    fi
+fi
 if [ -n "${EXPECT_ENGINE_MD5:-}" ]; then
     case "${PROV_ENGINE}" in
         ${EXPECT_ENGINE_MD5}*) : ;;

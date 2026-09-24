@@ -2818,3 +2818,17 @@ conversion-cost thread closes.
 
 Follow-up if wfr is null: the conversion floor is the branchy exponent test plus the accumulate in
 the consumer, so the next question is the *consumer's* loop shape, not the bitcast.
+
+## f16wfr (wfr at nd_f16's own bitcast): prepared, then withdrawn before any board
+
+Reason to believe it: `nd_f16`'s normal path still ends in a plain 4-byte copy, and under
+`-fno-builtin-memcpy` that is a ROM call wherever GCC does not fold it (#424: 26.9 cyc/conversion;
+#425's builtin-only variant: +0.190 % before head4 took nd_f16's biggest consumer).
+
+Why it is not queued: my composed header put `nd_f32_from_bits` where `nd_f16` could not see it, and
+the lane died at compile time with `conflicting types for 'nd_f32_from_bits'` (use before definition)
+- zero cases run, no board time lost beyond the flash. Fixing it means MOVING the helper above
+`nd_f16`, which changes the md5 of the already-measured `wfr` header, so the rider must be rebuilt on
+top of the accepted base and re-pinned, not patched into a measured tree. Expected value is
++0.06..0.19 %, i.e. sub-bar on its own; it only matters if a future bundle needs it, and bundle5
+already cleared the bar without it.

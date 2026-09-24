@@ -153,3 +153,11 @@ counters (run #391). Cost of the console ring: one metric tick (-0.09 %) and 4,2
 **One ask unblocks the re-pin:** re-capture or annotate those two goldens. Then one session on
 this exact tree should read 20/20 and the pin moves 5.3033 -> ~5.575. Nothing else in the campaign
 is above the 0.2 % keep bar inside the documented maxima and the byte-exact gate.
+
+## 2026-09-25 clean-tree reading (supersedes the 5.575 row above)
+
+Trace-free merge, prov `4d3094578050`, snapshot `.auto/exp84/main.c.lean-ring-clean`, ELF verified
+RXQ-free: **decode 5.5767 (+5.17 %)**, min_case 5.31, boot bench 5.621, internal_free 8,415,
+host 19/19 byte-exact, fidelity 5.341e-05, **device 18/20, LANE_RC=1**, diverging only on
+`heldout_interval_one` + `heldout_long_tools_note_only` (token_delta 52, golden_missing 0).
+Third independent reproduction of that pair, now with the diagnostic removed - #527's caveat retired.

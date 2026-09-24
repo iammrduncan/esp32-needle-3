@@ -1,133 +1,148 @@
 # Needle 3 mentor queue
 
-Mentor pass: 2026-09-24 05:38 UTC; evidence through #423 and completed lane logs.
-Read at lane turnover.
-Preserve live jobs and dirty work. Implementation/measurement belong to the
-researcher; these are priorities to test, not claims of speed or acceptance.
+Mentor pass: 2026-09-24 08:08 UTC. Evidence through #427 plus live lane logs.
+Read at lane turnover. Preserve live jobs and dirty work; the researcher owns
+implementation and measurement. These are experiments, not acceptance claims.
 
-Accepted: **5.1167 tok/s**, fw3foldnb, accepted engine signature cc046f59204e.
-Clean condT: **5.1267 (+0.196%)**, extended 5.0531 (13/13); 19 cases reached,
-then think-group handshake timeout, so still unaccepted. Fusion+refund: 5.1467;
-fusion+condT: 5.1567 on two boards, still unaccepted. Do not mix their bases.
-Bundle attempt #13 stopped at 17 cases. No gate waiver, shortened acceptance,
-union of sessions, or automatic promotion is authorized by this note.
+## What changed
 
-## Priority change: remove repeated machinery inside arithmetic loops
+Accepted remains **5.1167 tok/s**, fw3foldnb, engine `cc046f59204e`.
+The research base is now **expbc + head4**, engine `33ab30304257`, **5.235**
+on multiple boards. It is NOT accepted. Adding taphoist gives engine
+`0190834e3488`: **5.2717** on b3 and now b2 (+0.70% over 5.235, +3.03% over
+accepted); b3 repeat primary is 5.2733. Label both base and delta explicitly.
+One completed taphoist suite was **19/20**, token delta 0. No promotion yet.
 
-Three fresh source/binary findings outrank another unchanged gate attempt or
-accepted-image re-anchor. History searches found no equivalent measurements.
+The previous queue's exp bitcasts, head dispatch, FP16 bitcast screen, tap
+address hoisting and condT+two-sum retry have all been measured. They are no
+longer a future-work catalog. The first three independent discovery lanes below
+replace repeated gates and same-board confirmations at the next turnover.
 
-**A. Four-byte bitcasts are real ROM calls.** Board 2's current compile commands
-contain `-fno-builtin-memcpy`. Its ELF's `sigmoidf_pair` calls ROM `memcpy`
-(0x400011f4) twice at 0x4037c9b6/0x4037c9c2 just to construct the two exponential
-scales, with FP spills around them. `nd_f16_slow` does the same for four bytes.
-Thus #415's ~64-cycle "store-to-load forwarding floor" is not established:
-the cost includes a library call, argument setup and spills. The source's
-`nd_f16`, `nd_expf`, and `nd_expf_pair` all use this idiom.
+At inspection: b1 candgate exited with handshake timeout at 07:55 UTC and its
+lock/job is free; b2 and b3 still have real bench.py processes for taphoist but
+logs have not advanced beyond primary/reconnect recently. Do not interrupt live
+jobs. Harvest by process + log + exit status, not stale tmux session names.
+Prepare a candidate while they run, rather than another 9-minute blind sleep.
 
-First field candidate: change only the three scale bitcasts in `nd_expf` and
-`nd_expf_pair` to explicit `__builtin_memcpy` of four bytes (or a proven local
-register bitcast if the builtin still calls). Keep compiler flags, polynomial,
-range reduction, clamps and scalar fallback. Inspect emitted code: the calls
-must actually disappear. Check primitive bit equality on real/corner operands
-before full gates; removing calls can enable new FP contraction, so preserve
-the existing rounding points if it does. No global fast-math or global builtin
-policy change. This reaches the already-hot exp consumers without unstaging any
-weights. Price this on the accepted base before bundling with fusion/condT.
-Cycle sanity: 14,336 calls x 60 cycles / 240 MHz = 3.58 ms, not 0.36 ms;
-call cost and realised speedup still need measurement.
+## Next three independent experiments
 
-**B. The tap loop repeats integer work for every output channel.** Current
-`tap_rows` contains `remu` at 0x4037e3f7 followed by `mull` at 0x4037e3fa inside
-the tap/channel nest: `(pos-j)%taps`, then history-row addressing. Hoist the
-valid tap count and history-row offsets/pointers once per call, retaining the
-column loop and ascending-j MAC order. Archive header read directly: 3 taps,
-q/k/v widths 576/96/128. The current 256-column chunks all take the serial
-fallback (`nrows < 4`); this is not a currently dual-core tap kernel. Preserve startup `j <= pos`, wrap,
-zero seed and all fallback geometries. This is independent of fp16 storage.
-Compare the original and hoisted kernels with real PSRAM history/weights,
-warm and cold, current split policy, mismatch checks and setup included.
-The 2.4 ms q-tap attribution gives a real target; the exact saving is unknown.
-
-**C. Full vocabulary head misses the existing 4-bit assembly dispatch.** The
-~100 ms per-request residual has a concrete explanation to verify: after
-`ND_TOOL_CALL_END_ID`, `nd_sample_accept` clears `engaged`; the next call uses
-`nd_model_logits_all` to predict the stop token. Both all/subset paths charge
-ND_P_LOGITS. The all path reaches `nd_cq_gemv_prepared`, which unconditionally
-uses `gemv_rows_generic`, unlike `nd_cq_gemv_rows` with `gemv4_pick`.
-Read-only archive census: embedding is 8192x768, bits=4, group=128, six groups;
-ALL 49,152 norm exponents are ordinary (no 0/31). Thus the existing guarded
-4-bit row walker is eligible. Test routing the full prepared head through it,
-with **ctx.base explicitly zero-initialized** and generic fallback preserved.
-Check multi-row equality/cursors and unchanged whole-vocabulary argmax, then
-primary/extended/think monitors. Keep terminal prediction and token accounting;
-do not shortcut the model's stop decision. This is reuse of a proven kernel on
-an uncovered call path, not the already-null new multi-row fusion experiment.
-
-## Next three board lanes
-
-| Board | Work at turnover | Reason |
+| Lane | Next work | Why now |
 |---|---|---|
-| 1 | FP16 bitcast screen (researcher's selected substitute), then tap-offset-hoist B, using JTAG/FLASH_PORT | Its UART fault does not block kbench: #418 proved this route. Reuse that locked lane pattern; do not wait for a reseat. |
-| 2 | Exp-scale bitcast candidate A; condT has exited DONE_1 | This is a new high-call-count mechanism. No forced interruption of live work. |
-| 3 | Channel-major condT + two independent conditioning sums in flight | The researcher's proposed retry is justified: #380/#381 interleaved STRIDED operands; condT changes delivery. Compare against the clean 5.1267 condT reading as well as accepted, preserve each channel's ascending-i sum. A 4+4 split cold screen can precede the field candidate. |
+| Board 1 (free) | **Mixed-sign sigmoid pairing** | Fresh uncovered call path in an already successful mechanism. Use the proven JTAG screen route if UART blocks a field run. |
+| Board 2, after current tap confirmation | **Two adjacent tap outputs in registers**, on the taphoist base | Hoisting changed the bottleneck; preserve each channel's three MACs but expose independent chains. |
+| Board 3, after current repeat | **Forward the current tap input from projection** | Remove a redundant load after the history copy, without changing history or arithmetic. Different mechanism from column tiling. |
 
-Logits split is DONE_0 / HARVEST_DONE (`lg4_b3_052825.log`). Tools: 26 calls,
-mean prep 0.09715 ms, gather 0.10958 ms; route: 13 calls, prep 0.097 ms,
-gather 0.06762 ms. Subset children are small, but DO NOT conclude that the old
-3.8/7.1 ms parent was all print overhead: it also contains the full-head path
-in C above. The newly added printf further contaminates that parent. Use child
-timers for kernel pricing; a count/timer on the all-head path can confirm the
-fixed per-request residual without another broad attribution exercise.
+**1. Mixed-sign sigmoid pairing (highest new priority).**
+`sigmoidf_pair` in `engine/src/nd_model.c` only calls `nd_expf_pair` when the two
+original inputs have the same sign; opposite signs take TWO scalar exponentials.
+But both branches feed the exp a nonpositive argument. Compute each argument
+with the ORIGINAL predicate (`x >= 0 ? -x : x`), call the existing exp pair for
+both, then choose each output's ORIGINAL division independently:
+`1/(1+e)` for nonnegative input, `e/(1+e)` otherwise. No reciprocal rewrite,
+no `1-sigmoid`, no `-fabs` substitution (signed zero), no changed polynomial.
+The pair already has the scalar clamp fallback. Keep scalar handling for any
+nonfinite corner not covered by its proven domain. Reuse the primitive guard
+from `.auto/sigpair/test.c`; cover all four sign combinations, +/-0, subnormals,
+clamp boundaries and real operands under the device compiler's contraction
+settings. Inspect the actual mixed-sign path and price it with the current
+expbc header: #229's old 49-cycle saving is NOT a current price. History #290
+explicitly left mixed signs scalar; later retries changed placement, not this.
+A lightweight count from real operands can explain coverage, but is not a
+prerequisite for preparing the candidate or an excuse for a new profiling suite.
 
-## Small reserve, prepared while those lanes run
+**2. Tap two-column tile.**
+Start from the exact hoisted tree, not old main. Keep two independent +0 seeds;
+issue tap 0 for columns i/i+1, then tap 1, then tap 2, then store each output
+once. Each column retains ascending-j multiplication/addition and rounding.
+Use scalar tails and original startup/general-tap fallback. Screen two columns
+first; four only if two wins without spills. Measure real cold history/weights
+and setup included, plus current split policy. Prior condT2's null is a long
+strided reduction; this is a three-term independent output kernel whose integer
+cost has just fallen. Do not claim those are the same experiment.
 
-1. **Full-head assembly C is first on the next healthy free lane.** Do not
-   delay a ready condT+cond2 or bitcast lane to prepare it.
-2. **FP16 bitcast separately:** apply the same local call removal to `nd_f16`
-   and its slow path. Check all 65,536 half encodings bit-for-bit (including
-   signed zero, subnormals and NaN payload behavior), then price real consumers
-   and the unchanged staged model. Do not immediately repeat tap16/condv16:
-   only a measured cheaper conversion would change their rejected premise.
-3. **Tap field integration / independent column tile:** promote B if it wins;
-   if offset hoisting is insufficient, hold 2-4 neighboring channel sums in
-   registers across the ascending tap loop. Each sum keeps its original order;
-   pointers/control are shared and each output is stored once. Avoid a naive
-   tap-outer implementation that adds a PSRAM output load/store for every tap.
-4. **Changed-premise fp16 storage retry, conditional:** only if the FP16 screen
-   demonstrates cheap conversion, compare channel-major fp16 cond_v with
-   channel-major fp32, preserving the sums and counting cold delivery plus
-   conversion. This specifically removes the ROM-call penalty from #416;
-   saving memory alone is not a speed result. Do not spend a board otherwise.
+**3. Tap current-input forwarding.**
+`tap_projection` copies projection into the current history row immediately
+before `tap_rows`. For the j=0 term only, read the untouched `proj[i]` rather
+than reloading the identical history slot, then overwrite proj[i] only after
+its sum is finished. Keep the complete history memcpy, weight operand order,
++0 seed, old-tap sources, and fallback initially. This isolates load forwarding
+from copy fusion and column tiling. Projection is disjoint from history; verify
+that contract and compare BOTH resulting projections AND complete history over
+startup, wrap, odd widths and disjoint worker ranges. The history was just
+written, so do not price this as a guaranteed cold-PSRAM miss saving. If neutral,
+it can still motivate a later separately measured copy/compute fusion, not an
+automatic bundle. Do not add a new table or consume scarce internal RAM.
 
-## Keep the useful closures; narrow the overbroad ones
+## Ready substitutes and small reserve
 
-No repeat of logf(1) skipping (#413), 120 MHz vendor-blocked timing, wide float
-loads, generic row fusion, or the unchanged fp16-unstaging variants. The latter
-reject conversion-at-use as implemented; they do not close integer address
-hoisting or prove all tap time is memory latency. The residency control was
-never harvested (#420), so its outcome must not be invented. condT's cold gain
-is useful and remains banked; repeated bundle gates have lower discovery value.
-Use pinned per-board baselines and existing provenance/anti-repeat guards.
-Confirm each lane with the relevant process AND advancing nonempty logs.
-Wrap-up snapshot (last observed 05:39:50 UTC): no board jobs were live yet.
-The researcher acknowledged A, selected a JTAG FP16 screen for board 1,
-and prepared condT+cond2 for board 3. Board 2's bitcast generator FAILED:
-`s.count("__builtin_memcpy") == 3` also counts the added comment, so no candidate
-file was written and the subsequent copy/build failed. The shell nevertheless
-started checks on the unchanged base. Those results cannot validate A. Count
-actual call sites, stop on generation failure, verify the applied candidate,
-then launch the ready distinct lanes. This is the next pass's first inspection.
-The final assertion correction could only be saved here: the deadline-resumed
-environment refused Podman access (`chmod /run/user/1000/libpod: read-only file
-system`). Earlier priority steering was delivered and acknowledged.
-At 05:33 all board jobs had exited while Pi was in `sleep 560`; the mentor
-cancelled only that idle wait and sent these priorities. In this installed Pi,
-Ctrl-C clears the editor; documented `app.interrupt` is Escape. Queued guidance
-was resubmitted after the cancellation. Do not wait ten minutes to harvest
-already-complete lanes; prepare candidates while a real lane runs.
+- **Tap chunk geometry:** after hoisting, q=576 at 256 columns yields 3 units,
+  so the splitter runs serial. Try q-only 128-column chunks (5 units) with
+  bounded hi/tail; retain k=96/v=128 serial. Include worker dispatch/join and
+  real cold data. The old global split policy is not a measured optimum for
+  the newly shortened q tap. Test one geometry, not a sweep. This can substitute
+  if a top lane is blocked.
+- **Engram tap register accumulation:** `egtap_rows` already hoists row offsets
+  but zeroes the PSRAM output and reloads/stores it once per tap. A small column
+  tile can hold +0 sums across the ascending valid taps and store once. Keep
+  `back <= pos`, dilated history wrap and site offsets. This is different from
+  rejected fp16 unstaging; first price its actual field frequency, since this
+  phase is much smaller than qkv taps. Ready substitute for a blocked lane.
+- **Banked composition:** radix-4 FWHT + cold-path IRAM refund and clean condT
+  remain unaccepted, measured levers. Once fresh screens have launched, one
+  composition with the expbc/head4/taphoist research base can test interaction.
+  Pin every input signature; do not call a candidate base accepted again.
 
-Source trail for A: [IDF 5.5.2 toolchain flags](https://github.com/espressif/esp-idf/blob/v5.5.2/tools/cmake/toolchain-esp32s3.cmake)
-and [GCC explicit library builtins](https://gcc.gnu.org/onlinedocs/gcc/Library-Builtins.html).
-These support the mechanism; the local ELF establishes that it exists here.
-B is a direct source/disassembly deduction, not a borrowed speed claim.
+## Correctness blocker: bounded diagnosis, no automatic exoneration
+
+The same `heldout_long_tools_note_only` mismatch on f16bc and taphoist does
+NOT prove an order-dependent golden: both contain **expbc**, and neither is a
+completed same-order accepted control. The retained CASE lines ALREADY locate a semantic difference: the frozen
+`.auto/golden/device.json` calls `set_sampling_interval(seconds=300)`, while
+`M-f16bc-b3.log:130` and `M-tap-b3.log:185` both call it with **seconds=120**.
+Both are 19 tokens. This is not merely a tail-prose or whitespace discrepancy;
+`calls_ok=1` here only means execution succeeded because this case has expect=null.
+#395 says canonical accepted output was 20/20; its order-dependent isolated
+probes do not waive a mismatch in canonical order. #390's earlier condT veto on
+this same case is relevant too, but still does not identify the cause.
+
+Keep the strict 20/20 gate. The raw DIVERGE display truncates before the argument;
+retain a full raw result on the next already-needed candidate run, without
+changing prompts/goldens/order. Distinguish model-token change from response
+pairing/framing or firmware state. No fresh run is needed to discover 300 vs 120.
+
+Existing logs also show apparent reboots at group reconnects: M-tap-b3 STATE
+uptime goes 110372 ms (extended attach) to 63042 ms (think attach), with fresh
+priming and sampling state reset to 30 seconds/one sample. M-f16bc-b3 does the
+same (111132 -> 63452); M-tap2-b3 reprimes at the extended boundary. This is
+strong evidence against the comment that reconnect always preserves state.
+The old 20/20 fw3fold-gated-full-b1 log also has 119212 -> 65152 before think.
+Do not rewrite historical results, and do not attribute the note-only mismatch
+to a reset that happened AFTER it. If a gate diagnostic is needed, inspect
+continuity/port-open effects in the existing logs first; do not merely increase
+request timeouts or assume every live bench.py is advancing inference. A device-compiler differential of the shared expbc
+primitive against the actual accepted primitive is a useful bounded screen if
+that common ancestor has only host evidence. Preserve rounding/contraction;
+removing a memcpy call changes compiler scheduling. If a matched accepted
+control is truly needed, permit ONE named diagnostic lane while the other two
+screen distinct candidates. No repeated unchanged full gates, shortened
+acceptance, union of sessions, rewritten goldens or new prompt expansion.
+
+## Closures worth preserving
+
+- expbc is the measured +1.95% lever. Remaining ROM memcpy census sites are
+  bulk copies; do not repeat the original tiny-bitcast search.
+- head4 adds +0.35% over expbc. f16bc adds nothing to head4 (#426); its claimed
+  768 B heap refund was a base attribution error. Keep f16bc dropped.
+- condT2 = condT (5.1267); reduction interleaving stays closed.
+- tap16 / condv16 losses remain measured. Taphoist disproves the broad claim
+  that every tap cost is memory delivery, not those actual rejections.
+- No 120 MHz/vendor-blocked timing, approximate math, wide-float loads, generic
+  row-fusion reruns, or anti-repeat bypass. A host exact test does not cover
+  worker races or prove unchanged Xtensa codegen.
+
+Research basis: the new lanes come directly from current call paths and memory
+lifetimes. [GCC contraction documentation](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html)
+explains why source-order proofs must be checked under the actual build flags;
+[IDF speed guidance](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
+supports measuring memory placement and real task overhead rather than assuming
+a kernel-only speedup transfers. Neither source supplies a Needle speed claim.

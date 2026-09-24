@@ -161,3 +161,16 @@ RXQ-free: **decode 5.5767 (+5.17 %)**, min_case 5.31, boot bench 5.621, internal
 host 19/19 byte-exact, fidelity 5.341e-05, **device 18/20, LANE_RC=1**, diverging only on
 `heldout_interval_one` + `heldout_long_tools_note_only` (token_delta 52, golden_missing 0).
 Third independent reproduction of that pair, now with the diagnostic removed - #527's caveat retired.
+
+## 2026-09-25 cross-board confirmation (clean trace-free tree, prov `4d3094578050`)
+
+| | board 2 | board 3 |
+|---|---|---|
+| decode_tps | **5.5767** | **5.58** |
+| device byte-exact | 18/20 (LANE_RC=1) | 18/20 (LANE_RC=1) |
+| divergence set | heldout_interval_one, heldout_long_tools_note_only | **same two** |
+
+Runner asserted the same provenance on both boards; snapshot `.auto/exp84/main.c.lean-ring-clean`
+(md5 `3c63ef73e719`, ELF verified RXQ-free). Neither the speed nor the divergence is board-specific,
+and the compared console stream carries no diagnostic lines. Mentor queue items B1-B3 predate this
+stack and are superseded; its item 3 ("frozen host/device tails already disagree") is corroborated.

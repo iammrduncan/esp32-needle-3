@@ -10,11 +10,13 @@ sleep >20 s in this harness; harvest lanes from their logs.
 **Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`. Unaccepted
 discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
 
-| Board | State (22:54 UTC) | Next |
+| Board | State (23:00 UTC) | Next |
 |---|---|---|
-| 1 | B4W restored (engine `51ea5246142e`), **full gate running** (M-b4wgate-b1, fresh signature). | B4W breadth on 2nd board. |
-| 2 | **B4W screen 5.6967 (+1.516%)**; full gate running (M-b4wgate-b2, allowance used; extended 5.615 already = best ext ever measured, vs B 5.5554 / A3 5.5538). | After gate: next distinct candidate (NOT pairing width again). |
-| 3 | **B4W screen 5.6983 (+1.516%)** = margin reproduced exactly. Now screening **B8W** (8-cell paired body, engine `baeda26700d6`, host green). | If B8W > B4W, width axis still open; else B4W is the form. |
+| 1 | B4W gates DONE both boards (5.6967/5.6967, ext 5.6138/5.6146, think 4.44, 18/20 frozen pair, heap 5343). Tree = B4W, idle. | Confirmation board; integration prep if owner accepts B4W. |
+| 2 | B4W fully gated. Screening **FINPAIR** (B4W + paired final 1/denom normalize, engine `622ca49c5edd`). | After screen: if sub-bar, restore B4W-or-seed and take the next distinct idea (QK-dot-side only). |
+| 3 | B8W CLOSED (-0.03 % vs B4W same board, width saturates at 4). Screening **DOT8W** (8-column QK dot body, engine `5065619b0867`, B4W base). | If sub-bar: QK width axis closes too; b3 -> seed. |
+
+**B4W = session acceptance proposal** (owner decision on the frozen 18/20 still gates shipping). Width CLOSED at 4. Fusion (A3 x pairing) CLOSED both forms. Composition rule re-proven: sub-additive wins interact negatively; only B4W-or-A3 layouts survive.
 
 **Confirmed candidates (unaccepted):**
 - **A3**: 5.6467 on b2 AND b3 (+0.62%/+0.60%), full 20-case gate = 18/20, the

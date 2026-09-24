@@ -8,6 +8,11 @@
 # generator that silently matched nothing cannot pose as a measurement (#379/#363).
 set -uo pipefail
 B="${1:?board}"; GEN="${2:?generator script}"; TARGET="${3:-engine/src/nd_model.c}"
+# An optional SECOND (generator,target) pair, for a bundle whose halves are each already
+# measured on this base (the #371 precedent: two bar-marginal halves of one phase that have to
+# be priced together). Both are asserted independently, so a half that silently matched nothing
+# still stops the lane (#379/#363).
+GEN2="${4:-}"; TARGET2="${5:-}"
 MAIN=/workspace/esp32-needle-3
 W=/root/board-pool/board$B
 BRANCH=autoresearch/decode-tps-2026-09-18
@@ -20,7 +25,7 @@ rm -f "$W/esp32/sdkconfig"          # gitignored; regenerate from tracked defaul
 # clean measurement; every lane that printed a trustworthy number deleted them first (#423).
 rm -f "$W/.auto/diag_repeat_ok" "$W/.auto/diag_request_timeout_s" "$W/.auto/diag_case_gap_s" \
       "$W/.auto/diag_groups" "$W/.auto/diag_reattach_each" "$W/.auto/diag_build_cfg"
-REL="$TARGET"; TARGET="$W/$REL"
+REL="$TARGET"
 # Assert the BASE, not just the change: after the #421 base error a worker HEAD could carry a
 # gate-blocked candidate, so "accepted + candidate" was really "fusion + candidate".
 TREE_BEFORE=$( cd "$W" && { cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c; } | md5sum | cut -c1-12 )
@@ -29,12 +34,17 @@ if [ "$TREE_BEFORE" != "$ACCEPTED_ENGINE_MD5" ]; then
     echo "BASE_NOT_ACCEPTED tree_md5=$TREE_BEFORE expected=$ACCEPTED_ENGINE_MD5"; exit 6
 fi
 echo "BASE_ACCEPTED tree_md5=$TREE_BEFORE"
-BEFORE=$(md5sum < "$TARGET" | cut -c1-12)
-echo "accepted_engine_md5=$BEFORE target=$REL"
-python3 "$GEN" "$TARGET" || { echo "APPLY_FAILED"; exit 1; }
-AFTER=$(md5sum < "$TARGET" | cut -c1-12)
-echo "candidate_engine_md5=$AFTER target=$REL"
-[ "$AFTER" != "$BEFORE" ] || { echo "CANDIDATE_IS_NOOP"; exit 1; }
+for pair in "$GEN|$REL" ${GEN2:+"$GEN2|$TARGET2"}; do
+    g=${pair%%|*}; rel=${pair##*|}
+    [ -f "$g" ] || { echo "GENERATOR_MISSING $g"; exit 1; }
+    tgt="$W/$rel"
+    BEFORE=$(md5sum < "$tgt" | cut -c1-12)
+    echo "base_md5=$BEFORE target=$rel"
+    python3 "$g" "$tgt" || { echo "APPLY_FAILED $rel"; exit 1; }
+    AFTER=$(md5sum < "$tgt" | cut -c1-12)
+    echo "candidate_md5=$AFTER target=$rel"
+    [ "$AFTER" != "$BEFORE" ] || { echo "CANDIDATE_IS_NOOP $rel"; exit 1; }
+done
 TREE_AFTER=$( cd "$W" && { cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c; } | md5sum | cut -c1-12 )
 [ "$TREE_AFTER" != "$TREE_BEFORE" ] || { echo "CANDIDATE_NOT_IN_TREE"; exit 1; }
 printf '%s\n' "$TREE_AFTER" > "$W/.auto/expect_engine_md5"   # now machine-enforced by measure.sh

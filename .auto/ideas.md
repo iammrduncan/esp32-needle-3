@@ -3145,3 +3145,32 @@ Measured this window: A(v1) -1.55 % and wrong operand graph; paired split thresh
   documented AUTO_ALLOW_REPEAT allowance. Budget that allowance per tree.
 - objdump owed: composed loop (2 heads x 4 cells + 2 r + 4 wv) may spill; check
   loop-body stack traffic on the live b1 image before believing the number.
+
+# Runs #613-#641: the attention pairing family, the RX ring transport fix, and the frozen-pair attribution (2026-09-26)
+
+**Both acceptance trees are now fully evidenced; neither is accepted (owner's 5.3033 pin).**
+- SEED-ERA COMPOSITION (engine 10c74c756ee5 = B4W paired-head shared-V P.V at 4-cell +
+  DOT8W 8-column QK body + SELRES selective rescale sweeps): **5.7467 on all three boards**
+  (b3 screen, b2 gate, b3 gate - byte-identical primary), ext 5.6646 best, think 4.47,
+  min 5.51, heap 4823, host 19/19, capture green (#637). +2.4 pct over both seed pins.
+- SHIPPABLE BASE (bundle5 + same nd_model.c + lossless RX ring, 177bd44997fa): **5.4083**
+  = +1.973 pct on ACCEPTED code, ext 5.3377 (+2.12 pct), 18/20, capture green (#639/#641),
+  AND all 20 device cases complete - the campaign-length 17-requests-per-boot console wedge
+  is FIXED by the ring (case 17 is the first >128-byte request; the polled VFS FIFO drops it
+  and the reader waits for bytes already lost). Ring = main.c + esp_driver_uart REQUIRES.
+
+**Family arithmetic (all on same-board ladders, never cross-board):** pairing +1.52, QK width
++0.53, SELRES +0.56; composition +0.86 (sub-additive but constructive - the ONLY composition
+that ever worked; A3 rescale-fusion x pairing is closed as a mechanism, twice: in-loop branches
+-1.55 pct, hoisted dispatch -1.4 pct below parts). Loop-form axis CLOSED: counted pointer-walk
+-hurts even when it wins the hardware loop (QK -0.18 with the exact 4mul+4madd+4add body in a
+hardware loop but 12 stack reloads; PV -0.38). Spills are free (QKTILE2: zero loop-body spills,
+null). Width saturates at 4 cells for P.V (8 cells -0.03) but NOT for the QK dot (8 cols +0.53).
+
+**Frozen-pair attribution, three independent proofs it is NOT arithmetic:** (1) host is 19/19
+byte-exact incl. both cases for every family image while device is 18/20 delta 52; (2) the
+failures reproduce on the ACCEPTED 20/20 ancestor with ONLY B4W's diff (#633); (3) delta 52 is
+identical from the seed through B4W/B4W+DOT8W+SELRES to the bundle5 base - the two case names
+are the demo-timer/sampling-interval ones and their generations depend on device timer state.
+Owner decision, not an engineer fix: re-baseline, replace with state-independent cases, or keep
+as blockers. Do not attempt another arithmetic explanation.

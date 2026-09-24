@@ -8,12 +8,27 @@ SRC="$1"; TGT="$2"; B="${3:-2}"
 [ -f "$SRC" ] || { echo "NO_SOURCE $SRC"; exit 1; }
 W="/root/board-pool/board$B"   # the wrapper keeps the checkout at this path; .board.json has no checkout key
 MAIN=/workspace/esp32-needle-3
+# The accepted engine signature, i.e. the tree whose canonical run produced 5.1167 decode tok/s
+# (commit 018427c, nd_quant.c md5 cc174624959b, no nd_fwht4s anywhere). A lane that cannot
+# reproduce it is not measuring on the accepted base and must not print a delta against it.
+ACCEPTED_ENGINE_MD5="${ACCEPTED_ENGINE_MD5:-cc046f59204e}"
 case "$TGT" in
     engine/*) INC="$MAIN/engine/include" ;;
     esp32/main/*) INC="$MAIN/engine/include $MAIN/engine/src" ;;
     *) echo "BAD_TARGET $TGT"; exit 1 ;;
 esac
-git -C "$W" checkout -- engine esp32/main || { echo "SYNC_FAIL"; exit 1; }
+# Sync the worker from MAIN by LOCAL path (git push has no credentials here, and a worker that
+# fetches origin is reverted to a stale baseline - both recorded the hard way). `git checkout --`
+# alone was the bug: the worker's own HEAD was the commit that carried the gate-blocked fusion
+# candidate, so every lane built "accepted + candidate" while actually building "fusion +
+# candidate", which inflated every delta by the fusion's own +0.58 %.
+git -C "$W" fetch -q "$MAIN" autoresearch/decode-tps-2026-09-18 || { echo "SYNC_FETCH_FAIL"; exit 1; }
+git -C "$W" reset --hard -q FETCH_HEAD || { echo "SYNC_RESET_FAIL"; exit 1; }
+BEFORE=$( cd "$W" && { cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c; } | md5sum | cut -c1-12 )
+if [ "$BEFORE" != "$ACCEPTED_ENGINE_MD5" ]; then
+    echo "BASE_NOT_ACCEPTED tree_md5=$BEFORE expected=$ACCEPTED_ENGINE_MD5"; exit 6
+fi
+echo "BASE_ACCEPTED md5=$BEFORE"
 [ -L "$W/.venv" ] || ln -s /workspace/esp32-needle-3/.venv "$W/.venv"
 cp -f "$SRC" "$W/$TGT" || { echo "COPY_FAIL $TGT"; exit 1; }
 # Run the probe unconditionally. The earlier form gated it on a marker file that does not exist,

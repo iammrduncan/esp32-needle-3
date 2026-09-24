@@ -262,6 +262,21 @@ if [ -z "${AUTO_GROUPS:-}" ]; then
     fi
 fi
 
+# A restricted AUTO_GROUPS run used to REPORT byte-exactness without FAILING on it, so
+# a hand-written-assembly defect could print 0/6 and still exit 0 - measured directly
+# in run #595, where a deliberate tie1n mis-seed read device_output_exact=0/6 with
+# LANE_RC=0. The host goldens cannot see that class at all (they compile the C fallback),
+# so the device comparison is the only veto; it is meaningful whenever the run printed
+# it. Metric-safe by construction: this can only turn a green lane red.
+if [ -n "${AUTO_GROUPS:-}" ] && [ "$SAVE" != 1 ]; then
+    RX=$(grep -o 'device_output_exact=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
+    RC_=$(grep -o 'device_cases=[0-9]*' "$BENCH_LOG" | tail -1 | cut -d= -f2 || true)
+    if [ -n "${RX:-}" ]; then
+        [ "${RX}" = "${RC_:-1}" ] || { echo "DEVICE_OUTPUT_DIVERGED_RESTRICTED ${RX}/${RC_:-?}"; exit 1; }
+        echo "DEVICE_GATE_OK_RESTRICTED exact=${RX}/${RC_}"
+    fi
+fi
+
 # Record only after the benchmark and hard device gate complete. Recompute so a
 # deleted/regenerated sdkconfig is represented by the configuration actually
 # measured, not by the pre-build filesystem state.

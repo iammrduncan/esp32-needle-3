@@ -21,13 +21,12 @@ ACCEPTED base, 18/20 delta52 same frozen pair). b2+b3 = confirmed composition
 CLOSED (-0.18 / 0.00 / +0.53-via-extended-LEND only).
 
 NEXT discovery candidates on the composition (ranked):
-1. composed-v3: SELRES's 3-case dispatch x A3 rescale-fusion INTO the paired
-   PV loop (only for the both-rescale case). v2 (B4W+A3 4-way dispatch) died
-   with code bloat; SELRES's 3-case structure is the measured-good skeleton and
-   A3 alone was +0.62 pct. Host-byte-exact gate + objdump branch-count check
-   BEFORE flashing (in-loop selects are the known poison).
-2. If v3 fails: family holds at 5.7467; remaining value is owner disposition
-   of the frozen pair + the ring transport fix (both owned by the owner).
+1. (RETIRED before build) composed-v3 A3-fusion: #622 closed fusion of the
+   rescale multiply into the paired PV body "regardless of form" - SELRES's
+   skeleton would not rescue a mechanism already measured harmful twice.
+2. INSTEAD (running): behavioral capture of the CONFIRMED composition on b2 -
+   the acceptance packet needs capture green on exactly this image.
+3. Then: owner disposition (frozen pair + ring transport fix).
 STILL OWED: composition b3 gate is the b2-confirmed twin (skip or run at
 mentor's call); outline-attempt parked; owner: frozen-pair disposition blocks
 all acceptance incl. the ring-transport finding.

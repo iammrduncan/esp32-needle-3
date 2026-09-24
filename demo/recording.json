@@ -406,6 +406,133 @@
         "timer_remaining_ms": 0,
         "timer_fired_count": 0
       }
+    },
+    {
+      "id": "sampling",
+      "input": "Sample telemetry every 5 seconds",
+      "expected_model": "needle",
+      "expected_calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 5
+          }
+        }
+      ],
+      "route_match": true,
+      "tools_match": true,
+      "response": {
+        "input": "Sample telemetry every 5 seconds",
+        "success": true,
+        "routing": {
+          "type": "call",
+          "success": true,
+          "error": null,
+          "function_calls": [
+            {
+              "name": "set_sampling_interval",
+              "arguments": {}
+            }
+          ],
+          "results": [
+            {
+              "name": "set_sampling_interval",
+              "success": true,
+              "outcome": "model_selected"
+            }
+          ],
+          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{}}]</tool_call>",
+          "confidence": null,
+          "prefill_ms": 2503.0,
+          "prefill_tps": 5.59,
+          "decode_ms": 2822.0,
+          "decode_tps": 5.31,
+          "decode_tokens": 15,
+          "latency_ms": 6104.0,
+          "device": "esp32-s3",
+          "reasoning": false,
+          "phase": "route"
+        },
+        "execution": {
+          "type": "call",
+          "success": true,
+          "error": null,
+          "function_calls": [
+            {
+              "name": "set_sampling_interval",
+              "arguments": {
+                "seconds": 5
+              }
+            }
+          ],
+          "results": [
+            {
+              "name": "set_sampling_interval",
+              "success": true,
+              "state": {
+                "device": "esp32-s3",
+                "schema": "agent-watch-v2",
+                "layers": 8,
+                "model_bytes": 16155796,
+                "uptime_ms": 135658,
+                "free_internal_bytes": 6859,
+                "free_psram_bytes": 21924,
+                "sample_period_s": 5,
+                "samples": 3,
+                "last_sample_uptime_ms": 118255,
+                "last_sample_free_internal_bytes": 7779,
+                "timer_status": "idle",
+                "timer_remaining_ms": 0,
+                "timer_fired_count": 0
+              }
+            }
+          ],
+          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
+          "confidence": null,
+          "prefill_ms": 2355.0,
+          "prefill_tps": 5.94,
+          "decode_ms": 3182.0,
+          "decode_tps": 5.66,
+          "decode_tokens": 18,
+          "latency_ms": 6301.8,
+          "device": "esp32-s3",
+          "reasoning": false,
+          "phase": "tools"
+        },
+        "selected_model": {
+          "key": "needle",
+          "id": "needle-local",
+          "label": "Needle 3 / on watch",
+          "policy": "Device status, telemetry settings and countdown timers",
+          "execution": "local",
+          "route_tools": [
+            "get_status",
+            "set_timer",
+            "set_sampling_interval"
+          ]
+        },
+        "remote_called": false,
+        "inference_passes": 2,
+        "error": null,
+        "outcome": "local_executed",
+        "latency_ms": 14408.2
+      },
+      "state_after": {
+        "device": "esp32-s3",
+        "schema": "agent-watch-v2",
+        "layers": 8,
+        "model_bytes": 16155796,
+        "uptime_ms": 135706,
+        "free_internal_bytes": 7391,
+        "free_psram_bytes": 21924,
+        "sample_period_s": 5,
+        "samples": 3,
+        "last_sample_uptime_ms": 118255,
+        "last_sample_free_internal_bytes": 7779,
+        "timer_status": "idle",
+        "timer_remaining_ms": 0,
+        "timer_fired_count": 0
+      }
     }
   ]
 }

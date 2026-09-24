@@ -59,3 +59,27 @@ changing the data, never by changing the addressing.
    `esp32/main/main.c`, and the route schema's lack of a no-op escape (chit-chat produces a
    hallucinated `set_sampling_interval`). Also: board 1's USB console leg re-enumerates
    intermittently and may need a physical reseat.
+
+## Addendum 2026-09-25 - the stack grew from +0.78 % to +4.85 % and the gate still cannot pass
+
+Candidate now: **accepted + asmemo + radix-4 stage fusion + nf16v + spin handshake**
+= **5.560 / 5.5617 decode tok/s on two independent boards** (engine_md5 b1daae10df90,
+runner-asserted), +4.85 % over the 5.3033 pin and +127.9 % over the 2.44 baseline.
+Secondary evidence: prefill 5.8667, boot_bench 5.601, min_case 5.30 (best worst case on
+record), internal_free 12,095 (-1,272 B from asmemo's memo table; the fusion's IRAM is
+refunded), gen_tokens 99 with every case at its golden token count, and
+device_output_exact=6/6 on the primary group with token_delta 0.
+
+Six 20-case gate attempts across three engines now read 16,16,16,17,17,17 cases with
+**zero divergences** in every case reached; the accepted image reproduces the same stall
+at the same position, so this is the console-emission firmware defect, not the candidate.
+Board 1's console leg is separately dead (two identical readiness timeouts with all locks
+cleared) and needs a physical reseat.
+
+What is being asked of the owner, unchanged in kind:
+1. Accept the stack on disclosed evidence, or fix/schedule around the console-emission
+   stall so a 20-case session can complete in one boot (it is a product defect: the board
+   stops answering after 16-17 requests per boot, unaffected by reconnects).
+2. Board 1 reseat, for canonical acceptance runs.
+3. The two owner-gated levers remain measured and unshipped: assertion-level RAM
+   (+8,248 B, funds phi row residency ~+0.39 %) and octal 120 MHz (+3.51 %, vendor-blocked).

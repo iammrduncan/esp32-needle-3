@@ -898,6 +898,85 @@ __attribute__((noinline)) static float kb_div_sweep(const float *a, const float 
     return acc;
 }
 
+/* Experiment 48: price `logf`, the last libm-in-a-loop mass in the token.
+ *
+ * The measured call count is 1,280 per decode token (run #410: 160 per Sinkhorn call x 8 calls,
+ * counted on the host over a real frozen prompt), and 13.58 % of the arguments are exactly 1.0f,
+ * where logf is exactly 0.0f - so a `sum == 1.0f ? 0.0f : logf(sum)` skip is bit-exact by
+ * construction. Run #294 refused it on a break-even computed from an ASSUMED 150-420 cycle cost.
+ * This measures it. Three modes, min over rounds, operands rotated per the #230 rule: the mixed
+ * set is what the field actually feeds (13.58 % exact ones), the second excludes them, and the
+ * third is a bare multiply as the loop floor. Operands are built the way the kernel builds them:
+ * one exp(0) term plus three exponentials of arguments in [-10, 0].
+ */
+#define KB_LOG_N       128u
+#define KB_LOG_ROUNDS  12u
+
+static float __attribute__((noinline)) kb_log_sweep(const float *v, unsigned n, int mode)
+{
+    float acc = 0.0f;
+    unsigned i;
+
+    for (i = 0; i < n; i++) {
+        if (mode == 2)
+            acc += v[i] * 1.0009765625f;          /* floor: one independent multiply */
+        else if (mode == 1)
+            acc += (v[i] == 1.0f) ? 0.0f : logf(v[i]);   /* what the skip would leave */
+        else
+            acc += logf(v[i]);                          /* the shipped call, mixed set */
+    }
+    return acc;
+}
+
+static void bench_log(void)
+{
+    static float lg[KB_LOG_N];
+    static const char *NM[3] = { "field_mixed", "non_one_only", "mul_floor" };
+    uint32_t st = 0x1234567u;
+    uint32_t best[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+    float sink = 0.0f;
+    unsigned i, r, k, ones = 0;
+
+    printf("KB LOG ENTER\n");
+    for (i = 0; i < KB_LOG_N; i++) {
+        float sum = 1.0f;                            /* the row maximum contributes exp(0) */
+        unsigned j;
+
+        /* 13.58 % exactly 1.0f, the measured hit rate of the proposed skip. */
+        if ((i * 100u) % 736u < 100u) { lg[i] = 1.0f; continue; }
+        for (j = 0; j < 3; j++) {
+            float u;
+            st = st * 1664525u + 1013904223u;
+            u  = (float)(st >> 8) * 1.1641532e-10f;  /* [0,1) */
+            sum += expf(-10.0f * u);
+        }
+        lg[i] = sum;
+    }
+    for (i = 0; i < KB_LOG_N; i++) if (lg[i] == 1.0f) ones++;
+    for (r = 0; r < KB_LOG_ROUNDS; r++) {
+        for (k = 0; k < 3; k++) {
+            uint32_t off = (r * 37u) % KB_LOG_N, c0, cy;
+
+            c0 = esp_cpu_get_cycle_count();
+            sink += kb_log_sweep(lg + off, KB_LOG_N - off, (int)k);
+            cy = esp_cpu_get_cycle_count() - c0;
+            if (cy < best[k]) best[k] = cy;
+        }
+    }
+    asm volatile("" : "+f"(sink));
+    for (k = 0; k < 3; k++)
+        printf("KB LOG mode=%-13s n=%u min_cyc=%u cyc_per_logf=%u.%02u\n",
+               NM[k], (unsigned)KB_LOG_N, (unsigned)best[k],
+               (unsigned)(best[k] / KB_LOG_N),
+               (unsigned)((best[k] * 100u / KB_LOG_N) % 100u));
+    /* Break-even for the skip: 0.1358 x 1,280 calls x (cost - 4) must beat 0.2 % of the token,
+     * i.e. 386,000 cycles; solve for the printed cost. */
+    printf("KB LOG OPERANDS n=%u exact_ones=%u share=%.4f skip_gain_cyc=%u (need >386000 to ship)\n",
+           (unsigned)KB_LOG_N, ones, (double)ones / KB_LOG_N,
+           (unsigned)(0.1358 * 1280.0 * (double)(best[0] / KB_LOG_N)));
+    fflush(stdout);
+}
+
 static void bench_div(void)
 {
     static float               aa[KB_DIV_N], bb[KB_DIV_N];
@@ -3757,6 +3836,9 @@ int kbench_run(void)
     probes();          /* the ISA probes live in the assembly translation unit */
 #endif
     bench_div();
+#if ND_KB_EXP38
+    bench_log();
+#endif
     bench_gather();
     bench_wake();
     bench_rowrange();

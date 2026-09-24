@@ -2446,6 +2446,12 @@ RAM (+8,248 B, #293) now has no collectable buyer, because the residency idea it
 shown to need 3.59 MB/token against a flat 13.90 % tax (#330). What is left for this loop is coverage,
 gate hardening, and honest disclosure runs.
 
+## Experiment 31 - ALL THREE LANES MEASURED (pruned 2026-09-24; this list previously sat in the
+file as "ACTIVE" and nearly caused a duplicate run of 31B, which run #354 had already closed)
+31A packed use-ordered tier and 31C prepare split: measured in the run #344/#352/#355 line of work
+that shipped the FWHT rescale unroll. 31B attention P.V accumulate order: run #354 - shipped
+position-major 9.587 cyc/update vs dim-major chunked 17.164 = 44.1 % WORSE, bit-exact reorder
+verified first (order_mismatch 0/192). CLOSED. Do not re-open any of the three.
 ## Ranked runnable queue after Experiment 31 (pipeline discipline: 3 active + next 3)
 
 ACTIVE (batch 20260923T0606L, one per board, all bit-exact by construction):

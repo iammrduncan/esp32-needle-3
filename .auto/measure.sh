@@ -41,7 +41,17 @@ shipping_signature() {
         # different images AND let a config-only relink masquerade as a new candidate, which is the
         # exact failure #377's -O3 contamination showed was possible with build files. Sources were
         # edited in that incident, so the signature moved; a -D would not have moved it.
-        printf 'CFG profile=%s extra=%s\n' "${AUTO_PROFILE:-0}" "$(tr -d '\n' < .auto/diag_build_cfg 2>/dev/null)"
+        # Plain `if` statements on purpose: run #331's four dead lanes came from a
+        # `[ -f f ] && cmd` list here, which returns 1 when the file is absent and
+        # `set -e` then kills the run before it prints anything. An `&&` chain is not
+        # a condition when it is the last command in a loop body.
+        DIAG_CFG=""
+        for _c in "$AUTO_LOG_DIR/diag_build_cfg" .auto/diag_build_cfg; do
+            if [ -f "$_c" ]; then DIAG_CFG="$_c"; break; fi
+        done
+        if [ -n "$DIAG_CFG" ]; then EXTRA_CFG=$(tr -d '\n' < "$DIAG_CFG"); else EXTRA_CFG=""; fi
+        printf 'CFG profile=%s extra=%s\n' "${AUTO_PROFILE:-0}" "$EXTRA_CFG"
+        true
         true
     } | sha256sum | cut -d' ' -f1
 }

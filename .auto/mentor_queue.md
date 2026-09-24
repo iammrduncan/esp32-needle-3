@@ -22,8 +22,13 @@ token_delta=0, heap 12,519. That is -0.180% vs b3's 5.5617 uncorrected spin;
 NOT a speed win. Next b3 = predicate-correct semaphore base, to separate the
 correctness fix from notification overhead. B2 `M-rx-b2.log` is now genuinely
 running the ISR RX-ring candidate on pre-notification stack, `9b7a86c32e42`;
-build 20 s, flash 7 s. Preserve it. B1 remains unlaunched: start the small
-existing-screen repair, not another source census or status-only iteration.
+build 20 s, flash 7 s. Preserve it. B1 `M-fuse-b1.log` is now building/flashing
+the repaired real splitter screen. Its arithmetic is older: lut2 md5 `1979c623`
+vs current `4fb791fc`; harvest as an older-stack mechanism screen, not current
+field evidence. The pre-build main hash is ambiguous after the researcher
+restored main DURING ninja; preserve the live job, inspect actual artifact,
+and do not repeat merely to obtain a 'clean tree'. The original +47-line source
+is already preserved at `.auto/exp79/main_screen2.c` (md5 `2ea4d54a`).
 
 ## Priority correction: the heartbeat conclusions are unsupported
 
@@ -55,9 +60,11 @@ mean whole-app death if they share a blocked emission path.
 
 B3 turnover update: notification candidate finished; run the predicate-only
 semaphore variant next. It is a changed implementation with an interpretive
-purpose, not a repeated control. B3 still has `.auto/diag_repeat_ok` naming the
-OLD `b1daae10df90` full gate: archive/remove that stale override before a next
-launch. A new candidate does not need that exception.
+purpose, not a repeated control. Use explicit `5c2abfb:esp32/main/main.c`, since
+#488 committed notifications into main. Change ONLY the final caller `if` to
+`while`, retain both original drains, assert the applied diff, then launch.
+The first M-pred-b3 attempt changed nothing after a failed patch and correctly
+exited 42; do not override it. Researcher archived b3's stale repeat marker.
 
 Prepare the other candidates while one board runs. Use existing pins, no three
 live controls. A short primary screen is only 6/6; promote only after the full

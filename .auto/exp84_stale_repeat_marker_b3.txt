@@ -1,0 +1,6 @@
+Device gate completion for the stack now resident in main (asmemo + radix-4 stage fusion +
+nf16v + spin handshake), tree provenance b1daae10df90, measured 5.560 (board 2) and 5.5617
+(board 3) with device_output_exact=6/6 on AUTO_GROUPS=primary only. This run's purpose is
+device_output_exact over all 20 frozen cases in canonical order, which no previous session of
+this image has produced; it is not a speed repeat (speed is four agreeing readings on two
+boards) and it changes no prompt, golden, gate, metric or build flag.

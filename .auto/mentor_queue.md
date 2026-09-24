@@ -12,7 +12,7 @@ live build/flash/benchmark. No long foreground sleeps; harvest completed logs.
   /root/board-pool/preserved/b4w-transplant-b1/ (+ b1-worker-diff.patch).
 - B2 DOT8W full gate LIVE (M-d8gate-b2, engine 5065619b0867, fresh signature).
 - B3 QKTILE2 screen LIVE (M-t2-b3, engine 277cf888ef6b, B4W base, host 19/19;
-  two-column tile, eight chains, per-sum two-product grouping and ascending
+  two-column tile, four sums, per-sum two-product grouping and ascending
   order kept; remainder uses the same path - qk_hd 48 divides by 2).
 - Correction to #627: DOT8W b3 heap was 4823, not the 5343 I carried.
 - Next substitutes queued per mentor: selective A-only/B-only rescale sweeps
@@ -60,7 +60,7 @@ preserve the candidate, and keep other boards discovering. No repeated gates or
 new coverage campaign. A later DOT8W transplant is justified only after B4W's
 result is understood; do not silently add it to this attribution experiment.
 
-## 2. QK register lifetime: shorten the tile before widening again
+## 2. QK tile result and one changed-premise follow-up
 
 B4W shares K/V across heads, but its paired QK loop still spills. Mentor read
 B1's exact 22:54 ELF: `attn_heads` size 0x186b; loop
@@ -84,6 +84,32 @@ DOT8W's fresh B3 ELF still spills via a1+0x460 (`ssi` 0x4037c51e / `lsi`
 with an extended LEND. Its gain cannot be called "spill elimination". The
 changed loop form and fewer pointer/loop updates are plausible contributors.
 Do not close QK from P.V's B8W null, and do not blindly sweep to 16-wide.
+
+Mentor artifact check at 23:09: QKTILE2 `277cf888ef6b` has no inner-loop
+spill in 0x4037c4c5..0x4037c50b: eight shared loads, four MUL, four MADD,
+four ADD, then pointer updates and bnez. The f10 spill before/after the loop
+is not per-iteration. The target pair graph matches B4W for these four sums.
+Removing a spill can still lose to twice as many branch/pointer updates;
+await its measurement, not a proof-by-instruction-count verdict. B1 source
+manifest independently checked: only nd_model.c differs from `2c79104`; all
+three checked CMake/sdkconfig inputs also match bundle5. Its primary is
+5.3717 (+1.290%); B2 DOT8W primary 5.7283 reproduces B3. Both full gates live.
+
+**QKTILE2 finished: 5.6983 = same-board B4W exactly, 6/6, delta 0,
+heap 5343. Harvested as a null; no repeat.** It removed the measured spill but
+also doubled pointer/branch updates, so this does not prove spills cost nothing.
+DOT8W still leads at 5.7283. B3 now moves to selective rescale, not another width.
+
+One bounded follow-up after a lane opens: keep QKTILE2's arithmetic/loads but
+express its loop with a dedicated decreasing pair count and independent advancing
+pointers; require no use of that counter outside the loop. Aim for hardware LOOP
+without changing the two-column tile. Compare only if the object actually changes
+loop form; if it stays bnez, inspect one compiler loop dump or retire this source
+form without an end-to-end rerun. **Do not add empty inline-asm barriers to this
+C loop**: GCC 14.2's [Xtensa hwloop_optimize](https://github.com/gcc-mirror/gcc/blob/releases/gcc-14.2.0/gcc/config/xtensa/xtensa.cc)
+rejects a loop containing asm or a live iterator, as well as non-innermost/multiple
+entry loops. This gives a concrete compiler trail, not proof of why this build
+chose bnez. Keep global flags and the compiler version unchanged.
 
 ## Ready substitutes after these lanes
 

@@ -12,7 +12,12 @@ sweeps are otherwise empty loops - which is precisely where removing or overlapp
 has measured well, in contrast to the attention softmax where the same trick cost -0.43 % (#292)
 because that loop is the scheduler's best block.
 
-Bit-exact by construction, and the construction is what is delicate: the ADDS stay sequential on one
+Bit-exact by construction, with one bound that is easy to lose and is asserted by test rather than
+by eye: the pair may only be formed when a second column (row, for the column sweep) actually
+exists. The first version of this candidate omitted it, read the following row at the last column,
+and measured +4.1 % while computing something else.
+
+The ADDS stay sequential on one
 accumulator (a second accumulator would reassociate the sum and is refused by the byte-exact gate),
 the exact-zero literal keeps its own branch, and a pair only uses `nd_expf_pair` when NEITHER operand
 is the literal. `.auto/exp70/test_sinkpair_equiv.c` compares the resulting sum bit-for-bit against the
@@ -30,8 +35,13 @@ ROWS_NEW = """                /* Two adjacent exponentials go through the interl
                  * still added one after the other into this same accumulator, so the
                  * sum's bits are the shipped ones. The exp(0) literal keeps its own
                  * test: a pair is only used when neither operand is the literal. */
-                float d0 = a[i * n + j] - mx, d1 = a[i * n + j + 1u] - mx;
-                if (d0 != 0.0f && d1 != 0.0f) {
+                float d0 = a[i * n + j] - mx, d1;
+                /* The bound is the whole point of this comment: without `j + 1u < n`
+                 * the pair reads the NEXT row at the last column, adds a term the
+                 * shipped loop never adds and skips one it does - which is faster and
+                 * wrong, and it is exactly what an equivalence test that tests the
+                 * bound while the candidate omits would let through. */
+                if (j + 1u < n && d0 != 0.0f && (d1 = a[i * n + j + 1u] - mx) != 0.0f) {
                     float e0, e1;
                     nd_expf_pair(d0, d1, &e0, &e1);
                     sum += e0;
@@ -43,8 +53,8 @@ ROWS_NEW = """                /* Two adjacent exponentials go through the interl
 
 COLS_OLD = """                float d = a[i * n + j] - mx;   /* same exact-zero shortcut */
                 sum += (d == 0.0f) ? 1.0f : nd_expf(d);"""
-COLS_NEW = """                float d0 = a[i * n + j] - mx, d1 = a[i * n + j + n] - mx;
-                if (d0 != 0.0f && d1 != 0.0f) {
+COLS_NEW = """                float d0 = a[i * n + j] - mx, d1;
+                if (i + 1u < n && d0 != 0.0f && (d1 = a[i * n + j + n] - mx) != 0.0f) {
                     float e0, e1;
                     nd_expf_pair(d0, d1, &e0, &e1);
                     sum += e0;
@@ -61,8 +71,7 @@ def main() -> int:
     if got != BASE_MD5:
         print(f"BASE_MISMATCH got={got} want={BASE_MD5} -> refusing"); return 2
     text = data.decode()
-    if text.count("for (j = 0; j < n; j++) {\n                float d = a[i * n + j] - mx;") != 1 or \
-       text.count("for (i = 0; i < n; i++) {\n                float d = a[i * n + j] - mx;") != 1:
+    if text.count(ROWS_OLD) != 1 or text.count(COLS_OLD) != 1:
         print("ANCHOR_NOT_UNIQUE -> refusing (row or column sweep changed)"); return 2
     new = text.replace(ROWS_OLD, ROWS_NEW, 1).replace(COLS_OLD, COLS_NEW, 1)
     if new == text or new.count("nd_expf_pair(d0, d1, &e0, &e1);") != 2:

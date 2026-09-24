@@ -2885,3 +2885,18 @@ from a summary is not a fact - the mentor read the wrapper's source. And the two
 retired (the 23-cycle scheduler floor, and "sub-bar levers cannot compose further") were both cited
 for months; the first because `kbench` never installs `nd_parallel_rows`, the second because
 bundle5 beat the sum of its parts.
+
+## Run #444: the real wake cost (~1.8k-5.4k cycles), and the one candidate it prices
+
+`#344`'s "23 cycles, hot or parked" is void (kbench never installs `nd_parallel_rows`). Derived from
+field data instead: `tap96` added exactly 8 `nd_parallel_rows` splits/token (q taps, dim=576: 3 units
+of 256 fail `rows_dual_core`'s `half < 2` and run serially; 6 of 96 pass) and cost 0.094 % =
+181 us/token -> **22.7 us (5,442 cyc) per added split**, or 7.6 us (1,814 cyc) if all 24 units split.
+So a job must be worth tens of microseconds to be worth splitting.
+
+Priced candidate, not yet built: `nd_cq_lut_build` is **13.6 us total** and is itself split 18 times
+per token - paying a >= 7.6 us wake to save <= 6.8 us. Run `lutb_rows` serially: predicted
+**+0.03..0.07 %**, sub-bar alone, so bundle it (run #431/#439 precedent) rather than measure it alone.
+Also explains, with a real number, the old "don't split anything smaller than a kron half" rule; no
+past discard needs reviving, because the negative splits (tap96, rope split, dynamic self-scheduling)
+are exactly what this cost predicts.

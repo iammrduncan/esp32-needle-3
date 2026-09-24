@@ -13,7 +13,7 @@ ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
 speed/timer interaction, NOT solely the unaccepted stack; open question for
 mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
 (loop-form axis closed), #635 composition cross-board confirmed.
-ALL BOARDS IDLE CLEAN at 23:33. b1 = late-ring accepted stack (803f6fe390e3,
+LIVE at 23:42: b1 FULL 20-case gate of the SHIPPABLE-BASE composition (bundle5+B4W+DOT8W+SELRES+ring, engine 177bd44997fa, primary read 5.4067=+1.952 pct on the ACCEPTED base #638; full gate uses the documented repeat allowance with reason; log M-b1cmpG.log). b2+b3 idle carrying the seed-era composition (10c74c756ee5, 5.7467 two-board, capture green #637). b1 = late-ring accepted stack (803f6fe390e3,
 ring + B4W on bundle5: 20/20 cases complete, primary 5.365 = +1.163 pct on the
 ACCEPTED base, 18/20 delta52 same frozen pair). b2+b3 = confirmed composition
 (10c74c756ee5, 5.7467 both boards, gate done #635). PV-COUNT #636 DISCARDED

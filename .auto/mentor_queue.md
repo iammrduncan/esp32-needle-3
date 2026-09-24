@@ -10,11 +10,11 @@ sleep >20 s in this harness; harvest lanes from their logs.
 **Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`. Unaccepted
 discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
 
-| Board | State | Next |
+| Board | State (22:50 UTC) | Next |
 |---|---|---|
-| 1 | Composed **A3+B** source ready (engine `01daf46c7982`, host 19/19 byte-exact, checks rc=0). Full-B gate ran here first (primary 5.6433 reproduced; gate finishing). | Composed primary screen the moment the gate releases the lock (expect_engine_md5 already set). |
-| 2 | Holds exact recipe-B source (engine `e403eed2e822`); screen **5.6417 (+0.536%)** 6/6 rc=0. A3 source preserved /root/board-pool/preserved/a3-9e658137ba25/. | Idle after screen; free for the next distinct candidate (NOT another B/A3 duplicate; B breadth is on b3). |
-| 3 | Ran A3 screen **5.6467 (+0.595%)** = cross-board confirmation of A3; now running **B full gate** (new signature, breadth + the -3072 B heap check). | After gate: restore seed `61861dd9886c`, become the composed-A3+B confirmation board if composed screens positive. |
+| 1 | **Composed v2** (B4W pairing + A3 rescale-fusion, hoisted 4-way flag dispatch, engine `114c679790d8`, host 19/19 byte-exact) SCREENING now (M-comp2-b1). | If v2 > B4W same-board -> gate it; else B4W stands alone and A3-fusion closes. |
+| 2 | **B4W screen 5.6967 (+1.516%)**, session best. Full 20-case GATE running (M-b4wgate-b2, allowance used). | After gate: free board for next distinct candidate. |
+| 3 | **B4W cross-board screen** running (M-b4w-b3, own pin 5.6133). | B read here 5.6417-equiv; B4W source snapshot md5 12e36b116902. |
 
 **Confirmed candidates (unaccepted):**
 - **A3**: 5.6467 on b2 AND b3 (+0.62%/+0.60%), full 20-case gate = 18/20, the
@@ -27,9 +27,13 @@ discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
   (-3072 B) - the heap drop is the open risk; b1 gate + b3 breadth decide.
 - **C closed**: +0.089% (b3, 9f3b8411f95c). Q tap+norm+RoPE one-callback join is
   measured and dead. Do not re-run unit-count variants.
-- **Composed A3+B** (pv_pair2_a3, four-wide, per-head do_rs flags, odd tail is
-  A3's single-head body): host green; screen queued on b1. Owed before belief:
-  objdump the pair loop for loop-body spills (16 FP regs, 2 heads x 4 cells).
+- **B4W** (B's paired body at four-cell width; the two-cell width was an
+  unmeasured register-pressure guess): 5.6967 on b2 (+1.516 %), every case up,
+  heap same 5343. Session-best. objdump spill worry NOT realised.
+- **Composed A3+B v1** (per-cell doA?/doB? selects): REJECTED -0.38 % vs B same
+  board; objdump showed 142 IN-LOOP BRANCHES, zero spills. Per-cell flag
+  branching is the poison. v2 (hoisted 4-way dispatch over a macro body) is
+  screening on b1 as the composed-B4W+A3 test.
 
 ## Hard rules learned this session
 

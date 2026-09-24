@@ -2900,3 +2900,26 @@ per token - paying a >= 7.6 us wake to save <= 6.8 us. Run `lutb_rows` serially:
 Also explains, with a real number, the old "don't split anything smaller than a kron half" rule; no
 past discard needs reviving, because the negative splits (tap96, rope split, dynamic self-scheduling)
 are exactly what this cost predicts.
+
+## Run #446: the cross-core wake is STATE-DEPENDENT, and the lever now points the other way
+
+Two field A/Bs, opposite signs, one explanation:
+
+| change | splits/token | delta | peer-core state at the split |
+|---|---|---|---|
+| `tap96` (#436) | +8 | **-0.094 %** | otherwise parked (tap stretch is serial) |
+| `lutserial` (#446) | -18 | **-0.335 %** | hot (build sits right before the GEMV splits) |
+
+So there is no constant wake cost: run #444's 7.6-22.7 us/split was wake+imbalance in one schedule
+state, and #344's void 23 cycles was directionally right for the *hot* case only. Removing a split that
+the worker is already waiting on is a pure loss (~35 us/token here); adding one the worker must wake
+for is a pure cost.
+
+**Lever reversal, and it is a queue, not an idea.** Everything currently serial that sits *inside* a
+hot two-core stretch should be re-screened for splitting, because the old objection ("below the
+handshake") was priced off #344. On the old base these measured positive but sub-bar: p1/p2
+permutation +0.13 %, zcrms emit pass +0.13 %, rope-over-heads +0.13 %, rms scale pass +0.04 %, engram
+tap matmul +0.04 %. Bundle them (#431/#439: sub-bar halves of the same phase compose; #439: two
+above-bar levers compose sub-additively) as `bundle87 = bundle78 + those splits`, predicted ~+0.3 %,
+one change, host-proven byte-exact first (the odd-split guard `.auto/exp41/test_odd_split.c` is the
+right oracle - the device splits 3+3 where the host runs `rows_serial`).

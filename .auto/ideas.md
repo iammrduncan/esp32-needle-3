@@ -2986,3 +2986,13 @@ main + re-pin 5.56 in gen_lane.sh/lane_one.sh + `make capture`; (3) tune the two
 (4) re-derive the split/no-split rule against the NEW toll before running `.auto/exp82/
 nd_model.c.desplit1` (zcsplit emit), since #451's toll is now partly removed by design;
 (5) the console-wedge defect still caps a boot at 16-17 requests and blocks the 20-case gate.
+
+## #456 aftermath: the split sign flipped, so these revivals are now legitimate
+Spin handshake removed most of the ~16.6 us toll (budget-insensitive => the semaphore syscalls
+were the cost). Candidates refused as "below the handshake" on #344/#451-era numbers must be
+re-priced with the NEW toll, and their sign may flip positive:
+ - rope over heads (+0.13 % historically), zcrms emit pass (+0.13 %), per-head norms, rms scale pass
+ - run them as ONE bundle on the spin base (5.561), not individually; the de-split candidate
+   .auto/exp82/nd_model.c.desplit1 (zcsplit serial for n<1536) now has the OPPOSITE predicted
+   sign and should not be run before the bundle.
+Gate still owed: M-gate-b3.log (20 cases) is the only thing between the stack and a re-pin at ~5.56.

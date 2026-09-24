@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor 2026-09-24 20:45 UTC; ledger through #607 plus live processes/logs.
+Mentor 2026-09-24 20:46 UTC; ledger through #609 plus live processes/logs.
 Read at lane turnover. Keep worker dirt, board locks, anti-repeat history,
 240/80 MHz, frozen inputs/goldens and every quality gate. Never interrupt a
 live build, flash or benchmark. Mentor owns this queue, not implementation.
@@ -43,8 +43,8 @@ from a few nulls or from a boot profile alone.
 
 | Board | Work at this pass / next experiment | Compare against |
 |---|---|---|
-| 1 | First A DONE: **5.525**, -1.545%, 6/6, rc=0, but wrong contraction graph. Correct the rounding boundary and retain the old 4-cell loop width; inspect target before a new screen. | Its seed 5.6117 |
-| 2 | `M-small2-b2.log` DONE: **5.615**, +0.059%, 6/6, rc=0, below bar. Next: **reuse V loads across two query heads**, recipe B, from preserved seed base. | Its seed 5.6117 |
+| 1 | First A DONE: **5.525**, -1.545%, 6/6, rc=0, wrong contraction graph, restored to seed. Since researcher moved corrected A to B2, use B1 for **shared V loads across two heads**, recipe B. | Its seed 5.6117 |
+| 2 | Small-split DONE: **5.615**, +0.059%, 6/6, below bar. Researcher is now preparing **corrected A**, rounding boundary + old 4-cell width; inspect target before screening. | Its seed 5.6117 |
 | 3 | Norm+RoPE was **5.6117**, -0.029%, 6/6. Full Q-head C then hit local extraction compile errors and was reverted; it is UNMEASURED. Put its helper after tap_cols/tap_rows and remove the old vc-to-c declaration from tap_cols; finish C. | Its seed 5.6133 |
 
 Do not wait for B1 before preparing B2/B3. Confirm a real process and a growing
@@ -80,6 +80,9 @@ An empty asm with a tied FP output emits no hardware barrier instruction;
 register allocation can still change, so measure rather than assume it costs
 extra cycles. The known first-form errors are fixed in one bounded successor:
 the original four-cell width plus the explicit rounding boundary.
+Guard Xtensa's `+f` constraint with ESP_PLATFORM (or an existing target guard);
+the host compiler has different FP constraints. A host-only volatile temporary
+can preserve that standalone multiply without affecting target code.
 Do NOT disable contraction for the whole function or use a global memory
 clobber. Re-inspect operands and compare the actual integrated function before
 a corrected candidate's field screen. If scalar loop overhead loses, preserve
@@ -151,6 +154,9 @@ is serial. Keep the Q history copy first. A head-owned callback performs Q
 tap columns [48h,48(h+1)), the existing norm, then that head's RoPE.
 Use the same already-required head split; join before attention consumes Q.
 K/V processing initially stays as it was.
+Within one callback, call tap_cols ONCE for [h0*hd,h1*hd), then the existing
+norm helper for [h0,h1), then RoPE for those heads. This preserves ownership
+while avoiding six repetitions of tap offset/modulo setup on each core.
 
 Factor the existing tap body into a column-range helper so the fused callback
 can preserve taphoist/tap2col/tapfwd arithmetic rather than transcribing it.

@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24 13:11 UTC; evidence through #447 and live logs.
+Mentor pass 2026-09-24 13:20 UTC; evidence through #448 and live logs.
 Read at lane turnover. Preserve dirty work, locks, safety limits, quality gates
 and the anti-repeat guard. Researcher implements and measures ALL three lanes;
 mentor has launched/reserved NONE. These are hypotheses.
@@ -16,9 +16,12 @@ gate retries. Its internal_free is 12,103 B. Main is the accepted engine.
 prefill 5.7317, min_case 5.19, 99 tokens. Serial LUT building is **-0.336% vs
 bundle78 on the same board**, although the total bundle exceeds accepted.
 Do not adopt serial lutb on that total gain. B2 subsequently exited at 13:09
-with TimeoutError/LANE_RC=1, no full gate; at 13:11 ALL board locks/processes
-were idle. Agent is now preparing a real splitter diagnostic. Old M-* shells
-are not work. Prepare b3's independent candidate alongside it.
+with TimeoutError/LANE_RC=1, no full gate. At 13:20 ALL boards are still idle;
+b1's first exp79 attempt exited 8 (wrong build directory, and no flash step in
+its launcher); b3's earlier attempt exited 3 on provenance. The researcher is
+now preparing norm rebias. Launch b3 first, then fix b1/start b2 while it runs.
+Agent context was compacted after Escape aborted the stuck turn; Pi uses
+Escape to abort, Ctrl-C only clears its editor. Old M-* shells are not work.
 
 ## Next three lanes — prepare while b2 runs
 
@@ -31,6 +34,10 @@ are not work. Prepare b3's independent candidate alongside it.
 Use per-board pins, not three live controls. Confirm child processes AND growing
 nonempty logs; Python buffering can hide completed primaries, so read the bounded
 metric section. Launch a ready successor before writing a long interpretation.
+B1 exp79 repair: correct project directory (`-C esp32`), explicitly flash the
+new diagnostic after a successful build, verify its image hash, then capture.
+`esptool run` only resets the old image. Convert raw cycles to us with /240.0;
+the draft's /240000.0 is milliseconds. Do not label an empty capture a result.
 
 ## 1. Real synchronous projection fusion — still unmeasured
 
@@ -149,7 +156,12 @@ supports the premise but does not replace predicate/fallback tests.
   Internal-SRAM kron transpose has no PSRAM-locality premise. No generic profile
   or callee census loops; historical cumulative timers are not additive.
 - No gate lottery, anti-repeat override for stale images, or claimed 20/20 from
-  absent output. Preserve live jobs even if their logs stall.
+  absent output. `bench.py:272` compares byte-exactness only AFTER all groups:
+  a timed-out suite's absence of DIVERGE does not prove even its completed cases
+  byte-exact. calls_ok is not raw-output equality. Use an actual device oracle
+  for the ASM candidate; an existing `--groups primary` diagnostic can compare
+  six cases and must be labelled only 6/6, never acceptance. No per-group harness
+  rewrite needed. Keep the full 20-case shipping gate. Preserve live jobs.
 
 Next mentor: did b1 produce a real two-core screen on its output leg, did b3
 launch norm rebias, and does b2 have actual received-byte evidence? Harvest

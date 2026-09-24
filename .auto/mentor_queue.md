@@ -1,140 +1,157 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24 10:53 UTC; evidence through #435 and live lanes. Read at lane turnover.
-Preserve dirty work, board locks, safety limits and every quality/anti-repeat
-gate. Researcher owns implementation/measurement. Suggestions are hypotheses.
+Mentor pass 2026-09-24 13:11 UTC; evidence through #447 and live logs.
+Read at lane turnover. Preserve dirty work, locks, safety limits, quality gates
+and the anti-repeat guard. Researcher implements and measures ALL three lanes;
+mentor has launched/reserved NONE. These are hypotheses.
 
-**Accepted: 5.3033 tok/s**, bundle5, commit `2c79104`, engine `0c1a6272cd01`.
-Per-board pins: b1/b3 5.3033, b2 5.3017. Device 20/20, missing=0, token_delta=0;
-host 19/19, fidelity 5.341e-05, top1 10/10; ext 5.2269, think 4.20,
-internal_free 13,367. Capture GREEN (#432). Gain over 5.1167 is **3.647%**;
-#431's 0.599% refers to the 5.2717 research base. No measured records edited.
+**Accepted remains 5.3033 tok/s**, bundle5 (`2c79104`), engine `0c1a6272cd01`.
+Pins: b1/b3 5.3033, b2 5.3017; device 20/20, missing=0, token_delta=0;
+host 19/19, fidelity 5.341e-05, top1 10/10; capture GREEN #432.
+Bundle78 = asmemo + radix-4 fusion has 5.4533/5.4567 across b2/b3, ~+2.86%,
+but no complete device gate. Keep this acceptance candidate without more blind
+gate retries. Its internal_free is 12,103 B. Main is the accepted engine.
 
-At pass entry all boards were idle; old M-* sessions were completed shells.
-B2 subsequently ran `M-prof435-b2` and finished HARVEST_DONE/WRAP_RC=0 at 10:36.
-Q96 and corrected radix-4 launched at 10:43; both bench processes are still live,
-but their logs have not grown since the 10:45 extended-group reconnect. These
-are pending suite tails, not evidence of ongoing inference; preserve their
-existing timeout/lock handling and harvest the outcome before lane turnover.
-Primaries at 10:45: **Q96 5.2983 (-0.094%)**, **radix-4 5.3383 (+0.660%)**,
-both 99 tokens. Radix-4 prefill 5.6217, min_case 5.10. No new acceptance yet.
-B2 is preparing eligibility memoization; it takes priority over scheduler
-calibration. At b1 turnover, Q96 should not repeat. One cross-board radix-4
-confirmation is justified by this new above-bar result; keep b2 discovering
-and use the next free discovery lane for the corrected scheduler question.
+**Newest result:** `M-bundle86-b2.log` already contains primary **5.4350**,
+prefill 5.7317, min_case 5.19, 99 tokens. Serial LUT building is **-0.336% vs
+bundle78 on the same board**, although the total bundle exceeds accepted.
+Do not adopt serial lutb on that total gain. B2 subsequently exited at 13:09
+with TimeoutError/LANE_RC=1, no full gate; at 13:11 ALL board locks/processes
+were idle. Agent is now preparing a real splitter diagnostic. Old M-* shells
+are not work. Prepare b3's independent candidate alongside it.
 
-## Lane turnover priorities
+## Next three lanes — prepare while b2 runs
 
-| Board | Next experiment | Why |
+| Board | Direction | Purpose |
 |---|---|---|
-| 1 | Q96 suite live (`M-tap96-b1`), engine `4706e124e4bb` | Primary 5.2983: negative. Retire after harvest; no width sweep without new evidence. |
-| 2 | CQ2 eligibility memoization (guard 16/16; host gate running, board idle) | One cache entry thrashes across 44 field tensors; 130,560 invariant norm checks/token. |
-| 3 | Radix-4 suite live (`M-fus5-b3`), engine `97c6ec2198ec` | Primary 5.3383: +0.660%, gates pending. |
+| 1 | Correct two-core wake + Q/K/V/gate fusion screen; capture boot-only kbench output on native flash USB | A failed UART-console readiness test need not idle an output-only experiment. Secondary USB output is already enabled. |
+| 2 | Now free: bounded UART input-loss discriminator, then actual fix/gate if supported | A concrete source-level mechanism may unblock bundle78's full gate. |
+| 3 | Exact shorter FP16 norm conversion in shipping CQ2 assembly | Fresh hot-path arithmetic candidate, distinct from the cold C bitcast null. |
 
-Use pinned per-board baselines, not three live controls. Confirm real child
-processes and growing nonempty logs. Replace an exited/blocked lane with a ready distinct reserve; don't turn the pool into a verification loop.
+Use per-board pins, not three live controls. Confirm child processes AND growing
+nonempty logs; Python buffering can hide completed primaries, so read the bounded
+metric section. Launch a ready successor before writing a long interpretation.
 
-**Q96:** Keep taphoist/tap2col/tapfwd, +0 seed, ascending tap sum, and full history
-copy. Carry the same chunk width through callback bounds and dispatch count;
-width96 only for dim576, accepted path elsewhere. Check startup nt=1/2, tails,
-disjoint output/history ranges, and the real 3+3 split; host serial execution
-alone doesn't exercise partition boundaries. `/tmp/t96.log` is host 19/19 with
-unchanged fidelity; candidate nd_model.c `a37f69fa720c`. Price whole requests,
-including dispatch/join. Old Q-tap 2.4 ms predates taphoist; no promised gain.
+## 1. Real synchronous projection fusion — still unmeasured
 
-**Radix-4:** Use the existing primitive and odd-split guards on the ACTUAL
-composed source, then host/device gates. Source is #404
-`787fea9:engine/src/nd_quant.c`: cold helper attributes, nd_fwht4s body and its
-guarded dispatch. Preserve all accepted improvements. Initial exp75 restored
-the whole historical file (`a800d1ea1896`) and silently removed head4; mentor
-caught the final diff hunk at accepted nd_quant.c:537 before board launch.
-Corrected candidate is `afdb953abb85`, with ctx.base=0 and full-head assembly
-dispatch retained. This tests composition on the new base, not an unchanged
-repeat of the old gate. Keep general-geometry fallbacks and record RAM cost.
+#344's 23-cycle wake and #347/#348's +0.04/+0.02% fusion used
+`nd_parallel_rows`, which remained `rows_serial`: main enters kbench before
+`worker_start`, and kbench never installs its own `split_rows` into that pointer.
+Explicit `time_one(..., KB_SPLIT)` results elsewhere are NOT invalidated.
+#444 does not replace this measurement: tap96 changed work division, chunking,
+load balance and memory overlap as well as wake count. Net slowdown / 8 is not
+an isolated wake cost or a lower bound; /24 is not the changed call count.
+Bundle86's negative does not close fusion or notifications either. #447 correctly
+retracted the parked-worker inference: worker_task blocks after EVERY job.
 
-## Why scheduler experiments reopened
+**Another concrete correction:** #344's raw log
+`/root/board-pool/batches/20260923T0200L/b3.kb27.log` gives
+`cycles_per_us_x100=23999` and `lut_build_cyc=32598`: that is **135.8 us**,
+NOT 13.6 us. #443/#444's 0.127% ceiling and #447's 122-us explanation inherit
+this factor-of-ten error. Also `bench_gather` allocates xh/lut with ND_ALLOC
+(PSRAM), while production m->lut uses ND_ALLOC_FAST (internal). Do not simply
+substitute 135.8 us as a production time either. If pricing LUT build, time the
+real in_pad=768 internal operands and installed splitter. Keep data and source
+conditions distinct; do not manufacture a wake estimate from the difference.
 
-Current source AND #344 `dbc77fe` / #348 `93d5aaa` establish the flaw:
-- main's kbench branch calls kbench_run and loops forever before worker_start,
-  which is the only assignment of the production nd_parallel_rows dispatcher.
-- kbench creates its own worker and split_rows, but NEVER connects
-  nd_parallel_rows to it. bench_wake/bench_fused call rows_serial; only explicit
-  split_rows/time_one(KB_SPLIT) uses the worker. Those latter results still stand.
-- Thus 10/33/33 cycles measured an indirect serial call, not a 23-cycle wake.
-  `pdMS_TO_TICKS(3)` is also zero at 100 Hz; the parked probe wasn't parked.
-  Shared volatile += in kb_wake_fn is not a valid multicore completion proof.
+Use kbench's existing sole worker and actual `split_rows` for BOTH timed arms;
+no second worker or nested dispatch. Prove core IDs and disjoint complete ranges
+outside timing (n=2 serial; n>=4 both cores). Park >=1 actual tick, not
+`pdMS_TO_TICKS(3)` at 100 Hz. Time caller through completion, median/range as
+well as minimum; no shared volatile += completion counter.
+Then reuse `bench_fused`'s 576+96+128+768 = 1,568 rows: four sequential splits vs
+one concatenated job, same bytes/table/eligibility and scalar reduction order.
+Compare all outputs including the cross-tensor split boundary. Use actual
+tier-relative placement where possible; #353 showed scattered allocations can
+reverse a layout verdict. Keep scope to this screen, then field-test a winner.
+The old 64-row "interleaved" callback merely chunks concatenated row order;
+do not present it as a separate round-robin scheduling mechanism.
 
-On a later free lane, one bounded screen: use the real splitter, prove callback core IDs and
-disjoint complete ranges (n=2 serial, n>=4 both cores), time on the calling core
-through completion, use a nonzero parked delay and report median/range. Then
-reuse bench_fused's existing 576+96+128+768=1568-row machinery to compare four
-jobs with one concatenated job on identical operands. Do not start a second
-worker sharing one job slot or nest nd_parallel_rows. Join before any consumer
-or scratch reuse; no asynchronous gate-overlap revival (#126).
+B1 transport: sysfs identifies console as **1a86:55d3 USB-UART**, flash as
+**303a:1001 native USB Serial/JTAG**; not two identical interfaces. Resolved
+config has `CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y`. Under
+`needle-board run 1`, after exclusive flashing ends, capture boot-only kbench
+on `FLASH_PORT`, controlling reset lines. This secondary console takes NO
+request input. Require actual KB results/KBENCH_DONE; if it fails too, record
+that exact blocker and transfer the candidate to next turnover.
+[IDF secondary-console documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/stdio.html#secondary-output).
 
-If promising, host-gate and field-measure the actual wrapper, including context
-and eligibility costs. Keep eligibility behavior identical between arms; don't
-silently fold the independent cache change below into a scheduling result.
-If clearly negative, substitute the reserve rather than expanding the harness.
+## 2. Console blocker: received input, not another fatigue narrative
 
-## Board 2: CQ2 eligibility cache that retains the working set
+New evidence, NOT a demonstrated root cause:
+- `main.c:492` polls getchar(), sleeps 20 ms on EOF, and installs no UART driver.
+  Local IDF basic UART VFS directly polls the FIFO; `soc_caps.h` says **128
+  bytes**. At 115200 8N1, 20 ms admits ~230 bytes.
+- `serial_api.py:444` sends each whole wire request in one burst. The commonly
+  first failing `heldout_long_route` is 224 prompt bytes + 7 route-prefix bytes
+  + newline = **232 bytes**; note-only tools is **135 wire bytes**. Earlier
+  cases fit the FIFO. This predicts missing input/newline and wrong arguments
+  without an engine error. It need not explain b1 readiness or every short
+  command stall; keep those observations separate.
+- First/reconnect STATE frames repeat uptime ~61 seconds and the priming block
+  in recent logs. Do not assert warm state survived reconnect without evidence;
+  stale replay is also possible.
 
-`nd_quant.c`'s lut2_asm_usable has ONE s_asm_blob/s_asm_rows/s_asm_ok entry.
-Q/K/V/gate/out and engram key/value evict one another every token. Static call
-sites + archive directory give **44 full projections, 130,560 norm halfwords
-(261,120 bytes) scanned/token**. All those norms have ordinary exponents in the
-actual archive. The two large engram embedding tables use dequant_row and are
-excluded. Accepted objdump confirms l16ui/addi/extui/bbs per norm plus row-loop
-work, on the caller before the split. Kernel kbench preselects fn outside timing
-and therefore never priced this wrapper cost. No matching cache-capacity trial
-found in log/ideas; this one-entry design is unchanged since #137 (`0c769df`).
+One bounded discriminator: record received line length/hash outside timing,
+UART overflow status if available, and compare exact sent bytes for these
+existing long cases. Briefly contrast burst with safely paced chunks on SAME
+prompt bytes. Diagnostic timing is not a speed claim. Do not shorten prompts,
+skip cases, regenerate goldens, reorder acceptance or union multiple sessions.
+If input loss is confirmed, implement a product fix (small interrupt-driven RX
+ring + blocking VFS, or justified lossless equivalent), count heap cost, then
+run the unchanged full suite in canonical order on bundle78. Driver installation
+changes I/O and needs the full gate. Do not weaken 20/20 if lossless delivery
+exposes a formerly truncated frozen input. Keep other lanes discovering; bound
+this investigation rather than rebuilding the harness.
+[IDF UART VFS behavior](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/stdio.html#uart).
 
-Researcher selected this for b2; launch when host/guard preparation is ready.
-Memoize validation for all field tensors (bounded cache or model-owned flags),
-retaining cached rejections and the C fallback. Key on relevant geometry and
-final blob/norm identity AND invalidate on model close/reopen/replacement;
-a reused address doesn't prove unchanged contents. No skip-all-norms shortcut.
-Measure RAM/lookup cost, briefly establish miss/hit counts, test exceptional
-norms and reused-address invalidation, remove timing instrumentation, then
-host-gate and field-measure on bundle5. Speedup is unknown until measured.
+## 3. New arithmetic candidate: positive-normal FP16 norm rebias
 
-Exp77 now uses 64-slot open addressing (direct mapping would collide), with a
-close-time reset. Host goldens compile with ND_LUT2_ASM off: they do not exercise
-this memo. The small guard includes the actual candidate nd_quant.c with ASM
-enabled and discards unused target functions at link time. Corrected guard is
-**16/16** at 10:53: sufficiently sized fixtures, 96 distinct keys over 64 slots,
-cached rejections (exponents 0 and 31), and reused-address reset. A stale false
-positive can change arithmetic, not merely speed. Reset linkage was also fixed
-for the non-ASM host build; standard host gate is rerunning. Launch b2 once green;
-do not expand the harness. Judge field benefit plus ~1.28 KB of target cache RAM.
+`lut2_tie728.S:652` executes NF16V for every CQ2 row/group: ten instructions
+separately extract sign/exponent/mantissa, rebias, join, then wfr. There are
+130,560 norms/token from the census behind asmemo. #433's f16wfr null affected
+C nd_f16 call sites, NOT this macro. #138's early conversion lost: retain early
+halfword load and late conversion placement.
+For **positive ordinary** halfword h, exact FP32 bits are
+`(uint32_t(h) << 13) + 0x38000000`. Move exponent and mantissa together.
+Using existing dead scratch registers: materialize 112 then shift 23, shift h
+13, add, wfr = five instructions vs ten, no persistent register or table.
+Inspect emitted code. Five saved cycles with perfect two-core balance would
+be ~1.36 ms/token; this is an instruction-budget hypothesis, not measured gain
+or a latency bound. Screen it rather than dismissing it on #433.
 
-Conditional follow-up only: if real handshake cost has material token mass,
-try dedicated task notifications instead of go/done binary semaphores. Preserve
-one outstanding job, descriptor publication, completion before context reuse,
-priorities, blocking idle behavior, and watchdogs. No spin loop/tick change;
-check notification-index ownership. [ESP-IDF documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/system/freertos_idf.html#semaphore-api)
-supports the mechanism, not a Needle speed prediction. Q/K/V tap-job fusion or
-prepare+LUT fusion can wait for measured scheduling results; keep the queue small.
+Preserve general fallback semantics: either retain sign in an exact general
+normal conversion, or add sign==0 to cached eligibility before selecting a
+separately guarded positive kernel. Check real archive norm signs; the current
+exponent-only predicate does NOT guarantee positivity. Test actual assembled
+conversion vs reference over all halfwords in-domain; reject/fallback negatives,
+zero/subnormals/Inf/NaN, and compare multi-row real fixtures/split boundaries.
+Keep memo geometry/lifetime reset and head4/fusion intact. Host goldens do not
+exercise Xtensa assembly. Start CQ2 only; a win can later transfer to GEMV4.
+Mentor read-only archive census: 46 CQ2 tensors, 351,744 stored norms, zero
+negative or special-exponent halfwords. This includes the two embedding tables;
+the 44 full projections account for the 130,560 hot norms/token. Static data
+supports the premise but does not replace predicate/fallback tests.
 
-## Closures and constraints worth retaining
+## Ready reserve and retained constraints
 
-- Sinkpair -0.062%, silu4 exactly null, f16wfr +0.032% (one quantum), eghoist
-  -0.16%: no immediate repeats. f16wfr is at most a banked rider, not a proven win.
-- Sampler subset projection is ~0.14 ms; old 3.8-6.5 ms was a cumulative-timer
-  denominator artifact. No new sampler/profile tours. #435 kron-source transpose
-  premise fails because that source is internal SRAM; leave it off the queue.
-- condT2 and fp16 tap/cond storage losses stand. No approximate math, frozen
-  quantization changes, wide-float-load reruns or vendor-blocked 120 MHz.
-- Strict device 20/20 applies to each shipping candidate. Historical 19/20 tool
-  argument mismatch was seconds=300 vs 120, not merely prose; session-order
-  causality remains unproven. Preserve raw outputs on already-needed runs;
-  no union of sessions, gate weakening or anti-repeat override for stale images.
-- Validate generated candidate code, not a separately transcribed idealization.
-  Preserve worker dirty files before researcher-owned synchronization. Never
-  interrupt a live build, flash or benchmark to match this queue.
+- If true scheduling cost is material, try direct task notifications instead
+  of go/done binary semaphores as a separate candidate. Preserve one descriptor,
+  publication/completion ordering, blocking idle, priorities and notification
+  ownership (resolved array has one slot). No spin loop/tick change.
+  [IDF notification APIs](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/system/freertos_idf.html#task-notifications)
+  motivate the mechanism, not a Needle speed prediction.
+- asmemo cached rejections, full geometry key and close/reopen reset matter:
+  stale false positives can alter arithmetic. Validate actual sources, not a
+  transcribed idealization; include ASM files in provenance.
+- Leave tap96, sinkpair, silu4, f16wfr-alone, condT2, fp16 tap storage, wide-load
+  variants, approximate math and vendor-blocked 120 MHz off the immediate queue.
+  Internal-SRAM kron transpose has no PSRAM-locality premise. No generic profile
+  or callee census loops; historical cumulative timers are not additive.
+- No gate lottery, anti-repeat override for stale images, or claimed 20/20 from
+  absent output. Preserve live jobs even if their logs stall.
 
-Next mentor: first inspect the stalled reconnect tails and whether b2 memo has
-actually launched; then radix-4 full gates/cross-board confirmation and memo
-field benefit/RAM. Use the next discovery turnover for corrected core-ID/wake
-and synchronous fusion evidence. Accepted pins remain unchanged until the
-normal gates pass.
+Next mentor: did b1 produce a real two-core screen on its output leg, did b3
+launch norm rebias, and does b2 have actual received-byte evidence? Harvest
+bundle86's final status, keep bundle78 ahead of it, and require the strict full
+gate before moving accepted pins.

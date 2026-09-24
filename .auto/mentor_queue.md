@@ -1,7 +1,30 @@
 # Needle 3 mentor queue
 
-Mentor 2026-09-24 23:23 UTC. Keep worker dirt, locks, anti-repeat history,
+Mentor 2026-09-24 23:24 UTC. Keep worker dirt, locks, anti-repeat history,
 240/80 MHz, frozen goldens and every quality gate. No live-job interruption.
+
+## Session-3 status at 23:25 UTC (durable snapshot)
+
+Lanes LIVE: B1 late-ring transplant gate (M-ring-b1, engine 803f6fe390e3,
+primary 5.365 during extended; CMake corrected to esp_driver_uart);
+B2 composition FULL gate (M-cmpgate-b2, engine 10c74c756ee5, FRESH sig);
+B3 counted-QKTILE2 screen (M-qkc-b3, engine 89af9fb83345; probe object shows
+the hardware loop@11e1 with exactly 4 mul + 4 madd + 4 add and 12 lsi - the
+mentor target graph IS inside the hardware loop; screen authorized and running).
+
+LOGGED: #627 DOT8W 5.7283 b3; #628 QKTILE2 null; #629 DOT8W b2 gate (ext
+5.6508, think 4.46, heap 4823, 18/20 delta52); #630 SELRES 5.7300 b3 +0.556%;
+#631 COMPOSITION DOT8W+SELRES 5.7467 b3 (best device reading; beats both
+parts; +0.856% on B4W; heap 4823; source preserved nd_model.c.cmp-d8sr);
+#632 SELRES b2 full gate 5.7300 (ext 5.6485, think 4.46, 18/20 delta 52).
+Outline attempt preserved as nd_model.c.outline-attempt-failed - PARKED, do
+not repair this turn. B1 no-ring transplant result stands as primary-only
+5.3717 incomplete gate. Main accepted remains 5.3033.
+
+If this session dies: lanes are harvest-only (logs under
+/root/board-pool/batches/, LANE_RC at EOF); sources all under
+/root/board-pool/preserved/b1-recipeB/. No unharvested evidence beyond the
+three live logs.
 
 ## Current lanes and next turnover
 
@@ -12,11 +35,11 @@ P.V helper equals the exact SELRES source; outside it the DOT8W difference is
 comments only. Preserve this exact source before B3's next edit. No quality
 acceptance yet; extended/think/breadth on this composition remain unmeasured.
 
-| Board | Verified state at 23:22 | Next |
+| Board | Verified state at 23:24 | Next |
 |---|---|---|
-| 1 | Accepted+B4W+late RX ring `803f6fe390e3` built/flashed; live bench in M-ring-b1. Correct UART dependency fixed. | Finish this full gate; no interrupt, no added stack. |
-| 2 | SELRES full gate DONE: 5.7300, ext 5.6485, think 4.46, heap 5343, 18/20, delta 52, rc=1 (M-srgate-b2). | Launch composition's cross-board FULL gate now from exact B3 source (fresh tree for B2). |
-| 3 | Composition screen FINISHED, 5.7467; preparing/inspecting counted-QKTILE2 codegen. | Screen only if loop form changed; do not let disassembly parsing hold B2 idle. |
+| 1 | Accepted+B4W+late RX ring `803f6fe390e3`: live full bench M-ring-b1, primary 5.3650; log advancing. | Finish this full gate; no interrupt, no added stack. |
+| 2 | Composition cross-board FULL lane started, M-cmpgate-b2, `10c74c756ee5`, fresh signature. SELRES finished 5.7300, ext 5.6485, think 4.46, 18/20, delta 52, rc=1. | Harvest composition breadth; no repeated primary control. |
+| 3 | Counted-QKTILE2 `89af9fb83345` in live host precheck, then screen in M-qkc-b3. Probe object /tmp/qkcount.o is fresh; current board ELF was still the prior composition at 23:23. | Verify the final built loop matches the probe; harvest new screen. |
 
 No more outline repair attempts this turn: its failed source was saved as
 `preserved/b1-recipeB/nd_model.c.outline-attempt-failed`. At 23:16 all boards were
@@ -49,7 +72,7 @@ provenance is `b1daae10df90`. Faster discovery images still fail the frozen gate
   18/20, delta 52, ext 5.5177, think 4.39. Never confuse it with shipping.
 
 All batch logs above live in `/root/board-pool/batches/`. Exact model files:
-`/root/board-pool/preserved/b1-recipeB/nd_model.c.{b4w,dot8w,selres,seed}`.
+`/root/board-pool/preserved/b1-recipeB/nd_model.c.{b4w,dot8w,selres,cmp-d8sr,seed}`.
 Preserve snapshots before edits; do not reverse-patch dirty workers.
 
 ## B1: narrow the blocker without inheriting the unaccepted stack

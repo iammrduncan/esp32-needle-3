@@ -1,24 +1,29 @@
 # Needle 3 mentor queue
 
-Mentor 2026-09-24 23:16 UTC. Keep worker dirt, locks, anti-repeat history,
+Mentor 2026-09-24 23:23 UTC. Keep worker dirt, locks, anti-repeat history,
 240/80 MHz, frozen goldens and every quality gate. No live-job interruption.
 
-## Start the next three, without another outline repair loop
+## Current lanes and next turnover
 
-All three board jobs have finished; B1 timed out naturally with LANE_RC=1.
-B2's outline generator has failed repeatedly. Preserve that attempt and use the
-READY substitute. A host precheck after a failed generator is not a new candidate.
+**Composition WON: DOT8W + selective-rescale = 5.7467 on B3**, +0.291% over
+its best separate form (5.7300). 6/6 primary exact, delta 0, heap 4823, rc=0;
+engine `10c74c756ee5`, log `M-cmp-b3.log`. Mentor checked the composition:
+P.V helper equals the exact SELRES source; outside it the DOT8W difference is
+comments only. Preserve this exact source before B3's next edit. No quality
+acceptance yet; extended/think/breadth on this composition remain unmeasured.
 
-| Board | Next action | Comparison |
+| Board | Verified state at 23:22 | Next |
 |---|---|---|
-| 1 | **Accepted bundle5 + B4W + existing late RX ring**, full gate once. | B1 bundle5 5.3033; no-ring B4W primary 5.3717. |
-| 2 | **Plain selective-rescale on B4W**, cross-board FULL gate. Exact winner source is preserved. | B2 B4W 5.6967; B3 selective-rescale 5.7300. |
-| 3 | **DOT8W + selective-rescale**, ONE composition screen. | B3 separate winners 5.7283 and 5.7300; compare with 5.7300. |
+| 1 | Accepted+B4W+late RX ring `803f6fe390e3` built/flashed; live bench in M-ring-b1. Correct UART dependency fixed. | Finish this full gate; no interrupt, no added stack. |
+| 2 | SELRES full gate DONE: 5.7300, ext 5.6485, think 4.46, heap 5343, 18/20, delta 52, rc=1 (M-srgate-b2). | Launch composition's cross-board FULL gate now from exact B3 source (fresh tree for B2). |
+| 3 | Composition screen FINISHED, 5.7467; preparing/inspecting counted-QKTILE2 codegen. | Screen only if loop form changed; do not let disassembly parsing hold B2 idle. |
 
-Launch B2 from its ready source and B3 from the small proven hunk before more
-analysis. Verify actual processes and growing nonempty logs. All three lanes
-are different; B2's full breadth is the one justified confirmation of a winner.
-No live controls, waiting for admission, matrix completion or new goldens.
+No more outline repair attempts this turn: its failed source was saved as
+`preserved/b1-recipeB/nd_model.c.outline-attempt-failed`. At 23:16 all boards were
+idle after B1's natural timeout and repeated outline transcription failures;
+mentor used Ctrl-C + direct redirect. B1/B2 benchmarks and B3's completed screen
+are verified processes/logs, not launch announcements. Keep three distinct lanes
+moving; confirmations above have specific new breadth/cross-board purposes.
 
 ## What is actually measured
 
@@ -81,11 +86,11 @@ neither does nothing. Use flags, never compare r with zero (underflow is valid).
 Keep four-wide P.V exactly unchanged. The exact winning model file is ready
 for B2, whose full gate supplies its own quality/extended/think values.
 
-B3 applies only that rescale hunk to the preserved DOT8W source. DOT8W changed
+The measured B3 composition applied only that rescale hunk to preserved DOT8W. DOT8W changed
 QK; selective rescale changed output sweeps. Their independent gains justify
 one combination, without assuming percentages add. This is NOT the failed A3
-rescale/P.V fusion. If it beats both parts, preserve it and schedule its own
-breadth on a later turnover; otherwise keep the best separate form. No third
+rescale/P.V fusion. It beat both parts: preserve it and obtain its own breadth on B2 after SELRES
+finishes. Do not repeat its restricted screen on B3. No third
 fusion form or duplicate discovery lanes.
 
 ## Following turnover: one compiler question; outline stays parked until ready
@@ -142,6 +147,6 @@ support this experiment. Do not keep B2 idle preparing it; use the ready gate.
   Canonical source hash: cat src/*.c, src/*.S, include/*.h, main/*.c in that order.
   Host -ffp-contract=off cannot prove target contraction or assembly equivalence.
 
-Next mentor: B1 late-RX transplant quality/source manifest; B2 SELRES breadth;
-B3 composition result and actual three-lane turnover. Check for drift into
+Next mentor: B1 late-RX transplant quality/source manifest; B2 SELRES result and
+composition cross-board breadth; B3 counted-loop codegen/timing and real turnover. Check for drift into
 mechanical editing, stale waits or self-declared acceptance/finish narratives.

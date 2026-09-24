@@ -55,6 +55,11 @@ class Device:
         self._warned_noisy_log = False
         self._open(port, baud)
         self._handshake(boot_timeout)
+        # The baseline identity, so a later WARN line is a comparison and not a guess.
+        try:
+            print("ATTACH_DEVICE %s" % self._dev_identity())
+        except Exception:                        # pragma: no cover - diagnostic only
+            pass
 
     def _open(self, port, baud):
         # Both of this board's ports are USB-Serial/JTAG, and a DTR/RTS edge
@@ -75,6 +80,27 @@ class Device:
         self.serial.open()
         self.serial.dtr = False
         self.serial.rts = False
+
+    def _dev_identity(self):
+        """Identify the kernel node behind the path we were handed.
+
+        Every 'the board stopped answering' investigation here has assumed firmware, and the
+        failures are engine-independent (the accepted image reproduces them at the same case).
+        The console is a USB-UART bridge on UART0, so it can drop off USB by itself while the
+        ESP32 keeps running - which is what the thermal instrument showed: logs still streaming
+        on the other leg, model open, heap and PSRAM CRC clean. Resolving the alias chain makes a
+        stall readable as 'the console leg re-enumerated at case N'. Never raises: a diagnostic
+        that breaks a rescue is worse than the blind spot it closes.
+        """
+        try:
+            import os
+            real = os.path.realpath(self.port)
+            st = os.stat(real)
+            return "path=%s real=%s rdev=%d.%d" % (
+                self.port, real, os.major(st.st_rdev), os.minor(st.st_rdev))
+        except Exception as exc:                       # pragma: no cover - diagnostic only
+            return "path=%s identity_unavailable=%s" % (
+                getattr(self, "port", "?"), type(exc).__name__)
 
     def _handshake(self, boot_timeout):
         """Attach, then re-attach quietly if the board was busy on arrival.
@@ -366,6 +392,15 @@ class Device:
                 # the TimeoutError the caller needed - measured, make test has been
                 # red on exactly this since the rescue landed in run #389.
                 raise
+            # Which tty is actually behind the path? The console leg is a USB-UART bridge on
+            # UART0, so it can leave USB on its own while the ESP32 keeps computing; printing the
+            # resolved node turns 'the board hung at case 17' into 'the console leg re-enumerated
+            # at case 17', which is a rig fault rather than a firmware one. Diagnostic only, and
+            # it must never be able to break the rescue.
+            try:
+                print("WARN stalled_device_identity %s" % self._dev_identity())
+            except Exception as _exc:                  # pragma: no cover
+                print("WARN stalled_device_identity_unavailable %s" % type(_exc).__name__)
             print("WARN request timed out; reconnecting and re-sending this case "
                   "(not skipping it)")
             self.available = False

@@ -1,0 +1,9 @@
+diff --git a/esp32/sdkconfig.defaults b/esp32/sdkconfig.defaults
+index e974b2e..2c39b6d 100644
+--- a/esp32/sdkconfig.defaults
++++ b/esp32/sdkconfig.defaults
+@@ -24,3 +24,4 @@ CONFIG_ESP32S3_DATA_CACHE_64KB=y
+ CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+ CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+ CONFIG_ESP32S3_INSTRUCTION_CACHE_LINE_32B=y
++CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y

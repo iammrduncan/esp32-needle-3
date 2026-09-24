@@ -63,22 +63,18 @@ static float sigmoidf_(float x)
  */
 static ND_HOT inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)
 {
-    if ((x0 >= 0.0f) == (x1 >= 0.0f)) {
-        float e0, e1;
+    /* The pair needs matching EXPONENTS, not matching signs: both chains are fed the
+     * sign-normalized magnitude exactly as the scalar path would, so the sign only selects
+     * which of the two shipped scalar division forms each element uses. The shipped code
+     * required the signs to agree and otherwise ran two serially-dependent scalar chains. */
+    float e0, e1;
 
-        nd_expf_pair(x0 >= 0.0f ? -x0 : x0,
-                     x1 >= 0.0f ? -x1 : x1, &e0, &e1);
-        if (x0 >= 0.0f) {
-            *y0 = 1.0f / (1.0f + e0);
-            *y1 = 1.0f / (1.0f + e1);
-        } else {
-            *y0 = e0 / (1.0f + e0);
-            *y1 = e1 / (1.0f + e1);
-        }
-    } else {
-        *y0 = sigmoidf_(x0);
-        *y1 = sigmoidf_(x1);
-    }
+    nd_expf_pair(x0 >= 0.0f ? -x0 : x0,
+                 x1 >= 0.0f ? -x1 : x1, &e0, &e1);
+    if (x0 >= 0.0f) *y0 = 1.0f / (1.0f + e0);
+    else            *y0 = e0 / (1.0f + e0);
+    if (x1 >= 0.0f) *y1 = 1.0f / (1.0f + e1);
+    else            *y1 = e1 / (1.0f + e1);
 }
 
 /* FP16 tensors are read element-wise; they are small (norm scales, gates). */
@@ -385,8 +381,19 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                     h = (const uint16_t *)nd_cact_data(&m->c, &t);
                     n = t.nbytes / 2;
                     m->fp16_slot[li][SLOT[f]] = p;
-                    for (k = 0; k < n; k++)
-                        p[k] = nd_f16(h[k]);
+                    if (SLOT[f] == 25 && n == m->d_model * 8u) {
+                        /* cond_v is [d_model][8] in the archive and cond_rows reduces one
+                         * channel (one column of it) at a time, so convert it straight into
+                         * the transposed layout: element (i, ch) lands at ch*dm + i. Same
+                         * buffer, same size, same converted values - only the position each
+                         * halfword is written to moves, which is what turns eight stride-8
+                         * sweeps over 24 KB into eight contiguous 3 KB ones. */
+                        for (k = 0; k < n; k++)
+                            p[(size_t)(k & 7u) * m->d_model + (k >> 3)] = nd_f16(h[k]);
+                    } else {
+                        for (k = 0; k < n; k++)
+                            p[k] = nd_f16(h[k]);
+                    }
                     p += n;
                 }
         }
@@ -1156,11 +1163,26 @@ static ND_HOT void tap_rows(void *vc, uint32_t b0, uint32_t b1)
      * remainder per tap per column. Resolve them here; the column loop below then only
      * loads, multiplies and adds. `nt` is exactly the shipped `j < taps && j <= pos`. */
     if (nt == 3u) {
-        const float *h0 = c->hist + (size_t)( c->pos        % c->taps) * dim;
+        /* j = 0 is the row the caller memcpy'd out of c->proj immediately before this call,
+         * so read the source: same bytes, same order, one PSRAM sweep fewer per projection. */
+        const float *h0 = c->proj;
         const float *h1 = c->hist + (size_t)((c->pos - 1u)  % c->taps) * dim;
         const float *h2 = c->hist + (size_t)((c->pos - 2u)  % c->taps) * dim;
         const float *w0 = c->w, *w1 = c->w + dim, *w2 = c->w + 2u * dim;
-        for (i = lo; i < hi; i++) {
+        for (i = lo; i + 1u < hi; i += 2u) {
+            /* Two columns, two accumulators: each keeps its own ascending-tap order and
+             * its own +0.0f seed, so both stored sums are the shipped rounding sequence. */
+            float a = 0.0f, b = 0.0f;
+            a += w0[i] * h0[i];
+            a += w1[i] * h1[i];
+            a += w2[i] * h2[i];
+            b += w0[i + 1u] * h0[i + 1u];
+            b += w1[i + 1u] * h1[i + 1u];
+            b += w2[i + 1u] * h2[i + 1u];
+            c->proj[i] = a;
+            c->proj[i + 1u] = b;
+        }
+        if (i < hi) {
             float value = 0.0f;
             value += w0[i] * h0[i];
             value += w1[i] * h1[i];
@@ -1732,8 +1754,13 @@ static ND_HOT void cond_rows(void *vc, uint32_t c0, uint32_t c1)
     uint32_t        ch, i;
     for (ch = c0; ch < c1; ch++) {
         float acc = 0.0f;
+        /* cv is staged channel-major (see the fp16 pool fill), so channel ch is one
+         * contiguous row: the sweep is sequential instead of a stride-8 walk over 24 KB.
+         * The term order and the accumulator are exactly the shipped ones, so the sum
+         * is bit-identical - only where each term is fetched from moves. */
+        const float *cvr = c->cv + (size_t)ch * c->dm;
         for (i = 0; i < c->dm; i++)
-            acc += c->x[i] * c->cv[(size_t)i * 8 + ch];
+            acc += c->x[i] * cvr[i];
         c->dst[ch] = acc;
     }
 }

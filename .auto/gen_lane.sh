@@ -29,7 +29,7 @@ REL="$TARGET"
 # Assert the BASE, not just the change: after the #421 base error a worker HEAD could carry a
 # gate-blocked candidate, so "accepted + candidate" was really "fusion + candidate".
 TREE_BEFORE=$( cd "$W" && { cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c; } | md5sum | cut -c1-12 )
-ACCEPTED_ENGINE_MD5="${ACCEPTED_ENGINE_MD5:-cc046f59204e}"
+ACCEPTED_ENGINE_MD5="${ACCEPTED_ENGINE_MD5:-0c1a6272cd01}"   # run #431: accepted+expbc+head4+taphoist+wfr+bundle5
 if [ "$TREE_BEFORE" != "$ACCEPTED_ENGINE_MD5" ]; then
     echo "BASE_NOT_ACCEPTED tree_md5=$TREE_BEFORE expected=$ACCEPTED_ENGINE_MD5"; exit 6
 fi

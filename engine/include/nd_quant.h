@@ -70,6 +70,26 @@ static inline float nd_f16(uint16_t h)
  * software-emulated and measurable. Range-reduce to 2^k * 2^f with f in
  * [-0.5, 0.5], evaluate 2^f with a degree-5 polynomial, and apply 2^k by
  * assembling the exponent field directly. */
+/* Put an assembled 32-bit pattern into a float register.
+ *
+ * On Xtensa this is a single register transfer. The plain 4-byte copy - even as an explicit
+ * builtin, which is what run #424 needs for the -fno-builtin-memcpy flag - is lowered to a stack
+ * store plus an FP load (`s32i.n` + `lsi`), and that round trip, not the arithmetic, is what the
+ * board-1 kbench screen measured at ~50 cycles per conversion. Same bits in, same float out; the
+ * host build (the correctness oracle) keeps the portable copy. */
+static inline float nd_f32_from_bits(uint32_t bits)
+{
+#if defined(__XTENSA__)
+    float f;
+    __asm__ __volatile__("wfr %0, %1" : "=f"(f) : "r"(bits));
+    return f;
+#else
+    float f;
+    __builtin_memcpy(&f, &bits, 4);
+    return f;
+#endif
+}
+
 static inline float nd_expf(float x)
 {
     float    z, f, p;
@@ -92,7 +112,7 @@ static inline float nd_expf(float x)
     p = p * f + 1.0f;
 
     bits = (uint32_t)(k + 127) << 23;  /* 2^k */
-    __builtin_memcpy(&scale, &bits, 4);
+    scale = nd_f32_from_bits(bits);
     return p * scale;
 }
 
@@ -141,8 +161,8 @@ static inline void nd_expf_pair(float x0, float x1, float *r0, float *r1)
 
     b0 = (uint32_t)(k0 + 127) << 23;
     b1 = (uint32_t)(k1 + 127) << 23;
-    __builtin_memcpy(&sc0, &b0, 4);
-    __builtin_memcpy(&sc1, &b1, 4);
+    sc0 = nd_f32_from_bits(b0);
+    sc1 = nd_f32_from_bits(b1);
     *r0 = p0 * sc0;
     *r1 = p1 * sc1;
 }

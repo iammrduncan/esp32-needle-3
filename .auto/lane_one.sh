@@ -11,7 +11,7 @@ MAIN=/workspace/esp32-needle-3
 # The accepted engine signature, i.e. the tree whose canonical run produced 5.1167 decode tok/s
 # (commit 018427c, nd_quant.c md5 cc174624959b, no nd_fwht4s anywhere). A lane that cannot
 # reproduce it is not measuring on the accepted base and must not print a delta against it.
-ACCEPTED_ENGINE_MD5="${ACCEPTED_ENGINE_MD5:-cc046f59204e}"
+ACCEPTED_ENGINE_MD5="${ACCEPTED_ENGINE_MD5:-0c1a6272cd01}"   # run #431: accepted+expbc+head4+taphoist+wfr+bundle5
 case "$TGT" in
     engine/*) INC="$MAIN/engine/include" ;;
     esp32/main/*) INC="$MAIN/engine/include $MAIN/engine/src" ;;

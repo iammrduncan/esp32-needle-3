@@ -249,20 +249,7 @@ enum { ND_P_PROJ, ND_P_ATTN, ND_P_MLP, ND_P_PHI, ND_P_ENGRAM,
        ND_P_ATTNX,
        /* The stage between the QKV projections and the head split, in pieces:
         * history conv taps, per-head RMSNorms, RoPE, int8 KV store. */
-       ND_P_TAPS, ND_P_HNORM, ND_P_ROPE, ND_P_KVST,
-       /* ND_P_MHCX is a 4.7 ms aggregate over four small loops, which works out at ~10
-        * cycles per element-op against the 1-2 cycles a resident elementwise loop measures
-        * elsewhere - a 5x anomaly that has never been localised. Split it the way
-        * ND_P_PREP was split (run #355), because that split is what located the FWHT and
-        * the rescale and produced two shipped wins. Sub-phase of ND_P_MHCX, additive. */
-       ND_P_MHC_RMS, ND_P_MHC_BIAS, ND_P_MHC_LANE, ND_P_MHC_SUB,
-       /* ND_P_ENGRAM is 16.1 ms/token while the phase's own 2-bit GEMVs account for
-        * ~14.2 ms and the slot gathers were priced at ~0.02 ms - a ~1.9 ms gap that no
-        * accounting explains. This times the per-slot row dequant, which is the only
-        * other thing the phase does, and it is the suspect: it pulls a whole packed row
-        * straight out of flash per (site, order, head). Sub-phase, additive. */
-       ND_P_ENG_ROW,
-       ND_P_COUNT };
+       ND_P_TAPS, ND_P_HNORM, ND_P_ROPE, ND_P_KVST, ND_P_COUNT };
 extern uint64_t nd_prof[ND_P_COUNT];
 
 /* Calibrated confidence over everything fed so far, in [0,1].

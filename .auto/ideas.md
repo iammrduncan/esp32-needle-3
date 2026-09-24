@@ -2715,3 +2715,59 @@ After these, the transform family is measured on every axis it has: width (1,2,3
 stage order (ascending wins). What remains above the bar is owner-only: phi row residency (~18 KB/core
 vs 12,855 B free, gated on #293's assertion-level RAM), 120 MHz (vendor-blocked, #331), and the 0.2 %
 bar itself.
+
+# Runs #409-#410: two phase aggregates split, and Sinkhorn's exp-pairing priced exactly off-device
+
+## MEASURED, OFF-DEVICE, NOT BUILT: pair Sinkhorn's exponentials - ceiling +0.145 %, sub-bar
+
+`nd_expf` is called 3,786 times per decode token inside Sinkhorn's row/column sums, unpaired
+(the shipped line is `sum += (d == 0.0f) ? 1.0f : nd_expf(d)`), in the one loop where removing a
+transcendental *won* +0.200 % (run #291). Experiment 12's measured pair economics are 247.42 cycles
+for two scalar calls against 198.04 paired, i.e. 49.4 cycles saved per pair, so this looked like a
+real candidate. Counting the real quantities on the host (same engine, `-DND_SINK_STATS`, two
+prompts) prices it without a board:
+
+| quantity | measured | per decode token (8 Sinkhorn calls) |
+|---|---|---|
+| `sinkhorn()` calls per forward step | 8 (26,720 iterations / 20 / 167 steps) | 8 |
+| gross exponential terms per call | 640.0 exactly (473.2 computed + 166.8 zero-skipped) | 5,120 gross |
+| exponentials actually computed | - | **3,786** |
+| `logf` per call | 160.0 exactly (20 iters x 2 passes x 4 rows) | **1,280** |
+| adjacent (j, j+1) pair slots per call | 320 (16 per iteration, exact) | 2,560 |
+| pairable share (both operands non-zero) | **0.6131** (282,505 / 460,800) | 1,570 pairs |
+
+Saving = 1,570 x 49.4 = 77,558 cycles = 0.323 ms, minus ~10,240 cycles of eligibility tests on all
+2,560 slots = **0.28 ms of a 193 ms token = +0.145 % at full realisation**, and this family's
+measured realisation band is 25-70 % (#12, #288, #290, #291), so the expected delivery is
++0.04 %..+0.15 % - under the 0.2 % keep bar. Not built. Pairing across *rows* instead is worse, not
+better: per-term non-zero probability is 0.739, so two rows agreeing at the same column is 0.546
+against the 0.613 the j-adjacent scheme already gets, and interleaving rows costs more registers.
+
+**Two ledger figures reconciled, both correct.** The phase map's `sinkhorn` entry carried "~1,280
+exp + ~1,280 logf per token" and the kernel's own comment says "~5,120 exponentials per decode
+token". They measure different things: 5,120 is the gross term count (20 x 2 x 4 x 4 x 8) and 1,280
+is the count that still reaches `nd_expf` in the *pre-#291* form... measured directly: 3,786 reach
+`nd_expf` today, because #291's skip already removes 1,334/token. Consequence: the phase's 3.8 ms is
+fully explained by measured per-call costs (3,786 x ~99 cycles for exp plus 1,280 x ~250-420 for
+libm `logf` = 0.39-0.91 ms of transcendental alone, plus the row/column sweeps and rescales), so
+**Sinkhorn carries no anomaly**, and the banked `logf(1.0f)` skip stays closed on its own measured
+13.58 % hit rate: 174 skips x ~400 cycles = 0.29 ms = +0.15 %, sub-bar. Both numbers now come from
+counters rather than from arithmetic in a comment.
+
+## Harness/provenance findings worth more than the candidate
+
+1. **The provenance assertion did not cover `nd_model.c`.** `measure.sh`'s `engine_md5` hashed only
+   `engine/src/nd_quant.c` + `engine/src/*.S`, so every `nd_model.c`-only candidate this campaign has
+   run (condT, silu4, cond2, cond4, and this iteration's timer split) was NOT checked by
+   `EXPECT_ENGINE_MD5`. Now hashes `engine/src/*.c` + `*.S` + `engine/include/*.h` +
+   `esp32/main/*.c`. The four `PROVENANCE_MISMATCH` exits that exposed it were the gate correctly
+   refusing a mis-computed expectation - a gate rejecting a wrong claim is the gate working.
+2. **`needle-board run N -- cmd` executes with a cwd that is not the checkout**, so a candidate
+   applied with relative paths patches the wrong tree while the lane's own `md5sum` (also relative)
+   cheerfully agrees with itself. Absolute paths for both the copy and the `measure.sh` invocation
+   (the latter matters because `measure.sh` starts with `cd "$(dirname "$0")/.."`).
+3. **A profiled (ND_PROFILE=ON) image can read *faster* than the accepted one**: the six added
+   sub-phase timers measured 5.1367 on two boards against the accepted 5.1167, i.e. +0.39 %, which
+   is a codegen side-effect of the insertions, not a speed claim. The ledger's "timers are
+   diagnostics only" is right, but its implicit "and therefore slower" is not - so never read a
+   profiled decode as a delta, in either direction.

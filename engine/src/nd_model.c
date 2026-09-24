@@ -1062,11 +1062,9 @@ static void engram_step(nd_model *m, uint32_t token)
 
                 if (ok) {
                     nd_tensor *tt = &m->engram[s].tables;
-                    ND_T0(trg);
                     nd_cq_dequant_row(&m->c, tt, nd_cact_data(&m->c, tt),
                                       table * slots + idx, m->row,
                                       e + (size_t)table * sub);
-                    ND_T1(trg, ND_P_ENG_ROW);
                 } else {
                     memset(e + (size_t)table * sub, 0, sizeof(float) * sub);
                 }
@@ -1902,7 +1900,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         float a_res  = fp16_get(m, &m->mhc_a_res, li);
         uint32_t lane_id = li % n;
 
-        { ND_T0(x1); rms_unit(m->lane, nl, m->nx); ND_T1(x1, ND_P_MHC_RMS); }
+        { ND_T0(x1); rms_unit(m->lane, nl, m->nx); ND_T1(x1, ND_P_MHCX); }
 
         /* The phi tensors stack all layers; this layer owns a row slice. */
         ND_T0(tphi);
@@ -1929,7 +1927,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         }
         for (i = 0; i < n * n; i++)
             hres[i] = a_res * hres[i] + fp16_get(m, &m->mhc_b_res, li * n * n + i);
-        ND_T1(x2, ND_P_MHC_BIAS); }
+        ND_T1(x2, ND_P_MHCX); }
         sinkhorn(hres, n);
 
         /* u = sum_j hpre[j] * lane[j] */
@@ -1937,7 +1935,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
             lanepre_ctx lp = { m->u, m->lane, hpre, n, dm };
             ND_T0(x3);
             nd_parallel_rows(lanepre_rows, &lp, dm / 128);
-            ND_T1(x3, ND_P_MHC_LANE);
+            ND_T1(x3, ND_P_MHCX);
         }
 
         /* y = block(u) - u */
@@ -1946,7 +1944,7 @@ const float *nd_model_step_hidden(nd_model *m, uint32_t token)
         { ND_T0(x5);
           for (i = 0; i < dm; i++)
               m->u[i] -= m->ublk[i];
-          ND_T1(x5, ND_P_MHC_SUB); }
+          ND_T1(x5, ND_P_MHCX); }
 
         /* lane' = hres @ lane + hpost * y */
         /* Loop order swapped: the n lanes are the short dimension, so the

@@ -2965,3 +2965,24 @@ site and de-split the ones below it:
    a like-for-like base.
 4. The general lever is the opposite of the campaign's habit: fewer, larger splits - or one job that
    carries build-then-rows so the toll is paid once per stage instead of once per projection.
+
+## 2026-09-25 stack state after #453 (for the next window; read with .auto/prompt.md's rules)
+
+Accepted pin is still **5.3033**. The live acceptance stack, each piece measured on device:
+`asmemo (+2.20 %) -> fusion-r5 (+0.44 % on top) -> nf16v (+0.642 %) -> spin handshake (+1.31 %)`
+= **5.560 decode, +4.84 % over the pin**, with 6/6 primary byte-exact (AUTO_GROUPS=primary),
+token_delta 0, internal_free 12,095, min_case 5.30, boot_bench 5.601.
+
+Files: `asmemo+fusion` = `.auto/exp78/nd_quant.c.bundle` (+`apply_bundle.py`); `nf16v` =
+`.auto/exp80/nd_quant.c.nf16v` + main's `lut2_tie728.S` (md5 4fb791fcbcb4); `spin` = main's
+`esp32/main/main.c` (kept in main since #453's commit). Lane form that works:
+`needle-board run N -- env AUTO_GROUPS=primary bash /root/board-pool/boardN/.auto/measure.sh`
+(worker's own script, absolute paths, `.auto/expect_engine_md5` written into the WORKER).
+
+Open in order: (1) board 3 cross-board reading of spin (expect b1daae10df90; differs from b2's
+tree only by the exactly-null hoist revert) then a 20-case session as the gate; (2) integrate into
+main + re-pin 5.56 in gen_lane.sh/lane_one.sh + `make capture`; (3) tune the two spin budgets
+(20,000 worker / 600 caller iterations are first guesses - more may be there, price idle power);
+(4) re-derive the split/no-split rule against the NEW toll before running `.auto/exp82/
+nd_model.c.desplit1` (zcsplit emit), since #451's toll is now partly removed by design;
+(5) the console-wedge defect still caps a boot at 16-17 requests and blocks the 20-case gate.

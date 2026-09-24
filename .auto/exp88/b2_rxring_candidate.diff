@@ -1,0 +1,50 @@
+diff --git a/esp32/main/main.c b/esp32/main/main.c
+index 665eb90..34bf182 100644
+--- a/esp32/main/main.c
++++ b/esp32/main/main.c
+@@ -39,6 +39,36 @@
+ #include "tools_schema.h"
+ #include "routes_schema.h"
+ 
++#include "driver/uart.h"
++#include "esp_vfs_dev.h"
++
++/* The default console VFS is POLLED: stdin reads a 128-byte software FIFO and
++ * getchar() sleeps 20 ms on EOF. At 115200 8N1 a 20 ms window admits ~230 wire
++ * bytes, so a request longer than the FIFO loses characters, the terminating
++ * newline never arrives, and the reader waits for the rest of a line that has
++ * already been dropped. The frozen suite's cases 1-16 are all <= 89 bytes; case
++ * 17 is the FIRST request over 128 bytes (232), and the note-only tools case is
++ * 135 - which is exactly the observed 16-17 requests-per-boot ceiling, and why
++ * no amount of reconnecting recovered it.
++ *
++ * Installing the UART driver replaces that FIFO with an ISR-fed ring, and
++ * esp_vfs_dev_uart_use_driver() routes stdin through it. Bytes are retained
++ * rather than dropped, so this is lossless rather than a bigger drop window. */
++static void console_rx_ring_enable(void)
++{
++    uart_config_t cfg = {
++        .baud_rate = 115200,
++        .data_bits = UART_DATA_8_BITS,
++        .parity    = UART_PARITY_DISABLE,
++        .stop_bits = UART_STOP_BITS_1,
++        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
++        .source_clk = UART_SCLK_DEFAULT,
++    };
++    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0));
++    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &cfg));
++    esp_vfs_dev_uart_use_driver(UART_NUM_0);
++}
++
+ /* The schema is generated from tools/demo-tools.json at build time; see
+  * main/CMakeLists.txt. Edit that JSON, not this file. */
+ static const char TOOLS_RAW[] = ND_TOOLS_JSON;
+@@ -427,6 +457,8 @@ static size_t model_length(const esp_partition_t *part)
+ 
+ void app_main(void)
+ {
++    console_rx_ring_enable();   /* before any console input is read */
++
+     const esp_partition_t     *part;
+     esp_partition_mmap_handle_t handle;
+     const void                *blob = NULL;

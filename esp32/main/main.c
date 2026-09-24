@@ -181,9 +181,7 @@ static const char *s_pname[ND_P_COUNT] = { "proj2bit", "attention", "hadamard", 
                     "engram", "logits4", "prep+lut", "confpool",
                                          "  of-mlp:kron", "whole block", "sinkhorn",
                                          "mhc-mix", "step-tail", "sample", "attn-stage",
-                                         "qkv taps", "head norms", "rope", "kv store",
-                                         "  of-mix:lane_rms", "  of-mix:bias", "  of-mix:lanew", "  of-mix:sub",
-                                         "  of-eng:slot_row" };
+                                         "qkv taps", "head norms", "rope", "kv store" };
 
 static void prof_dump(double ms, int n)
 {

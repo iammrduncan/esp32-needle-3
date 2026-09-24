@@ -1,5 +1,5 @@
 {
-  "recorded_at": "2026-09-24T09:41:21.367748+00:00",
+  "recorded_at": "2026-09-24T17:48:47.969278+00:00",
   "source": "real ESP32-S3; host orchestrates two on-device inference passes",
   "hashes": {
     "tools/model-routes.json": "419bf26a282edc8f7a234906da9cc5c0b9b976a135b3cef58e34cba981aa6d1f",
@@ -53,13 +53,13 @@
     "schema": "agent-watch-v2",
     "layers": 8,
     "model_bytes": 16155796,
-    "uptime_ms": 64482,
-    "free_internal_bytes": 12475,
-    "free_psram_bytes": 42116,
+    "uptime_ms": 86057,
+    "free_internal_bytes": 7391,
+    "free_psram_bytes": 39848,
     "sample_period_s": 30,
     "samples": 1,
-    "last_sample_uptime_ms": 61544,
-    "last_sample_free_internal_bytes": 13075,
+    "last_sample_uptime_ms": 58255,
+    "last_sample_free_internal_bytes": 8123,
     "timer_status": "idle",
     "timer_remaining_ms": 0,
     "timer_fired_count": 0
@@ -94,12 +94,12 @@
           ],
           "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
-          "prefill_ms": 2441.0,
-          "prefill_tps": 5.33,
-          "decode_ms": 2772.0,
-          "decode_tps": 5.05,
+          "prefill_ms": 2323.0,
+          "prefill_tps": 5.6,
+          "decode_ms": 2643.0,
+          "decode_tps": 5.3,
           "decode_tokens": 14,
-          "latency_ms": 6039.2,
+          "latency_ms": 5743.4,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -119,20 +119,20 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 7040.5
+        "latency_ms": 6744.6
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 71562,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
+        "uptime_ms": 92837,
+        "free_internal_bytes": 7391,
+        "free_psram_bytes": 21924,
         "sample_period_s": 30,
-        "samples": 1,
-        "last_sample_uptime_ms": 61544,
-        "last_sample_free_internal_bytes": 13075,
+        "samples": 2,
+        "last_sample_uptime_ms": 88255,
+        "last_sample_free_internal_bytes": 7779,
         "timer_status": "idle",
         "timer_remaining_ms": 0,
         "timer_fired_count": 0
@@ -167,12 +167,12 @@
           ],
           "raw": "<think></think>\n<tool_call>[{\"name\":\"write_code\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
-          "prefill_ms": 3768.0,
-          "prefill_tps": 5.31,
-          "decode_ms": 2201.0,
-          "decode_tps": 5.0,
+          "prefill_ms": 3585.0,
+          "prefill_tps": 5.58,
+          "decode_ms": 2099.0,
+          "decode_tps": 5.24,
           "decode_tokens": 11,
-          "latency_ms": 6794.7,
+          "latency_ms": 6465.7,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -192,20 +192,20 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 7795.9
+        "latency_ms": 7466.9
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 79412,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
+        "uptime_ms": 100341,
+        "free_internal_bytes": 7391,
+        "free_psram_bytes": 21924,
         "sample_period_s": 30,
-        "samples": 1,
-        "last_sample_uptime_ms": 61544,
-        "last_sample_free_internal_bytes": 13075,
+        "samples": 2,
+        "last_sample_uptime_ms": 88255,
+        "last_sample_free_internal_bytes": 7779,
         "timer_status": "idle",
         "timer_remaining_ms": 0,
         "timer_fired_count": 0
@@ -240,12 +240,12 @@
           ],
           "raw": "<think></think>\n<tool_call>[{\"name\":\"research_and_plan\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
-          "prefill_ms": 4337.0,
-          "prefill_tps": 5.3,
-          "decode_ms": 2592.0,
-          "decode_tps": 5.02,
+          "prefill_ms": 4126.0,
+          "prefill_tps": 5.57,
+          "decode_ms": 2472.0,
+          "decode_tps": 5.26,
           "decode_tokens": 13,
-          "latency_ms": 7759.6,
+          "latency_ms": 7385.0,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -265,20 +265,20 @@
         "inference_passes": 1,
         "error": null,
         "outcome": "external_selected",
-        "latency_ms": 8760.9
+        "latency_ms": 8386.2
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 88212,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
+        "uptime_ms": 108765,
+        "free_internal_bytes": 7391,
+        "free_psram_bytes": 21924,
         "sample_period_s": 30,
-        "samples": 1,
-        "last_sample_uptime_ms": 61544,
-        "last_sample_free_internal_bytes": 13075,
+        "samples": 2,
+        "last_sample_uptime_ms": 88255,
+        "last_sample_free_internal_bytes": 7779,
         "timer_status": "idle",
         "timer_remaining_ms": 0,
         "timer_fired_count": 0
@@ -318,12 +318,12 @@
           ],
           "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
-          "prefill_ms": 2820.0,
-          "prefill_tps": 5.32,
-          "decode_ms": 2000.0,
-          "decode_tps": 5.0,
+          "prefill_ms": 2682.0,
+          "prefill_tps": 5.59,
+          "decode_ms": 1907.0,
+          "decode_tps": 5.24,
           "decode_tokens": 10,
-          "latency_ms": 5643.0,
+          "latency_ms": 5368.0,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "route"
@@ -347,13 +347,13 @@
                 "schema": "agent-watch-v2",
                 "layers": 8,
                 "model_bytes": 16155796,
-                "uptime_ms": 101218,
-                "free_internal_bytes": 12027,
-                "free_psram_bytes": 24192,
+                "uptime_ms": 121214,
+                "free_internal_bytes": 6943,
+                "free_psram_bytes": 21924,
                 "sample_period_s": 30,
-                "samples": 2,
-                "last_sample_uptime_ms": 91544,
-                "last_sample_free_internal_bytes": 12855,
+                "samples": 3,
+                "last_sample_uptime_ms": 118255,
+                "last_sample_free_internal_bytes": 7779,
                 "timer_status": "idle",
                 "timer_remaining_ms": 0,
                 "timer_fired_count": 0
@@ -362,12 +362,12 @@
           ],
           "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
           "confidence": null,
-          "prefill_ms": 2662.0,
-          "prefill_tps": 5.64,
-          "decode_ms": 1893.0,
-          "decode_tps": 5.28,
+          "prefill_ms": 2524.0,
+          "prefill_tps": 5.94,
+          "decode_ms": 1800.0,
+          "decode_tps": 5.56,
           "decode_tokens": 10,
-          "latency_ms": 5369.0,
+          "latency_ms": 5087.4,
           "device": "esp32-s3",
           "reasoning": false,
           "phase": "tools"
@@ -388,464 +388,24 @@
         "inference_passes": 2,
         "error": null,
         "outcome": "local_executed",
-        "latency_ms": 13014.4
+        "latency_ms": 12456.9
       },
       "state_after": {
         "device": "esp32-s3",
         "schema": "agent-watch-v2",
         "layers": 8,
         "model_bytes": 16155796,
-        "uptime_ms": 101282,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
+        "uptime_ms": 121259,
+        "free_internal_bytes": 7391,
+        "free_psram_bytes": 21924,
         "sample_period_s": 30,
-        "samples": 2,
-        "last_sample_uptime_ms": 91544,
-        "last_sample_free_internal_bytes": 12855,
+        "samples": 3,
+        "last_sample_uptime_ms": 118255,
+        "last_sample_free_internal_bytes": 7779,
         "timer_status": "idle",
         "timer_remaining_ms": 0,
-        "timer_fired_count": 0
-      }
-    },
-    {
-      "id": "sampling",
-      "input": "Sample telemetry every 5 seconds",
-      "expected_model": "needle",
-      "expected_calls": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 5
-          }
-        }
-      ],
-      "route_match": true,
-      "tools_match": true,
-      "response": {
-        "input": "Sample telemetry every 5 seconds",
-        "success": true,
-        "routing": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_sampling_interval",
-              "arguments": {}
-            }
-          ],
-          "results": [
-            {
-              "name": "set_sampling_interval",
-              "success": true,
-              "outcome": "model_selected"
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 2631.0,
-          "prefill_tps": 5.32,
-          "decode_ms": 2961.0,
-          "decode_tps": 5.07,
-          "decode_tokens": 15,
-          "latency_ms": 6416.5,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "route"
-        },
-        "execution": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_sampling_interval",
-              "arguments": {
-                "seconds": 5
-              }
-            }
-          ],
-          "results": [
-            {
-              "name": "set_sampling_interval",
-              "success": true,
-              "state": {
-                "device": "esp32-s3",
-                "schema": "agent-watch-v2",
-                "layers": 8,
-                "model_bytes": 16155796,
-                "uptime_ms": 116335,
-                "free_internal_bytes": 11943,
-                "free_psram_bytes": 24192,
-                "sample_period_s": 5,
-                "samples": 2,
-                "last_sample_uptime_ms": 91544,
-                "last_sample_free_internal_bytes": 12855,
-                "timer_status": "idle",
-                "timer_remaining_ms": 0,
-                "timer_fired_count": 0
-              }
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 2483.0,
-          "prefill_tps": 5.64,
-          "decode_ms": 3349.0,
-          "decode_tps": 5.37,
-          "decode_tokens": 18,
-          "latency_ms": 6645.8,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "tools"
-        },
-        "selected_model": {
-          "key": "needle",
-          "id": "needle-local",
-          "label": "Needle 3 / on watch",
-          "policy": "Device status, telemetry settings and countdown timers",
-          "execution": "local",
-          "route_tools": [
-            "get_status",
-            "set_timer",
-            "set_sampling_interval"
-          ]
-        },
-        "remote_called": false,
-        "inference_passes": 2,
-        "error": null,
-        "outcome": "local_executed",
-        "latency_ms": 15064.6
-      },
-      "state_after": {
-        "device": "esp32-s3",
-        "schema": "agent-watch-v2",
-        "layers": 8,
-        "model_bytes": 16155796,
-        "uptime_ms": 116402,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
-        "sample_period_s": 5,
-        "samples": 2,
-        "last_sample_uptime_ms": 91544,
-        "last_sample_free_internal_bytes": 12855,
-        "timer_status": "idle",
-        "timer_remaining_ms": 0,
-        "timer_fired_count": 0
-      }
-    },
-    {
-      "id": "timer",
-      "input": "Start a 60 second timer",
-      "expected_model": "needle",
-      "expected_calls": [
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 60
-          }
-        }
-      ],
-      "route_match": true,
-      "tools_match": true,
-      "response": {
-        "input": "Start a 60 second timer",
-        "success": true,
-        "routing": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_timer",
-              "arguments": {}
-            }
-          ],
-          "results": [
-            {
-              "name": "set_timer",
-              "success": true,
-              "outcome": "model_selected"
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 2064.0,
-          "prefill_tps": 5.33,
-          "decode_ms": 1994.0,
-          "decode_tps": 5.02,
-          "decode_tokens": 10,
-          "latency_ms": 4878.2,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "route"
-        },
-        "execution": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_timer",
-              "arguments": {
-                "seconds": 60
-              }
-            }
-          ],
-          "results": [
-            {
-              "name": "set_timer",
-              "success": true,
-              "state": {
-                "device": "esp32-s3",
-                "schema": "agent-watch-v2",
-                "layers": 8,
-                "model_bytes": 16155796,
-                "uptime_ms": 128633,
-                "free_internal_bytes": 11967,
-                "free_psram_bytes": 24192,
-                "sample_period_s": 5,
-                "samples": 4,
-                "last_sample_uptime_ms": 126335,
-                "last_sample_free_internal_bytes": 12855,
-                "timer_status": "running",
-                "timer_remaining_ms": 59999,
-                "timer_fired_count": 0
-              }
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 1949.0,
-          "prefill_tps": 5.64,
-          "decode_ms": 2614.0,
-          "decode_tps": 5.36,
-          "decode_tokens": 14,
-          "latency_ms": 5359.8,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "tools"
-        },
-        "selected_model": {
-          "key": "needle",
-          "id": "needle-local",
-          "label": "Needle 3 / on watch",
-          "policy": "Device status, telemetry settings and countdown timers",
-          "execution": "local",
-          "route_tools": [
-            "get_status",
-            "set_timer",
-            "set_sampling_interval"
-          ]
-        },
-        "remote_called": false,
-        "inference_passes": 2,
-        "error": null,
-        "outcome": "local_executed",
-        "latency_ms": 12240.4
-      },
-      "state_after": {
-        "device": "esp32-s3",
-        "schema": "agent-watch-v2",
-        "layers": 8,
-        "model_bytes": 16155796,
-        "uptime_ms": 128682,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
-        "sample_period_s": 5,
-        "samples": 4,
-        "last_sample_uptime_ms": 126335,
-        "last_sample_free_internal_bytes": 12855,
-        "timer_status": "running",
-        "timer_remaining_ms": 59951,
-        "timer_fired_count": 0
-      }
-    },
-    {
-      "id": "batch",
-      "input": "Sample every 10 seconds and start a 30 second timer",
-      "expected_model": "needle",
-      "expected_calls": [
-        {
-          "name": "set_sampling_interval",
-          "arguments": {
-            "seconds": 10
-          }
-        },
-        {
-          "name": "set_timer",
-          "arguments": {
-            "seconds": 30
-          }
-        }
-      ],
-      "route_match": true,
-      "tools_match": true,
-      "response": {
-        "input": "Sample every 10 seconds and start a 30 second timer",
-        "success": true,
-        "routing": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_sampling_interval",
-              "arguments": {}
-            }
-          ],
-          "results": [
-            {
-              "name": "set_sampling_interval",
-              "success": true,
-              "outcome": "model_selected"
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 3199.0,
-          "prefill_tps": 5.31,
-          "decode_ms": 2968.0,
-          "decode_tps": 5.05,
-          "decode_tokens": 15,
-          "latency_ms": 6993.2,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "route"
-        },
-        "execution": {
-          "type": "call",
-          "success": true,
-          "error": null,
-          "function_calls": [
-            {
-              "name": "set_sampling_interval",
-              "arguments": {
-                "seconds": 10
-              }
-            },
-            {
-              "name": "set_timer",
-              "arguments": {
-                "seconds": 30
-              }
-            }
-          ],
-          "results": [
-            {
-              "name": "set_sampling_interval",
-              "success": true,
-              "state": {
-                "device": "esp32-s3",
-                "schema": "agent-watch-v2",
-                "layers": 8,
-                "model_bytes": 16155796,
-                "uptime_ms": 146887,
-                "free_internal_bytes": 11703,
-                "free_psram_bytes": 24192,
-                "sample_period_s": 10,
-                "samples": 8,
-                "last_sample_uptime_ms": 146335,
-                "last_sample_free_internal_bytes": 12855,
-                "timer_status": "running",
-                "timer_remaining_ms": 41745,
-                "timer_fired_count": 0
-              }
-            },
-            {
-              "name": "set_timer",
-              "success": true,
-              "state": {
-                "device": "esp32-s3",
-                "schema": "agent-watch-v2",
-                "layers": 8,
-                "model_bytes": 16155796,
-                "uptime_ms": 146887,
-                "free_internal_bytes": 10495,
-                "free_psram_bytes": 24192,
-                "sample_period_s": 10,
-                "samples": 8,
-                "last_sample_uptime_ms": 146335,
-                "last_sample_free_internal_bytes": 12855,
-                "timer_status": "running",
-                "timer_remaining_ms": 29999,
-                "timer_fired_count": 0
-              }
-            }
-          ],
-          "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":10}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":30}}]</tool_call>",
-          "confidence": null,
-          "prefill_ms": 3020.0,
-          "prefill_tps": 5.63,
-          "decode_ms": 5379.0,
-          "decode_tps": 5.39,
-          "decode_tokens": 29,
-          "latency_ms": 9253.7,
-          "device": "esp32-s3",
-          "reasoning": false,
-          "phase": "tools"
-        },
-        "selected_model": {
-          "key": "needle",
-          "id": "needle-local",
-          "label": "Needle 3 / on watch",
-          "policy": "Device status, telemetry settings and countdown timers",
-          "execution": "local",
-          "route_tools": [
-            "get_status",
-            "set_timer",
-            "set_sampling_interval"
-          ]
-        },
-        "remote_called": false,
-        "inference_passes": 2,
-        "error": null,
-        "outcome": "local_executed",
-        "latency_ms": 18249.3
-      },
-      "state_after": {
-        "device": "esp32-s3",
-        "schema": "agent-watch-v2",
-        "layers": 8,
-        "model_bytes": 16155796,
-        "uptime_ms": 146972,
-        "free_internal_bytes": 12475,
-        "free_psram_bytes": 24192,
-        "sample_period_s": 10,
-        "samples": 8,
-        "last_sample_uptime_ms": 146335,
-        "last_sample_free_internal_bytes": 12855,
-        "timer_status": "running",
-        "timer_remaining_ms": 29915,
         "timer_fired_count": 0
       }
     }
-  ],
-  "after": {
-    "device": "esp32-s3",
-    "schema": "agent-watch-v2",
-    "layers": 8,
-    "model_bytes": 16155796,
-    "uptime_ms": 177472,
-    "free_internal_bytes": 12475,
-    "free_psram_bytes": 24192,
-    "sample_period_s": 10,
-    "samples": 11,
-    "last_sample_uptime_ms": 176887,
-    "last_sample_free_internal_bytes": 12855,
-    "timer_status": "expired",
-    "timer_remaining_ms": 0,
-    "timer_fired_count": 1
-  },
-  "verification": {
-    "routes_match": true,
-    "tools_match": true,
-    "requests_succeeded": true,
-    "no_external_calls": true,
-    "local_has_two_passes": true,
-    "external_stops_at_selection": true,
-    "telemetry_progressed": true,
-    "sampling_interval_applied": true,
-    "timer_expired": true
-  }
+  ]
 }

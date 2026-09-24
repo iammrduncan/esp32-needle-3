@@ -2777,3 +2777,27 @@ counters rather than from arithmetic in a comment.
    is a codegen side-effect of the insertions, not a speed claim. The ledger's "timers are
    diagnostics only" is right, but its implicit "and therefore slower" is not - so never read a
    profiled decode as a delta, in either direction.
+
+## 2026-09-24 - opened by the expbc discovery (#424, +1.95 %, two boards)
+
+The mechanism is `-fno-builtin-memcpy` (an ESP-IDF default): every plain small `memcpy` in the
+engine is a ROM library call with argument setup and FP spills. Priced on the device: 77.15 ->
+50.22 cycles per fp16->fp32 conversion (screen, all 65,536 encodings bit-exact).
+
+- **f16bc (NEXT, biggest remaining prize):** the same one-line mechanism on `nd_f16`'s own
+  bitcast (engine/include/nd_quant.h:62) - the header says >100K calls/token, so 26.9 cyc/conv is
+  worth metres. Screen already proves bit-exactness over the whole encoding space; the candidate
+  must keep the `nd_f16_slow` fallback for e==0/e==31 untouched, and price a real consumer (the
+  group dequant), not just the converter.
+- **nd_f16_slow's bitcast** (engine/src/nd_quant.c:6) - same mechanism, cold path, cheap to ride
+  along with f16bc but attribute separately.
+- **memcpy census:** `objdump -dr` every engine object and list remaining call sites per token;
+  any per-token struct copy or 4/8-byte spliced bitcast is the same 27-cycle prize. (Board-2
+  objects: nd_model.c 114, nd_quant.c 16, nd_sample.c 10 after expbc.)
+- **condv16 retry (#416, -2.24 %) - CONDITIONAL on f16bc:** its rejection assumed conversion-at-use
+  costs ~77 cyc; after f16bc it is ~50. Only retry once f16bc is measured, and only against the
+  fp32 staged baseline on the same base. tap16 (#414) has the same shape but lost -1.89 % on a
+  purely integer reason, so leave it closed.
+- **NOT a retry:** #231 (exponent-field insertion instead of the bitcast) lost to the SLOW memcpy
+  baseline, so it loses harder against the fast one - named here so nobody re-opens it on the
+  theory that expbc changed its premise.

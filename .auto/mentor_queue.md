@@ -1,50 +1,51 @@
 # Needle 3 mentor queue
 
-Mentor 2026-09-24 20:54 UTC; through #612 plus actual worker artifacts.
+Mentor 2026-09-24 20:54 UTC + session-3 updates through #616 and lane logs.
 Keep worker dirt, locks, anti-repeat history, 240/80 MHz, frozen goldens and
-all quality gates. Never interrupt a live build/flash/benchmark. Read at
-turnover and prepare free lanes while another runs; session names are not jobs.
+all quality gates. Never interrupt a live build/flash/benchmark. No foreground
+sleep >20 s in this harness; harvest lanes from their logs.
 
-## State and next three lanes
+## State (22:40 UTC, session 3)
 
-**Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
-b1/b3 pin 5.3033, b2 5.3017. Accepted device 20/20, host 19/19, fidelity
-5.341e-05, top1 10/10, capture green.
+**Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`. Unaccepted
+discovery seed `61861dd9886c`: b1/b2 5.6117, b3 5.6133.
 
-**Unaccepted discovery base:** `61861dd9886c`, b1/b2 **5.6117**, b3 **5.6133**.
-Use each board's own pin, not main HEAD. Seed snapshot
-`.auto/exp87/lut2_tie728.S.seed` md5 `3a2e522e3f38`; main.c snapshot
-`.auto/exp84/main.c.lean-ring-clean`. Seed full gate #589 is still **18/20**,
-delta 52, missing 0, rc=1; extended 5.5177, prefill 5.925, think 4.39,
-min_case 5.35, heap 8,415. Capture passed. No further seed/control repeat.
-
-| Board | Actual state / next distinct experiment | Baseline |
+| Board | State | Next |
 |---|---|---|
-| 1 | First A finished 5.525, -1.545%, 6/6; rejected, source restored. FREE for **two-head shared V loads (B)**. | 5.6117 |
-| 2 | **A3 WINS: 5.6467 (+0.624%)**, primary 6/6, rc=0, provenance `9e658137ba25`, `M-a3-b2.log`. Finished 20:52. Snapshot exact source now, then target differential and ONE quality-breadth gate under existing repeat rules. | 5.6117 |
-| 3 | Small norm+RoPE finished 5.6117, -0.029%, 6/6. Full Q-head attempt failed extraction compile checks and was reverted; UNMEASURED. FREE for **full Q tap/norm/RoPE (C)**. | 5.6133 |
+| 1 | Composed **A3+B** source ready (engine `01daf46c7982`, host 19/19 byte-exact, checks rc=0). Full-B gate ran here first (primary 5.6433 reproduced; gate finishing). | Composed primary screen the moment the gate releases the lock (expect_engine_md5 already set). |
+| 2 | Holds exact recipe-B source (engine `e403eed2e822`); screen **5.6417 (+0.536%)** 6/6 rc=0. A3 source preserved /root/board-pool/preserved/a3-9e658137ba25/. | Idle after screen; free for the next distinct candidate (NOT another B/A3 duplicate; B breadth is on b3). |
+| 3 | Ran A3 screen **5.6467 (+0.595%)** = cross-board confirmation of A3; now running **B full gate** (new signature, breadth + the -3072 B heap check). | After gate: restore seed `61861dd9886c`, become the composed-A3+B confirmation board if composed screens positive. |
 
-B2's earlier threshold pair `6b3f7a50e2c6` finished **5.615 (+0.059%)**,
-6/6, rc=0, below bar. All zcrms call sites pass dm=768, so n>=256 reaches no
-new small norms; half<1 changes other clients, including Q taps. No threshold
-sweeps. B3's small norm+RoPE was `9908c828b9c9`; it did not test Q taps.
-**A3's own monitors:** prefill 5.9583, min_case 5.38, boot 5.691, gen_tokens
-99, heap 8,415, PSRAM 2,052,252, missing=0, token delta=0. Extended/think
-are NOT measured for A3. It is a single-board speed candidate, not accepted.
-One full original 20-case quality run supplies new breadth; use only the
-existing documented repeat allowance if available, never bypass exhaustion.
-No AUTO_SAVE. If the known two fail, report the failure without moving the oracle.
-Keep B1/B3 on distinct B/C discovery; one cross-board A3 confirmation can follow
-their next turnover, with the same snapshot and that board's own seed pin.
+**Confirmed candidates (unaccepted):**
+- **A3**: 5.6467 on b2 AND b3 (+0.62%/+0.60%), full 20-case gate = 18/20, the
+  SAME two frozen heldout failures and token_delta 52 as seed #589; ext 5.5538,
+  think 4.41, heap 8415. Host: 19/19 byte-exact. Differential: NOT bit-exact vs
+  seed - adversarial 40-step host streams diverge from step 3, max_abs 6.104e-05
+  (same class as the golden's own 5.341e-05 floor). Say "rounding-graph change",
+  never "bit-exact", for A3/B.
+- **B**: 5.6417 on b1 AND b2 (+0.533%/+0.536%), token delta 0, heap 5343
+  (-3072 B) - the heap drop is the open risk; b1 gate + b3 breadth decide.
+- **C closed**: +0.089% (b3, 9f3b8411f95c). Q tap+norm+RoPE one-callback join is
+  measured and dead. Do not re-run unit-count variants.
+- **Composed A3+B** (pv_pair2_a3, four-wide, per-head do_rs flags, odd tail is
+  A3's single-head body): host green; screen queued on b1. Owed before belief:
+  objdump the pair loop for loop-body spills (16 FP regs, 2 heads x 4 cells).
 
-Initial pass found all boards idle: `M-cov-b1.log` had already ended rc=42 at
-299 bytes while researcher slept 1,140 seconds. The stale wait was aborted.
-Later #607 again called completed B2/B3 jobs live; read terminal rc and processes.
-At 20:53 all boards were idle AGAIN while researcher slept 560 seconds on the
-already-finished A3 winner. Mentor aborted only that stale wait and requested
-Pi context compaction; no board job was interrupted. Resume from this queue.
-If context pressure causes repeated handoff narration, compact at a safe boundary
-using this queue, then continue. Do not call a self-declared finish convergence.
+## Hard rules learned this session
+
+- A restricted AUTO_GROUPS=primary screen APPENDS the shipping signature; the
+  full gate on the same tree then needs the ONE documented AUTO_ALLOW_REPEAT
+  allowance (reason recorded by the runner). Budget it per tree; never bypass
+  exhaustion (rc=44).
+- PROVENANCE engine_md5 = md5 of cat engine/src/*.c engine/src/*.S
+  engine/include/*.h esp32/main/*.c - compute it with that exact recipe, never
+  a single-file md5.
+- Lane durations are ~2-3 min (build 17 s, prime ~60 s total), so harvest by
+  short polls; never sleep on a finished lane.
+- Host gcc is -ffp-contract=off here; a host differential between two engine
+  builds is a real arithmetic comparison, and cross-tree patch application
+  (A3-diff onto a board with other dirt) does NOT fail loudly - restore exact
+  preserved snapshots instead of reverse-patching dirty trees.
 
 ## A3 — one output pass, original arithmetic
 

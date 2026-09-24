@@ -3126,3 +3126,22 @@ Lane map: B2 = corrected A; B1 = recipe B (two-head shared V in P.V); B3 = recip
   wv scalars, one dim loop loading vf0[i]/vf1[i] once for two disjoint oh arrays.
 Measured this window: A(v1) -1.55 % and wrong operand graph; paired split thresholds
 +0.059 % (family closed); norm+RoPE fused wake -0.029 %. Pin owner's 5.3033.
+
+## 2026-09-24 22:36 lane state + differential findings (session 3)
+- A3 (5.6467 b2 / 5.6467 b3, both +0.6%) cross-board CONFIRMED, full gate 18/20
+  = the same two frozen heldout cases as seed #589, token_delta 52 identical,
+  ext 5.5538 (+0.65% vs seed), think 4.41 (+0.46%). Candidate, not accepted.
+- B (two heads share each V load): 5.6417 b1 (+0.533%) / 5.6417 b2 (+0.536%),
+  6/6, delta 0. internal_free 5343 vs 8415 seed (-3072 B) - full gate running
+  (b1 gate, b3 breadth). Composed A3+B now building on b1 (engine 01daf46c7982).
+- A3 host differential (adversarial random-token streams, host gcc, contract=off):
+  A3 vs seed diverge from step 3, max_abs_delta 6.104e-05 over 40 steps, 81% of
+  logits differ by <=1 ulp-ish. So A3 is NOT bit-exact vs seed; it is a
+  rounding-graph change of the SAME magnitude class as the frozen golden's own
+  5.341e-05 fidelity floor. Host 19/19 byte-exact + device goldens are the real
+  gates. Do not describe A3/B as bit-exact in future entries.
+- HARNESS TRAP: a restricted AUTO_GROUPS=primary screen APPENDS the shipping
+  signature, so the follow-up full gate hits rc=42 and must use the one
+  documented AUTO_ALLOW_REPEAT allowance. Budget that allowance per tree.
+- objdump owed: composed loop (2 heads x 4 cells + 2 r + 4 wv) may spill; check
+  loop-body stack traffic on the live b1 image before believing the number.

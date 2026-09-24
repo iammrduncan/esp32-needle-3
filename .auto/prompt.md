@@ -13,7 +13,42 @@ queue. It does not cancel an experiment already building or running, and measure
 evidence may override it, but do not silently ignore it: record why a suggested
 direction was selected, deferred, transformed, or retired.
 
-## CURRENT STATE AND QUEUE -- 2026-09-23T12:35Z (runs #375-#382)
+## CURRENT STATE AND QUEUE -- 2026-09-24T12:20Z (runs #431-#436) -- AUTHORITATIVE
+
+**Accepted runtime: 5.3033 decode tok/s (+117.2 %)** = bundle5 (expbc + head4 + taphoist + wfr +
+sigpair + tap2col + tapfwd + condT), device 20/20 byte-exact, host 19/19, fidelity 5.341e-05,
+`make capture` green, internal_free 13,367. Pins: engine hash `0c1a6272cd01`; `nd_quant.c`
+`a485999e5c91`, `nd_model.c` `0d639424f636`, `nd_quant.h` `57a0fa8af900`.
+
+**Live/recent candidates.** `fusion-r5` (radix-4 stage fusion + cold-path noinline refund, composed as
+FIVE hunks onto the accepted `nd_quant.c` - NOT the old whole file, which predates head4 and would
+have silently reverted +0.35 %): **5.3383 = +0.660 %** on board 3, prefill 5.6217, min_case 5.10.
+NEXT: cross-board reading + its own 20-case gate, then it is the acceptance candidate. `tap96`
+(96-column Q tap partition so `half < 2` stops running dim=576 single-core): **5.2983 = -0.094 %**,
+retired. `asmemo` (per-tensor memo of `nd_lut2_asm_ok`'s verdict; the single-entry cache re-walked
+130,560 immutable norms/token across 44 blobs): prepared, guarded, running on board 2.
+
+**Two closures are now INVALID and must not be cited.** (1) The scheduler floor: `main.c:388` calls
+`kbench_run` then loops forever, so `worker_start` (which assigns `nd_parallel_rows`) never runs in a
+kbench image and kbench installs its own `split_rows` without assigning it - therefore #344's "23
+cycles, hot or parked" priced a serial indirect call, and its `pdMS_TO_TICKS(3)` is zero ticks at
+100 Hz. Every "small jobs are not worth splitting" conclusion built on it is void; the corrected
+two-core screen is a focused open measurement, and tap96's negative is consistent with a real wake
+cost. `gemv4_asm_usable` already has four entries - leave it separate. (2) "Sub-bar levers cannot be
+bundled further" - #431 measured a bundle delivering more than the sum of its parts.
+
+**Method facts worth keeping.** The host build compiles the engine with `ND_LUT2_ASM` off, so host
+goldens are blind to the 2-bit asm predicate; `.auto/exp77/test_asmemo.c` gets real coverage by
+`#include`ing the ACTUAL candidate `nd_quant.c` with `-DND_LUT2_ASM=1` and
+`-ffunction-sections -Wl,--gc-sections`, which drops the Xtensa walkers at link (16/16: accept, cached
+reject at exponent 0 AND 31, reset-then-reused-address recompute, geometry-key recompute, 96 distinct
+keys over 64 slots). A memo verdict is not speed-neutral: C/asm walkers agree only when the predicate
+is true, so a stale false positive changes arithmetic - hence the key (blob+rows+ngroup+g) and
+`nd_model_close()` clearing the table. Also: a `"wrong verdict only costs speed"` claim of mine was
+false and is retracted; and negative greps/probes must carry a positive control (this session's census
+printed zero everywhere because the build spells relocations `R_XTENSA_32`).
+
+## Superseded queue -- 2026-09-23T12:35Z (runs #375-#382)
 
 **Accepted runtime: 5.1050 decode tok/s (+109.1 %)** - run #379: two FWHT groups transformed in one
 stage walk (`nd_fwht2`) on top of run #378's within-stage butterfly unroll. Both came from ONE

@@ -4,19 +4,53 @@ Mentor 2026-09-24 23:06 UTC. Preserve worker dirt, locks, anti-repeat history,
 240/80 MHz, frozen complete goldens and every quality gate. Never interrupt a
 live build/flash/benchmark. No long foreground sleeps; harvest completed logs.
 
-## Session-3 lane status (23:08 UTC)
+## New result / turnover — 23:14 UTC
 
-- B1 transplant LIVE (M-b5b4w-b1): tree = git archive 2c79104 engine+esp32/main
-  (verified bundle5-only nd_model.c delta; engine `0bd9021c6136`), host 19/19,
-  b1 worker harness/fixtures kept, discovery files preserved under
-  /root/board-pool/preserved/b4w-transplant-b1/ (+ b1-worker-diff.patch).
-- B2 DOT8W full gate LIVE (M-d8gate-b2, engine 5065619b0867, fresh signature).
-- B3 QKTILE2 screen LIVE (M-t2-b3, engine 277cf888ef6b, B4W base, host 19/19;
-  two-column tile, four sums, per-sum two-product grouping and ascending
-  order kept; remainder uses the same path - qk_hd 48 divides by 2).
-- Correction to #627: DOT8W b3 heap was 4823, not the 5343 I carried.
-- Next substitutes queued per mentor: selective A-only/B-only rescale sweeps
-  on B4W (flags outside dimension loop), then odd-head-fallback outlining.
+**Selective rescale WON on B3: 5.7300 vs B4W 5.6983 = +0.556%,**
+6/6, delta 0, heap 5343, rc=0, engine `f708f8e782f7`, M-sr-b3.
+This is real removal of the unneeded partner sweep, with the P.V body unchanged.
+Preserve its exact source now. DOT8W independently won on QK (5.7283).
+
+- B3 next: ONE **DOT8W + selective-rescale** composition, on exact preserved
+  DOT8W with only the selective-rescale hunk. These are two separately measured
+  changes to different loops; test their interaction, never add percentages.
+  Compare to B3's best separate 5.7300 and enforce the usual host/device gates.
+- B2: finish its already-started odd-head outline, then **selective-rescale's
+  cross-board FULL gate** on plain B4W. That yields independent speed+breadth
+  for this winner while B3 screens the composition; no B3 duplicate full gate.
+- B1: existing transplant timeout/retry remains live. Let it exit naturally,
+  then the late-RX-only transplant specified below; do not interrupt its job.
+
+If outline.py is still blocked, its only template mismatch was the two-line
+comment before the fallback P.V loop ("Same per-element order as before...").
+Read/extract the actual block rather than retyping it. Do not run an unchanged
+B4W precheck/measurement after a generator assertion fails.
+
+## Live turnover — 23:12 UTC
+
+- B1 accepted+B4W (`0bd9021c6136`, M-b5b4w-b1): primary 5.3717 (+1.290%),
+  but log stopped after heldout_long_route (17 completed cases, last write
+  23:10:29). Bench/lock still LIVE with 200 s request timeout. Do not interrupt.
+  If it times out, the old no-ring console blocker has recurred; do not repeat
+  this image or spend the other boards verifying it.
+- B2 DOT8W full gate DONE: 5.7283 = B3 screen exactly; extended 5.6508,
+  think 4.46, heap 4823, **18/20, delta 52, rc=1**, same two frozen failures.
+  Harvest. **B2 now: outline odd-head fallback on B4W independently.** Do not
+  wait for B3's selective-rescale result, and do not compose those experiments yet.
+- B3 selective-rescale screen LIVE (M-sr-b3, `f708f8e782f7`), on B4W. Its
+  predecessor QKTILE2 finished 5.6983 (exactly B4W; no spill but more loop work).
+
+**B1 after a natural timeout only:** preserve its B4W-on-bundle5 candidate;
+make a NEW candidate adding only the existing lossless RX ring, installed LATE
+(after model/prefix allocations), retaining accepted quant/assembly/scheduler.
+The concrete old-console failure now blocks this performance candidate's gate,
+so a bounded transport fix is justified. Read the preserved implementation;
+`.auto/exp88/apply_rxring.py` installs too early, so do not copy its placement
+blindly. No changed prompts, pacing, resets between cases, output expectations,
+transport tracing framework, or broader stack reintroduction. Full gate this
+new image once. Main/worker prompts and device goldens were independently
+verified byte-equivalent to `2c79104`; freeze them. A ring-enabled 18/20 result
+would narrow the cause further, never authorize shipping or a golden rewrite.
 
 ## Decision and next three lanes
 
@@ -25,19 +59,11 @@ device 20/20, host 19/19. B4W/DOT8W are discovery candidates. The inherited
 18/20 frozen gate is a shipping blocker, not an owner-admission formality.
 Do not reserve a confirmation board or declare performance discovery finished.
 
-| Board | Next experiment | Reference and reason |
-|---|---|---|
-| 1 | **B4W-only attention on accepted bundle5**, host then full 20-case gate. | B1 bundle5 5.3033. Recover a potentially shippable gain without inheriting the unresolved stack. |
-| 2 | **DOT8W cross-board full gate**, after finished FINPAIR is harvested. | B2 B4W 5.6967. One justified confirmation of B3's +0.526% winner, including its own extended/think/breadth. |
-| 3 | **QK two-column operand tile on B4W**, after preserving/harvesting DOT8W. | B3 B4W 5.6983; also compare DOT8W 5.7283. Test the actual register spill found below. |
-
-FINPAIR and DOT8W were already DONE at 23:03: neither is a live job to wait on.
-FINPAIR = 5.6967, zero gain vs same-board B4W, heap 5087, restricted 6/6.
-DOT8W = **5.7283** on B3, restricted 6/6, delta 0, heap 4823, rc=0,
-engine `5065619b0867`; log `/root/board-pool/batches/M-dot8-b3.log`.
-FINPAIR-on-B4W is a valid incremental experiment: never rebuild on seed solely
-for a tidy measurement ladder. No noise control, third B4W breadth run, A3 board
-matrix, or simultaneous duplicate discovery screens.
+Current lane assignments and next actions are above. Compare a discovery
+candidate to its same-board parent: B4W B2=5.6967 / B3=5.6983; B1 accepted
+bundle5=5.3033. FINPAIR-on-B4W was a valid incremental experiment, so never
+rebuild it on seed for a tidy ladder. No noise control, third B4W breadth run,
+A3 board matrix, or simultaneous duplicate discovery screens.
 
 ## 1. Accepted-base transplant: exact source, bounded interpretation
 

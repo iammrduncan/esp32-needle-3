@@ -83,6 +83,12 @@ the original four-cell width plus the explicit rounding boundary.
 Guard Xtensa's `+f` constraint with ESP_PLATFORM (or an existing target guard);
 the host compiler has different FP constraints. A host-only volatile temporary
 can preserve that standalone multiply without affecting target code.
+**#610's "Xtensa rejected +f" is false.** Its diagnostics are in B2
+`.auto/runs/local/auto_chost.log`; `host/build/CMakeCache.txt` sets
+`CMAKE_C_COMPILER=/usr/bin/cc`. "implicitly popped registers" is the host x87
+constraint error predicted above. No Xtensa rejection was established. Use
+the target guard; do not burn time on explicit fixed registers or abandon A
+because the wrong compiler saw the asm. Preserve the failed patch as evidence.
 Do NOT disable contraction for the whole function or use a global memory
 clobber. Re-inspect operands and compare the actual integrated function before
 a corrected candidate's field screen. If scalar loop overhead loses, preserve

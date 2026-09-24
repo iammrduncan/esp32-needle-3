@@ -3106,3 +3106,23 @@ RESTRICTED`), proven by a deliberate tie1n mis-seed that printed 0/6 and exited 
 seed transformation over 4.18M fp32 values and fails if the difference set grows beyond
 {-0.0, signaling NaN} - and an add-from-zero is NOT a move for exactly those two classes,
 which is a rule for every future "seed from a zero register" idea.
+
+## Handoff at ~21:20Z (all boards clean on seed base 61861dd9886c, idle)
+
+Lane map: B2 = corrected A; B1 = recipe B (two-head shared V in P.V); B3 = recipe C.
+* Corrected A: keep the 4-cell width; the deferred rescale must round on its own cell,
+  then the two P.V products stay contracted as baseline. The `asm("":"+f"(y))` barrier
+  is REJECTED by xtensa-GCC in a statement-expression ("implicitly popped registers must
+  be grouped at top", "output constraint 0 must specify a single register"). Next attempt:
+  explicit-register `mul.s` helper (register float bound to fN, template `mul.s %0,%1,%2`)
+  under `#ifdef ESP_PLATFORM`, with a volatile-temporary fallback on host so the x86
+  golden still exercises the same arithmetic. objdump the fused branch and diff the
+  mul.s/madd.s operand order against the baseline branch BEFORE flashing.
+* Recipe C, simplified per mentor: one callback, tap_cols(&tap, h0*hd, h1*hd) once for the
+  head range, then zcrms_head_rows(h0,h1), then rope over [h0,h1). Two errors already
+  fixed in knowledge: declare the helper AFTER tap_ctx/tap_cols, and delete the leftover
+  `const tap_ctx *c = (const tap_ctx *)vc;` inside the extracted tap_cols.
+* Recipe B: untried. Pair HEADS (not positions), keep per-head QK/max/exp order and four
+  wv scalars, one dim loop loading vf0[i]/vf1[i] once for two disjoint oh arrays.
+Measured this window: A(v1) -1.55 % and wrong operand graph; paired split thresholds
++0.059 % (family closed); norm+RoPE fused wake -0.029 %. Pin owner's 5.3033.

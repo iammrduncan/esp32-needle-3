@@ -11,6 +11,7 @@
 #   AUTO_NOFLASH=1            re-measure the already-flashed app (noise checks)
 #   AUTO_MODEL=1              also rewrite the model partition
 set -euo pipefail
+export PYTHONUNBUFFERED=1  # #541: bench.py block-buffers to a redirected log, so lane logs advance in chunks and "log not growing" stops being ambiguous
 cd "$(dirname "$0")/.."
 AUTO_LOG_DIR=${AUTO_LOG_DIR:-$PWD/.auto/runs/local}
 mkdir -p "$AUTO_LOG_DIR"

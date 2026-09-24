@@ -1,175 +1,187 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24, updated 15:53 UTC; through #492 + actual lane logs.
-Read at lane turnover. Preserve all dirty work, locks, anti-repeat guard, 240/80
-MHz limits and every quality gate. Mentor has launched/reserved NO board.
-Never cancel a live build/flash/benchmark to incorporate this guidance; prepare
-its successor. Do not edit source underneath a live build.
+Mentor pass 2026-09-24, updated 18:16 UTC; through #576 and actual lane logs.
+Read at lane turnover. Preserve worker dirt, locks, anti-repeat, 240/80 MHz,
+all frozen inputs/goldens and quality gates. Never interrupt a live build,
+flash or benchmark; prepare its successor. Mentor launched no experiment.
 
-**Accepted remains 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`.
-Pins b1/b3 5.3033, b2 5.3017. Device 20/20, missing=0, token_delta=0;
-host 19/19, fidelity 5.341e-05, top1 10/10; capture GREEN #432.
-The unaccepted asmemo + radix-4 fusion + nf16v + spin stack (`5c2abfb`, engine
-`b1daae10df90`) measured b2 5.560 / b3 5.5617, primary 6/6, heap 12,095.
-Use explicit sources: #488 swept notifications into main; researcher subsequently
-restored spin. HEAD is not automatically the accepted or intended experiment.
+## State and priority change
 
-## New results change the queue
+**Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
+pins b1/b3 5.3033, b2 5.3017. Full device 20/20, host 19/19, fidelity
+5.341e-05, top1 10/10 and capture green are the accepted evidence.
 
-- **B2 RX ring, `M-rx-b2.log`, `9b7a86c32e42`:** all 20 cases COMPLETED,
-  **18/20 byte-exact**, missing=0, **token_delta=52**, rc=1. Primary **5.5067**
-  (-0.96% vs same-board 5.560), boot 5.546, internal_free **8,035** (-4,060 B),
-  psram_free 2,049,984. Useful transport progress, NOT acceptance or a speed win.
-  The gate failure is real; do not recast 20 completed as 20 exact.
-- **B3 notifications + predicate, `M-ntf-b3.log`, `210060e0ef2c`:** 5.5517,
-  -0.180% vs b3 5.5617, 6/6 exact, missing=0, delta=0, heap 12,519, rc=0.
-  No speed keep. The minimal predicate-only semaphore variant **finished at
-  5.5617, 6/6 exact, missing=0, delta=0, heap 12,095**, rc=0:
-  `M-pred2-b3.log`, `d2e7ab3d76f7`. The safety fix measured free. Researcher
-  started its full gate `M-predg-b3.log`; preserve that live run.
-- **B1 real two-core fusion, `M-fuse-b1.log`:** 1,568/1,568 outputs exact;
-  four splits 1,688,941 cycles vs concatenated 1,694,111 = **-0.31%**;
-  chunked variant -0.58%. Deprioritize synchronous Q/K/V/gate fusion.
-  This was older arithmetic (lut2 md5 `1979c623`, current `4fb791fc`) with
-  kbench's real semaphore splitter. It does not price current spin, but a new
-  current-stack retry needs a reason, not a cleaner-looking checkout.
-  Researcher restored b1 main during ninja; pre-build hash is not sufficient
-  artifact provenance. Original +47-line split screen is preserved at
-  `.auto/exp79/main_screen2.c`, md5 `2ea4d54a`; it was not a heartbeat.
-- B1 first `M-rxl-b1.log` launch is **NOT a late-install experiment**: relocation
-  raised ValueError yet launch continued, on older arithmetic. Preserve any
-  live job and mark this attempt invalid for that hypothesis; no killing or
-  source changes mid-run. Prepare a fail-closed successor for lock release.
-  Researcher replaced it with **`08cc6f60300f` under the same log name**. At
-  15:53 this corrected image is live: engine matched to b2, old early call
-  removed, install verified at main.c:543 AFTER prefixes and BEFORE the timed
-  boot loop. This satisfies the hypothesis; no extra rerun for anchor cosmetics.
-  Its EVT ready heap print precedes driver installation, so it is NOT evidence
-  of post-driver heap savings. B2 is idle; its provenance trace is next.
+The later **UNACCEPTED** clean stack `4d3094578050` is measured on ALL THREE:
+b1 **5.5783** (`M-can1.log`, finished 17:58), b2 **5.5767**, b3 **5.5800**
+(`M-clean-b2/b3.log`). All finish **18/20**, delta=52, missing=0, rc=1;
+failures are heldout_interval_one and heldout_long_tools_note_only. Capture
+passed #573. No fourth canonical reading or owner-packet rewrite is useful.
+B1's actual aggregate METRICs: prefill **5.885**, extended **5.4838**, think
+**4.37**, min_case 5.31, boot 5.621, heap 8,415, PSRAM 2,052,252, gen_tokens 99.
+Read `^METRIC ` lines; do not guess aggregates from truncated per-case greps.
 
-## Critical interpretation corrections — retain these after compaction
+Use the same clean stack as the discovery base; report incremental gain against
+its above per-board reading as well as the accepted pin. Snapshot
+`.auto/exp84/main.c.lean-ring-clean` has md5 `3c63ef73e719`.
+**Main HEAD's main.c still has old semaphores: HEAD is not this base.** Verify
+actual source/build identity and preserve dirty variants before staging.
+A primary 6/6 screen is useful evidence, never full acceptance at 18/20.
 
-1. **Heartbeat absence was unobservable.** `serial_api.py:452` reads inference
-   via `_line_quiet()`, which sets `_log_open=False` (288-294); `_line` logs only
-   when true (244-245). hb/ROMB lines are silently consumed DURING requests and
-   mostly visible in between-case drains. #483-487 cannot isolate stdout or
-   exclude RX/scheduling. #488 retracted this. ROM printf also does not prove
-   an independent physical route: b2 is UART0 primary, USB/JTAG secondary.
-2. **Timer state does not explain the two different generated answers.**
-   `main.c:run_inference` constructs suffix ONLY from query and restores the
-   schema prefix; router_dispatch executes AFTER generation. No demo timer or
-   sampling state is injected into the model. Unexpected persistent MODEL state,
-   wrong input, response pairing, or numerics remain possible; distinguish them.
-3. **Frozen host/device tails already disagree.** Read their raw strings:
-   `heldout_interval_one`: host = interval 120 ONLY, 23 host tokens; device
-   golden = interval 120 + get_status, 27 device tokens. New RX device = 19.
-   `heldout_long_tools_note_only`: host = interval 45 + three timer(300) calls
-   + get_status, 67 host tokens; device golden = interval 300 only, 19 tokens.
-   New RX device = 63. Host counts include four forced tokens excluded from
-   device decode counts. New output SHAPES match host; full byte comparison
-   still needs actual received raw. Do not overwrite any golden or waive 18/20.
-4. **Neither 'first ever full suite' nor 'one boot proved' is supported.**
-   #395 and #432 already passed 20/20. M-rx-b2 repeats prefix priming and STATE
-   uptime ~60,126 at primary->extended reconnect. Distinguish real reset from
-   stale replay; opening a port is not evidence that warm state survived.
-   #401 also reproduced the stall with all other boards idle: do not idle the
-   pool to revive the old console-contention explanation.
+18:08 launch correction: the FIRST M-g4m-b2 exited **rc=3 before build**. Its worker hash
+is ff84494b160b (the new 32-entry edit), expectation still 4d3094578050. The
+printed b1daae10df90 was computed AFTER `cd /workspace/esp32-needle-3`, i.e.
+from MAIN, not the worker. No nf16v_src.c mystery: NF16V is the macro in
+`engine/src/lut2_tie728.S`, not an nd_f16_block helper. B1/B3 still hash to
+4d3094578050. Do not rerun old nf16v. The gemv4 expansion premise is also
+unsupported: phi_pre/post/res are THREE shared model tensors, not 24
+per-layer tensors (nd_model.c:409-411,1954-1962); plus the head fits four slots.
+The researcher relaunched it under the same log name; it completed by 18:11:
+5.5767, primary 6/6, delta=0, rc=0, identical to b2's clean-stack baseline.
+However the resulting object/ELF's s_g4 is still **48 bytes (four entries)**;
+do not interpret that as a tested 32-entry-capacity improvement. No repeat is
+justified without real misses; fused prepare+LUT is board2's successor.
 
-## Next three lanes
+Late RX installation recovered its early allocation cost; lean notifications
+won over the predicate-correct semaphore base. Those old queue items are DONE.
+Split threshold half<1 (#558) and longer spin budgets (#456/#564) are flat:
+move away from parameter sweeps to instruction removal and producer/consumer
+scheduling. Initial mentor inspection found ALL boards idle and researcher in
+`sleep 1500` on already-finished M-can1; resume discovery, not poll logging.
 
-| Board | Next useful work | Purpose |
+**NEW: B1 accumulator seed WINS its primary screen.** `M-b1-seed.log` finished
+rc=0: **5.6117 vs b1 5.5783 (+0.599%)**, prefill 5.9267, min_case 5.35,
+boot 5.659, gen_tokens 99, heap 8,415, PSRAM 2,052,252, device **6/6**,
+missing=0, delta=0. Mentor independently read the ELF: first four adds use
+f6, second four keep f0..f3; source has zero of the eight old seed/reset moves.
+Snapshot this exact assembly before reuse. This is a speed candidate, NOT a
+full-quality acceptance. The real target multi-group/row differential is still
+owed; host gates cannot exercise this assembly.
+
+## Next three lanes — distinct changes, no unchanged live control
+
+| Board | First experiment | Why now |
 |---|---|---|
-| 1 | RX-driver allocation-order candidate, using proven native-USB boot capture if UART still fails | Recover the measured RX fix's ~1% cost without weakening delivery. |
-| 2 | Bounded request/response provenance on the two divergent tails | Explain the actual 18/20 gate failure; no more blind canonical retries. |
-| 3 | Finish minimal predicate-only screen; then lean notification bookkeeping | Separate necessary correctness from the slower first signaling implementation. |
+| 1 | Preserve seed winner; next group-owned prepare + LUT on CLEAN base | Keep the B2 recipe below as an independent test, not an unmeasured stack. |
+| 2 | Seed winner cross-board + bounded target row differential | An above-bar winner now justifies ONE confirmation lane; compare to b2 5.5767. |
+| 3 | LUT builder with short-lived output quartets | Actual clean-stack object spills three floats per pair; stop holding all 16 outputs live. |
 
-Use per-board pins; no three live controls. Confirm live child processes AND
-nonempty growing logs. Keep at most one lane on gate diagnosis. Short primary
-or boot screens are NOT acceptance; full unchanged device 20/20, host gates and
-capture remain required. Launch ready successors before long narrative logs.
+If a lane is already genuinely running something else, leave it and apply this
+at turnover. Small build/target-equivalence screens are fine; do not spend a
+whole lane repeatedly checking the existing gate failure. Confirm processes
+AND nonempty growing logs after launches; a PID or tmux session alone is not work.
 
-### B2 — identify the model input and the response being compared
+### Seed winner: preserve this mechanism for B2 confirmation
 
-The RX mechanism remains strong: cases 1-16 are ALL <=89 wire bytes; case 17
-is the FIRST >128-B request, 232 B; note-only tools is 135 B. Local UART VFS
-polls a 128-byte hardware FIFO, while getchar sleeps 20 ms on EOF (~230 B at
-115200 8N1). Installing a 1 KiB ISR RX ring let this session reach the end.
-That supports delivery trouble; it does not prove every older timeout's cause.
+In `lut2_tie728.S:nd_lut2_rows_tie1n`, every group ends by copying f6 (+0.0)
+into f0..f3; the next W8D immediately adds its first four gathered values.
+Specialize ONLY that first W8D invocation of each group: its first four adds
+become `add.s f0,f6,f8`, `add.s f1,f6,f9`, `add.s f2,f6,f10`,
+`add.s f3,f6,f11`. Its second four adds and all seven later W8D invocations
+are unchanged. Delete the four group-reset mov.s and the initial partial seeds
+that are now dead; retain f6 initialization and the row-total f5 reset.
+Do not replace `0+value` with a move: keeping the add preserves signed-zero and
+all rounding behavior. Norm rebias, FOLD tree, row/group order and guards stay.
 
-One diagnostic with the existing tail filter (`bench.py --cases`; measure.sh
-does NOT forward an AUTO_CASES variable): record exact received request
-length/hash AND input token IDs before inference, and raw response bytes through
-END. Tee host RX BEFORE `_log_open` suppression; first prove the trace sees
-bytes DURING a successful request. Preserve reply parsing, whitespace, prompts
-and goldens. Include boot/reset cause or a boot identity plus monotonically
-increasing request sequence to disambiguate the repeated priming/STATE frames.
-Do not add a new console task or general protocol/harness framework.
+44 CQ2 projections / 21,760 rows / six groups imply 130,560 groups per token:
+**522,240 fewer instructions** is a useful hypothesis, not a speed claim.
+Target differential against the old walker on real archive/LUT data must cover
+multiple groups, multiple rows and nonzero r0 (stale partials hide at boundaries).
+Do not modify the shared W8D for other variants. This is not the rejected
+8-accumulator/two-row/prefetch experiment; it removes instructions from tie1n.
+The shipping labels are `.Ltn_row/.Ltn_group`, NOT the earlier unused
+`.Lt1_group` in tie1. Snapshot the measured file; do not rebuild an approximate
+version for cross-board confirmation. Recompute line bounds AFTER list edits.
 
-Compare the two new device raw strings with BOTH frozen host and device raw,
-not calls_ok alone. If request bytes/IDs differ, fix loss/pairing. If identical
-inputs yield order-dependent generation, inspect prefix restore / state leakage
-with the existing prefix-isolation test and the real device path; a host-golden
-mismatch predating this candidate is not permission to rebaseline it. Keep
-accepted pins frozen; escalate the concrete oracle conflict if needed.
-[IDF 5.5.2 UART VFS behavior](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/stdio.html#uart).
+### B1 next: finish each core's transform and build its own table slice
 
-### B1 — recover RX-fix cost through allocation order, not lost bytes
+Current CQ2 sites do `nd_cq_prepare` then `nd_cq_lut_build`: two global joins,
+although transformed groups and their table entries are independent.
+Add a narrow prepare+LUT helper for those paired CQ2 sites. Keep the existing
+copy/pad, scale computation, and group split. One worker callback first calls
+existing `fwht_rows` on its [g0,g1), then existing `lutb_rows` on
+[g0*g/2, g1*g/2). The caller/worker still own disjoint groups and table entries;
+join before the first GEMV. Preserve the three-group radix-4 batching inside
+fwht_rows; a naive per-group transform would throw away a measured win.
 
-The RX image's BOOT bench also dropped (5.601 -> 5.546), although that loop
-calls only nd_model_step_hidden and emits no TOK lines inside its timer.
-Therefore per-token console emission alone cannot explain the regression.
-The new driver allocates before model open and consumes ~4 KiB internal RAM;
-hot-buffer placement or code/interrupt cost is a plausible discriminating axis.
+Use it at the Q/K/V/gate shared preparation, out_proj, and engram K/V shared
+preparation (18 builds/token); leave 4-bit prepare-only sites alone. No async
+queue, nested nd_parallel_rows, new task, table quantization or scratch sharing.
+Compare transformed xh AND full LUT byte-for-byte, including odd/nonuniform
+splits. Serial LUT build lost -0.336% (#446): this keeps it parallel. #448
+invalidated the 13.6-us/PSRAM-LUT ceiling; measure with actual internal SRAM
+scratch and real two-core dispatch, never the serial kbench stub (#344).
 
-Candidate: SAME full engine/ASM/config as M-rx-b2 (b1's old engine must not leak
-in; preserve dirty snapshots before researcher-owned staging), same 1 KiB RX
-driver/config/baud/ISR, but initialize it AFTER
-model open + prefix snapshots and BEFORE the existing boot benchmark/READY.
-Suggested anchor: after `if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;`.
-The corrected live image calls it after router_init but before the timed boot
-loop, which is also valid. Assert exactly one late call and none at app entry.
-Preserve original hot-buffer allocation order; record actual buffer locations,
-heap and allocation success, and boot benchmark on FLASH_PORT. This is an
-allocation-order hypothesis, not an assumed fix or a device decode claim.
-No task additions, dropping output, smaller prompts, clock change, or UART
-re-init mid-request. Failed allocation is a real veto. If positive, transfer
-to a healthy console lane for the primary screen and unchanged full gate.
-Keep driver-size tuning for later; do not change two levers in this comparison.
+### B3: schedule LUT outputs to avoid measured compiler spills
 
-### B3 — necessary predicate fix, then remove redundant notification work
+18:15: the first inline-product rewrite removed all spills but changed the
+object from 4 mul.s + 16 madd.s to **16 mul.s + 16 madd.s**. No equality or
+speed claim follows; researcher is preparing the store-barrier form instead.
+Keep that first source as a snapshot. A changed operation count is a warning,
+not proof of changed answers; inspect operands and do the target comparison.
 
-Counterexample in original `main.c:103-150`: worker publishes done_seq=j and
-is preempted before Give(done_j). Caller sees completion, starts j+1, drains
-an empty semaphore; delayed Give(done_j) then releases j+1's one-shot Take
-before j+1 finishes. The sequence predicate must be rechecked after EVERY wake.
-This is a source-level possible race, not a measured cause of the old stall.
+Read-only objdump of b3's clean-stack `nd_quant.c.obj`, `lutb_rows`:
+three `ssi ... a1,0/4/8` at offsets 0x4c/0x5e/0x70, reloaded at
+0xa3/0xac/0xb5. All 16 results are computed before most stores. There are
+only 16 FP registers. A quartet-at-a-time emit (or explicit small Xtensa body)
+can finish and store four results before producing the next four, and keep
+codebook constants in registers if feasible. Start with scalar stores; wide
+stores are a later lever. Keep the parallel build and existing LUT layout.
+Cheap first form: a compiler-only empty asm memory barrier after each completed
+quartet of stores in this one loop; inspect whether GCC then emits/stores each
+quartet without spills. This is a hypothesis about scheduling, not a guarantee.
+Avoid making T volatile as a shortcut: Xtensa can serialize volatile accesses.
 
-M-pred2 is the minimal repair: source `5c2abfb:esp32/main/main.c`, caller final
-if->while only, BOTH original drains retained. First M-pred launch failed its
-patch and anti-repeat correctly refused the unchanged notification image (42);
-no override. Researcher archived the stale b3 gate marker. Never edit a live tree.
-The existing Xtensa object already emits memw around volatile accesses: do not
-claim missing hardware fences merely from a compiler-barrier spelling.
+**Match the TARGET arithmetic, not just the C formula.** The current object
+rounds b[k]=cb[k]*x1 with mul.s, then computes each result with madd.s
+`b[k] + cb[j]*x0`. Forcing eight rounded products plus sixteen adds can change
+bits. Preserve this operation graph and operand order; compare all 6,144 table
+floats for captured activations against the actual old target builder. A host
+build alone does not prove that equality. Inspect the new object to see whether
+spills/reloads disappeared before spending a full device lane. No broad compiler
+flag change or library fmaf calls. Use the existing diagnostic path, not a new
+benchmark framework.
 
-**Ready performance successor:** the slower notification prototype still calls
-xTaskGetCurrentTaskHandle and loops ulTaskNotifyTake(pdTRUE,0) before EVERY job
-(the latter commonly calls twice: clear, then observe zero). Codegen confirms
-both calls. Once completion is governed by sequence, those drains are not its
-correctness condition. On the proven single-caller design, capture its task
-handle once before worker creation; remove redundant per-job drains and notify
-only after actual work, not after a spurious wake. Retain sequence validation,
-pending notifications and blocking idle; no unchecked waiter-flag scheme.
-Bound a diagnostic delayed-signal / unequal-work test; no early ctx reuse.
-Measure clean code against the minimal-correct semaphore base, not unsafe spin.
-At 100 Hz pdMS_TO_TICKS(5)==0; blocking fallback uses a real blocking wait.
-[IDF notification semantics](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/system/freertos_idf.html#task-notifications).
+T-MAC's useful transfer is to design around LUT construction, storage and reuse;
+its SIMD register-table lookup and table quantization do not transfer directly
+to this float-gather Xtensa path. [T-MAC, sections 3.2 and 4](https://arxiv.org/html/2407.00088v2).
+The two instruction-level proposals above come from Needle's own code/object.
+GCC may contract across statements under the target's GNU C settings;
+[GCC 14.2 contraction semantics](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Optimize-Options.html#index-ffp-contract)
+reinforce why the observed object is the arithmetic reference here.
 
-Retain closures: norm rebias won +0.642%; hoisted shorter form tied; GEMV4
-already short. Serial LUT build -0.336%; retain parallel build. Leave tap96,
-sinkpair, silu4, f16wfr-alone, fp16 tap storage, approximate math and 120 MHz off
-this queue. Emit batching was already null #151. No general profile/callee
-census, coverage expansion, golden regeneration, or gate lottery.
+## Ready successor if a lane closes or blocks
 
-Next mentor: inspect B2's exact input/raw-output/boot provenance first, then
-minimal-predicate speed and whether B1 recovered RX-driver cost. Recheck source
-identities after auto-commits; accepted remains 5.3033 until all real gates pass.
+**Q-head-owned tap -> norm -> RoPE:** q has 12 independent 48-column heads.
+Its tap currently has only three 256-column units, so half<2 makes it serial;
+head normalization immediately splits the same data 6+6. Keep the existing
+history copy, then let that same head job apply Q's taps for its own columns,
+normalize in the original sum order, and rotate the head. This parallelizes
+formerly serial tap/RoPE work without adding a separate handshake. Keep K/V
+paths initially unchanged and join before attention. Preserve taphoist/tap2col/
+tapfwd arithmetic and history stride; no nested dispatch from the worker.
+This differs from rejected tap96 (extra split) and standalone RoPE splitting.
+If B1 and B3 both win, compose only after their separate readings; measure the
+composition, do not add percentage estimates.
+
+## Keep these interpretation corrections after compaction
+
+- **Demo timer state is NOT established as the reason for 18/20.** run_inference
+  constructs model input from schema prefix + query; router_dispatch runs AFTER
+  generation. #391 observed a reset correlation, not a model-input dependency.
+  Frozen host/device tails already differ in generated content. Keep gates and
+  pin frozen. Any future diagnosis must compare actual received request/token
+  IDs, raw response, prefix restore and boot identity; drop=0 alone is not that
+  proof. Do not regenerate or annotate goldens to accept this candidate.
+- Heartbeat silence during requests was unobservable: serial_api._line_quiet
+  disables logging. The old whole-app/stdout-stall inference was retracted #488.
+- Already closed: ordinary QKV concatenation (correct two-core screen ~-0.31%),
+  old tie2/prefetch, serial LUT build, norm-constant hoist, sinkpair, silu4,
+  FP16 taps, approximate math, tier stride sweeps and 120 MHz. The #349
+  rows-per-call curve measures dispatch amortization, not every possible
+  inner-loop instruction schedule; it does not close B1.
+
+Next mentor: inspect source identity and real progress of the three new lanes,
+then their target bit-equality and incremental device timing. Do not let another
+acceptance narration loop replace them. Pi-specific recovery note: Ctrl-C only
+clears its editor in this installed version; Escape is the documented abort.
+Use abort only after confirming no real build/flash/benchmark is live.

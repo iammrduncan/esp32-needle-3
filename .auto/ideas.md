@@ -2832,3 +2832,35 @@ the lane died at compile time with `conflicting types for 'nd_f32_from_bits'` (u
 top of the accepted base and re-pinned, not patched into a measured tree. Expected value is
 +0.06..0.19 %, i.e. sub-bar on its own; it only matters if a future bundle needs it, and bundle5
 already cleared the bar without it.
+
+## Post-acceptance sweep (#431 base, 5.3033): what the library-call surface still owes - nothing
+
+`nm -u` on the ACCEPTED engine objects, taken because expbc came from exactly this census:
+`nd_model.c.obj` externally references `__divsf3 cosf expf logf lrintf memcpy memmove memset powf
+sinf sqrtf` plus the engine's own functions. Each one was traced to its call site rather than
+assumed:
+
+* `sinf`/`cosf` - RoPE, 12 pairs, computed once per token for the whole model (the comment at the
+  site already says "shared by every layer"), so 24 libm calls per decode token, not per layer.
+* `powf` - open-time rope_inv build only.
+* `logf` - Sinkhorn's 1,280 log-sum-exp calls per token; not substitutable bit-exactly, and the
+  exact-`logf(1)` skip was already priced at +0.032 % (#413).
+* `sqrtf`/`__divsf3` - RMSNorm inverses and the sigmoid/gate divisions; #338 measured the ROM
+  divider at 7.95 cycles and #398 recorded that inline TIE reciprocal is refused, so this is at the
+  floor, not at the call.
+* `memcpy`/`memmove` - 118 sites in `nd_model.c.obj`, all bulk after expbc (#424 removed the 34
+  bitcast expansions): tap-history copies, row buffers, and struct moves whose size justifies the
+  call.
+
+Conclusion: the per-token library-call surface, which produced two shipped wins (#424 expbc, #431
+wfr), is now measured as exhausted. The next lever has to be loop structure or delivery again, not
+a call being removed.
+
+## Sinkhorn exp pairing: closed by measurement, not by the argument that predicted it
+
+`sinkpair` with the bounds bug fixed measured **-0.062 %** (5.3000 vs 5.3033) with host 19/19
+byte-exact and identical fidelity - a clean speed verdict. It was expected to be sub-bar-positive;
+instead it is the third independent confirmation of #292's rule (after #292 itself and #231): adding
+a branch around `nd_expf_pair` costs more than the Horner latency it recovers, even in a loop as
+small as a 4x4 Sinkhorn sweep. The exp-pairing family is finished - attention softmax, attention
+gate, SiLU and the conditioning softmax are paired or too small to matter.

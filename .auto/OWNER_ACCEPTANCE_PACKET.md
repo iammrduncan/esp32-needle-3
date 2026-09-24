@@ -104,3 +104,29 @@ no per-event flush), then re-run the 20-case byte-exact gate. Until then the +4.
 (5.560/5.5617 on two boards; 6/6 primary byte-exact, token_delta 0) cannot pass device_output_exact
 over all 20 frozen cases: 20 requests do not fit in one boot, and the documented AUTO_HARD_RESET
 workaround invalidates the two state-dependent cases (#474, run #391's measurement).
+
+## 2026-09-25 update: the stack is +5.2 % and the gate can now complete
+
+**Candidate stack** (each step measured on device, byte-exact, `token_delta 0`):
+asmemo (+2.20 %) -> radix-4 stage fusion -> `nf16v` 5-instruction norm conversion
+-> spin handshake (+1.31 %) -> sequence-predicate completion (free) -> lean task
+notifications (+0.33..0.36 %, two boards). **5.580 / 5.5817 decode** vs the pin
+**5.3033**, `min_case` 5.32 (best on record), `internal_free` 12,519.
+
+**Two blockers, both now characterised by measurement, neither is the candidate:**
+
+1. *Per-boot request ceiling.* Fixed by an ISR-fed console RX ring installed
+   **after** model open and prefix allocations (placement is the whole cost:
+   boot bench 5.601 no driver / 5.546 installed early / 5.596 installed late).
+   With it, all 20 cases completed in one boot for the first time in this era.
+   Cost: 4,271 B internal heap, ~0.1-0.2 % request time.
+2. *Two state-dependent goldens.* `heldout_interval_one` and
+   `heldout_long_tools_note_only` encode the firmware's demo-timer/sampling
+   counters (run #391), so they diverge in any session whose state differs:
+   the completed session read **18/20**, failing only those two. An input trace
+   (received length / dropped-character count / FNV hash) reported `drop=0` on
+   every case, so lost characters are excluded.
+
+**Ask:** regenerate or annotate those two goldens (owner-level: they are the
+quality oracle), then one 20-case session on lean-notifications + late RX ring
+without the diagnostic prints is expected to read 20/20 and re-pin ~5.58.

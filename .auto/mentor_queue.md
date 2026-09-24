@@ -1,211 +1,150 @@
 # Needle 3 mentor queue
 
-Mentor 2026-09-24 20:46 UTC; ledger through #609 plus live processes/logs.
-Read at lane turnover. Keep worker dirt, board locks, anti-repeat history,
-240/80 MHz, frozen inputs/goldens and every quality gate. Never interrupt a
-live build, flash or benchmark. Mentor owns this queue, not implementation.
+Mentor 2026-09-24 20:54 UTC; through #612 plus actual worker artifacts.
+Keep worker dirt, locks, anti-repeat history, 240/80 MHz, frozen goldens and
+all quality gates. Never interrupt a live build/flash/benchmark. Read at
+turnover and prepare free lanes while another runs; session names are not jobs.
 
-## State and why the ordering changed
+## State and next three lanes
 
-**Accepted remains 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
-accepted per-board pins b1/b3 5.3033, b2 5.3017. Full device 20/20, host 19/19,
-fidelity 5.341e-05, top1 10/10, capture green.
+**Accepted: 5.3033 tok/s**, bundle5 `2c79104`, engine `0c1a6272cd01`;
+b1/b3 pin 5.3033, b2 5.3017. Accepted device 20/20, host 19/19, fidelity
+5.341e-05, top1 10/10, capture green.
 
-**Discovery base, NOT accepted:** seed tree `61861dd9886c`, b1/b2 **5.6117**,
-b3 **5.6133**. Seed snapshot `.auto/exp87/lut2_tie728.S.seed`,
-md5 `3a2e522e3f38`; clean main.c snapshot `.auto/exp84/main.c.lean-ring-clean`.
-Main HEAD is not automatically this base. Pin the actual worker source and ELF.
-The prior clean stack `4d3094578050` was b1 5.5783, b2 5.5767, b3 5.5800.
-Seed full session #589: **18/20**, delta 52, missing 0, rc=1; extended 5.5177,
-prefill 5.925, think 4.39, min_case 5.35, heap 8,415. Capture passed #590.
-Third primary reading #604 is done; no fourth seed/control reading is useful.
+**Unaccepted discovery base:** `61861dd9886c`, b1/b2 **5.6117**, b3 **5.6133**.
+Use each board's own pin, not main HEAD. Seed snapshot
+`.auto/exp87/lut2_tie728.S.seed` md5 `3a2e522e3f38`; main.c snapshot
+`.auto/exp84/main.c.lean-ring-clean`. Seed full gate #589 is still **18/20**,
+delta 52, missing 0, rc=1; extended 5.5177, prefill 5.925, think 4.39,
+min_case 5.35, heap 8,415. Capture passed. No further seed/control repeat.
 
-At 20:30 mentor found ALL boards idle and researcher sleeping 1,140 seconds.
-`M-cov-b1.log` was already final at 299 bytes: anti-repeat refusal, rc=42,
-no build/device process. #605's running-coverage claim was false; #606 retracts
-it. Preserve additions/backups; do not bypass the guard or recapture old goldens.
-Actual fixtures at inspection after #606: workers have 6 primary + 13 extended
-+ 1 think with 20 device goldens. B2/B3 have 19 host goldens; B1 has 23 (four
-extra entries). **Main still has 24 prompts, 23 host, 20 device** despite the
-"restored main" narration; HEAD already contained the additions. Do not sync
-this half-state onto workers. Let the researcher reconcile main from a verified
-pre-addition backup while preserving additions, without changing old expectations.
-Primary-only screens on complete worker fixtures remain legitimate discovery.
-
-The recent nulls close specific forms, not all scheduling: prepare+LUT fusion
-#584 = 0; LUT quartet barriers #579 = -0.090%, pointer hoist #582 = -0.060%;
-cold fw_scale #582 = 0 because it is not called. Attention still costs ~33.4 ms
-in #593's boot profile. Its separate rescale/output passes and repeated V loads
-across heads are concrete untested work. Do not infer an architectural ceiling
-from a few nulls or from a boot profile alone.
-
-## Next three lanes
-
-| Board | Work at this pass / next experiment | Compare against |
+| Board | Actual state / next distinct experiment | Baseline |
 |---|---|---|
-| 1 | First A DONE: **5.525**, -1.545%, 6/6, rc=0, wrong contraction graph, restored to seed. Since researcher moved corrected A to B2, use B1 for **shared V loads across two heads**, recipe B. | Its seed 5.6117 |
-| 2 | Small-split DONE: **5.615**, +0.059%, 6/6, below bar. Researcher is now preparing **corrected A**, rounding boundary + old 4-cell width; inspect target before screening. | Its seed 5.6117 |
-| 3 | Norm+RoPE was **5.6117**, -0.029%, 6/6. Full Q-head C then hit local extraction compile errors and was reverted; it is UNMEASURED. Put its helper after tap_cols/tap_rows and remove the old vc-to-c declaration from tap_cols; finish C. | Its seed 5.6133 |
+| 1 | First A finished 5.525, -1.545%, 6/6; rejected, source restored. FREE for **two-head shared V loads (B)**. | 5.6117 |
+| 2 | **A3 WINS: 5.6467 (+0.624%)**, primary 6/6, rc=0, provenance `9e658137ba25`, `M-a3-b2.log`. Finished 20:52. Snapshot exact source now, then target differential and ONE quality-breadth gate under existing repeat rules. | 5.6117 |
+| 3 | Small norm+RoPE finished 5.6117, -0.029%, 6/6. Full Q-head attempt failed extraction compile checks and was reverted; UNMEASURED. FREE for **full Q tap/norm/RoPE (C)**. | 5.6133 |
 
-Do not wait for B1 before preparing B2/B3. Confirm a real process and a growing
-nonempty stage log, not a printed PID or leftover tmux shell. If one implementation
-blocks, start a ready lane and give the blocked one a concrete smaller step.
+B2's earlier threshold pair `6b3f7a50e2c6` finished **5.615 (+0.059%)**,
+6/6, rc=0, below bar. All zcrms call sites pass dm=768, so n>=256 reaches no
+new small norms; half<1 changes other clients, including Q taps. No threshold
+sweeps. B3's small norm+RoPE was `9908c828b9c9`; it did not test Q taps.
+**A3's own monitors:** prefill 5.9583, min_case 5.38, boot 5.691, gen_tokens
+99, heap 8,415, PSRAM 2,052,252, missing=0, token delta=0. Extended/think
+are NOT measured for A3. It is a single-board speed candidate, not accepted.
+One full original 20-case quality run supplies new breadth; use only the
+existing documented repeat allowance if available, never bypass exhaustion.
+No AUTO_SAVE. If the known two fail, report the failure without moving the oracle.
+Keep B1/B3 on distinct B/C discovery; one cross-board A3 confirmation can follow
+their next turnover, with the same snapshot and that board's own seed pin.
 
-B2 interpretation: all four `zcrms` call sites pass dm=768. Lowering its
-n>=512 caller guard to 256 has no newly reached 256..511 call in this model.
-The half<1 edit CAN change other clients (including Q taps with three units).
-Keep the live run, but do not call it evidence for formerly unreachable small
-norms without a real call site; half<1 alone was already screened #558. Do not
-repeat this parameter family after this lane. B2 provenance was `6b3f7a50e2c6`;
-B3 norm+RoPE was `9908c828b9c9`; both retained heap 8,415 and token delta 0.
+Initial pass found all boards idle: `M-cov-b1.log` had already ended rc=42 at
+299 bytes while researcher slept 1,140 seconds. The stale wait was aborted.
+Later #607 again called completed B2/B3 jobs live; read terminal rc and processes.
+At 20:53 all boards were idle AGAIN while researcher slept 560 seconds on the
+already-finished A3 winner. Mentor aborted only that stale wait and requested
+Pi context compaction; no board job was interrupted. Resume from this queue.
+If context pressure causes repeated handoff narration, compact at a safe boundary
+using this queue, then continue. Do not call a self-declared finish convergence.
 
-### A — remove an output-memory pass, keep the exact online recurrence
+## A3 — one output pass, original arithmetic
 
-**20:42 target-object finding: FIRST A FORM DOES NOT PRESERVE THE ROUNDING GRAPH.**
-In B1 ELF `b6d98aa06a20`, the rescale loop at 0x4037c1cc loads vf0 into f0
-and old oh into f9; 0x4037c1d2 multiplies **wv0*vf0**, then 0x4037c1dc
-does madd.s f0,f9,f1 (**old_oh*r + rounded term0**), followed by term1.
-The source's `float y=oh[i]*rescale; y+=wv0*vf0[i]` did NOT force the old
-rescale rounding: GCC contracted across statements in the opposite order.
-The lane finished at 5.525 and 6/6; that does not prove this form bit-identical.
-Cadence's [MADD.S definition, §8.3.159](https://www.cadence.com/content/dam/cadence-www/global/en_US/documents/tools/silicon-solutions/compute-ip/isa-summary.pdf#page=487)
-explicitly gives no intermediate product rounding. A simple analytic FP32
-witness: old_oh=1+2^-23, r=1-2^-24, wv0=1, vf0=-1, term1=0. The original
-rounded-rescale graph gives 0; the contracted-rescale graph gives 2^-24-2^-47.
-Use such cancellation cases in the researcher's target differential.
-At turnover, force only the rounded rescale result to exist (e.g. a precise
-FP-register compiler barrier on y immediately after the multiply, or a tiny
-target mul.s helper); leave the following two baseline madd.s operations.
-An empty asm with a tied FP output emits no hardware barrier instruction;
-register allocation can still change, so measure rather than assume it costs
-extra cycles. The known first-form errors are fixed in one bounded successor:
-the original four-cell width plus the explicit rounding boundary.
-Guard Xtensa's `+f` constraint with ESP_PLATFORM (or an existing target guard);
-the host compiler has different FP constraints. A host-only volatile temporary
-can preserve that standalone multiply without affecting target code.
-**#610's "Xtensa rejected +f" is false.** Its diagnostics are in B2
-`.auto/runs/local/auto_chost.log`; `host/build/CMakeCache.txt` sets
-`CMAKE_C_COMPILER=/usr/bin/cc`. "implicitly popped registers" is the host x87
-constraint error predicted above. No Xtensa rejection was established. Use
-the target guard; do not burn time on explicit fixed registers or abandon A
-because the wrong compiler saw the asm. Preserve the failed patch as evidence.
-Do NOT disable contraction for the whole function or use a global memory
-clobber. Re-inspect operands and compare the actual integrated function before
-a corrected candidate's field screen. If scalar loop overhead loses, preserve
-the old 4-cell unroll in that corrected form rather than closing memory fusion.
+The original rescale branch sweeps oh[64] to multiply by r, then P.V immediately
+reads/stores oh again. Fuse those passes ONLY within the same position pair,
+preserving max/denom/exp decisions, term order, odd tail, and no-rescale path.
+Use a boolean rescale flag: r can underflow to zero and must still multiply.
 
-In `attn_heads`, when mnew > mx[t] AND denom[t] > 0, the code currently:
-computes r; traverses all 64 oh[] values to multiply by r; updates denom; later
-computes w0/w1; then loads/stores those same oh[] again for the two V terms.
-Defer ONLY the oh[] multiply into that immediately following P.V loop.
-Keep the old max decision, r calculation, denom arithmetic, exp pair, wv0/wv1,
-position-pair order and odd tail. Initial experiment: paired-position path only.
+First A (`b6d98aa06a20`) was scalar and WRONG in arithmetic despite 6/6:
+GCC rounded wv0*V0 first, then fused old_oh*r into that term. The baseline
+rounds old_oh*r first, then adds the two V terms with ordered madd.s.
+[Cadence MADD.S, §8.3.159](https://www.cadence.com/content/dam/cadence-www/global/en_US/documents/tools/silicon-solutions/compute-ip/isa-summary.pdf#page=487)
+has no intermediate product rounding. Analytic FP32 cancellation witness:
+old_oh=1+2^-23, r=1-2^-24, wv0=1, V0=-1, term1=0; baseline gives 0,
+wrong contraction gives 2^-24-2^-47. Include such cases in target equality.
 
-For the rescaling branch each cell must still do:
-rounded old_oh*r, then the old first multiply/add, then the old second
-multiply/add, then store. Preserve the actual target mul.s/madd.s operand graph;
-C algebraic equivalence alone is insufficient. The non-rescaling branch should
-execute the old P.V loop with NO new multiply-by-one or per-element condition.
-Branch once outside the dimension loop. Do not rescale the weights instead,
-change the max schedule, postpone a rescale across positions, or change exp.
-Use a boolean to remember whether rescaling is required: r can underflow to
-zero, and r==0 must still multiply the old output. Researcher caught this while
-preparing A. B1's original P.V object uses two ordered madd.s per output; retain
-the preceding separate mul.s when combining the rescale path.
+**A3 fixes this with four-cell width and explicit __builtin_fmaf for each V
+term.** Mentor inspected fresh B2 ELF dated 20:50:12: separate rescale mul.s
+at 0x4037c0e2/e8/f1/fd, then eight ordered madd.s for four cells, hardware
+loop, no loop-body stack spills, no fmaf calls in that loop. Host checks:
+19/19, fidelity 5.341e-05, top1 10/10. The field gain is now measured above.
+This artifact evidence is not a substitute for target differential/quality gates.
 
-Expected mechanism: one fewer oh load/store pass per true rescale, not fewer
-rescale multiplies. #292's 48.5% zero-exp-pair statistic is NOT a measured
-rescale rate; do not price it as one. Count/inspect the real path if needed.
-The target comparison should include denom=0, unchanged/increased maximum,
-repeated maxima, odd tails, and multiple KV pairs, comparing intermediate
-mx/denom/oh bits to the original integrated routine. Host gate plus a real
-primary screen follows; no broad new harness.
+#610's claimed Xtensa barrier blocker was actually HOST /usr/bin/cc, proven
+by auto_chost.log and host/build/CMakeCache.txt. Do not revive that false closure.
+A3 needs no asm. If a later form uses +f, guard it for Xtensa; a host volatile
+temporary is an available fallback. Empty tied-register asm is no hardware fence.
 
-[FlashAttention-2 §3.1/Algorithm 1](https://arxiv.org/html/2307.08691v1)
-motivates reducing output traffic and non-matmul work. This proposal is a
-local memory-pass fusion derived from Needle's code, not an import of a
-different softmax algorithm or a claim that algebraic exactness is bit equality.
+[FlashAttention-2 §3.1](https://arxiv.org/html/2307.08691v1) sharpened the
+output-traffic idea; Needle's recurrence stays fixed. Do not rescale weights,
+change maxima or exp, defer across positions, or switch the softmax algorithm.
+#292's zero-exp frequency is not a measured rescale frequency.
 
-### B — share each loaded V value across TWO heads, within the same position pair
+## B — share each V load across two heads, within one position pair
 
-Current `attn_heads` converts each V pair once for a KV group, then six heads
-independently load vf0[i]/vf1[i] from the staging arrays. Pair HEADS, not
-positions or reduction terms. Compute the existing QK/max/denom/exp work for
-two heads (same per-head operation order), retaining four wv scalars. Then one
-dimension loop loads vf0[i] and vf1[i] once and updates both disjoint oh arrays,
-each still term0 then term1. Keep existing rescale passes initially, so this
-is independent of A. Use a scalar fallback when a head range has an odd tail.
+Current attn_heads converts V once per KV group, but six heads each reload
+vf0[i]/vf1[i]. Pair HEADS: run the original QK/max/denom/exp substep for each
+of two heads, retaining four wv scalars. Then one dimension loop loads V0/V1
+once and updates both disjoint oh arrays. Each output still receives term0
+then term1. Keep the original rescale passes initially, independent of A3.
 
-This can be written directly as t+=2 plus two independent scalar softmax
-substeps; no full score matrix, six-head scratch arrays, new allocations,
-cross-core communication, or query-dot reassociation. Start with one cell
-(or two) at a time: two output accumulators + four weights + two V values
-fit the FP register budget more comfortably than a blindly duplicated 4-wide
-body. Inspect generated loads/spills before expanding the unroll.
+Start with one or two cells at a time, not two blindly duplicated four-wide
+bodies: two accumulators + four weights + two V values limit register pressure.
+Check the object for actual shared loads and collateral spills. Keep a scalar
+odd-head fallback and original dot parenthesization. No score matrix, six-head
+scratch arrays, allocation, new task, or cross-core communication. Compare real
+noninteger head outputs including split boundaries, then primary screen.
 
-This is NOT #354's rejected position/dimension loop interchange. Mentor read
-`.auto/exp31/kbench_e31.c:146-180`: its fixture is s_oh[8][24] with a
-DIFFERENT s_v row for every p; it has no shared six-query-head V operand and
-one update per cell. Its -44.1% remains valid for that loop, not this reuse.
-#230 varied dot schedules, not two-head P.V operand reuse. Preserve original
-dot parenthesization and softmax arithmetic. Compare all head outputs with
-real/noninteger activations, including split boundaries and odd-head fallback.
-Then measure the integrated candidate at this board's seed pin.
+This is NOT #354's rejected dimension/position interchange. Mentor read
+`.auto/exp31/kbench_e31.c:146-180`: s_oh[8][24] has a DIFFERENT V row per p
+and one update per cell, with no six-head sharing. Its -44.1% does not close
+this operand reuse. #230 changed dot schedules, not head-shared P.V loads.
 
-### C — give one core each Q head's whole producer/consumer chain
+## C — one callback owns its Q-head range through tap, norm and RoPE
 
-Q has 12 independent 48-column heads. Current Q taps have three 256-column
-units and run serial with half<2; norm already splits heads 6+6, while RoPE
-is serial. Keep the Q history copy first. A head-owned callback performs Q
-tap columns [48h,48(h+1)), the existing norm, then that head's RoPE.
-Use the same already-required head split; join before attention consumes Q.
-K/V processing initially stays as it was.
-Within one callback, call tap_cols ONCE for [h0*hd,h1*hd), then the existing
-norm helper for [h0,h1), then RoPE for those heads. This preserves ownership
-while avoiding six repetitions of tap offset/modulo setup on each core.
+Q has 12 independent 48-column heads. Current taps have three 256-column
+units and run serial at half<2; norm already splits 6+6, RoPE is serial.
+Keep Q's history copy first. The existing head split calls tap_cols ONCE on
+[h0*hd,h1*hd), then existing norm for [h0,h1), then RoPE for those heads.
+Join before attention; leave K/V paths alone. This avoids both a new dispatch
+and repeated tap-offset setup for every head.
 
-Factor the existing tap body into a column-range helper so the fused callback
-can preserve taphoist/tap2col/tapfwd arithmetic rather than transcribing it.
-Do NOT fake tap_ctx.dim=48: history and weight strides must stay full Q dim=576.
-Keep ascending tap order, +0 seeds, nt=1/2 fallback, original norm sum order
-and normalization multiply grouping, and the two original RoPE expressions.
-Never call nd_parallel_rows inside a worker; call range helpers directly.
-Keep declaration order: tap_ctx, tap_cols, tap_rows, then qhead_ctx/qhead_rows.
-zcrms_head_rows is already defined earlier. Do not duplicate `c` or retain a
-reference to the deleted `vc` parameter inside tap_cols. A compile refusal on
-these extraction errors is not a negative performance result.
-Target checks should cover startup positions, wraparound, and odd head splits.
-The smaller norm+RoPE candidate is a legitimate staged implementation; its
-~0.2 ms RoPE phase gives a small ceiling. Q-tap parallelization is the main prize.
-This differs from standalone tap96's extra dispatch and from free-join fusion A/B.
+Factor the actual tap body into tap_cols(c,lo,hi), with full dim=576 history
+and weight strides; never fake dim=48. Preserve taphoist/tap2col/tapfwd, +0
+seeds, ascending taps, nt=1/2 fallback, norm sum/multiply order and RoPE
+expressions. No nested nd_parallel_rows from a worker.
 
-## Preserve these conclusions and limits
+The failed extraction has TWO local fixes: define tap_ctx/tap_cols/tap_rows
+before qhead_ctx/qhead_rows; remove the old c=(tap_ctx*)vc declaration from
+tap_cols, which already takes c. zcrms_head_rows is defined earlier.
+Host/target checks should cover startup, wraparound and odd head splits.
+The -0.029% norm+RoPE-only result does not test this serial Q-tap opportunity.
 
-- Failed cases remain heldout_interval_one and heldout_long_tools_note_only.
-  **The cause is unresolved.** The generated model input is schema prefix +
-  query and router dispatch occurs after generation; demo-timer state is not
-  thereby proven to explain changed generated text. Drop=0 is not request/token
-  identity. Keep goldens and acceptance frozen; no owner "admission" substitutes
-  for unchanged model quality. Do not start another unchanged full gate.
-  Concrete evidence: #589 generates interval=120 alone where the device golden
-  also calls get_status; the long-tools case changes a single interval=300 call
-  into interval=45 plus repeated timer calls and status. These are generated
-  tool-call differences, not merely runtime timer/status response fields.
-- The first-W8D seed retains ADD(+0,value) in BOTH old and new walks. Its host
-  add-versus-MOV sweep describes a different equivalence question; it does not
-  test multi-group/row cursor correctness of the transformed assembly. Preserve
-  the measured winner, existing guards, and its target-differential obligation.
-- Closed without new premises: old tie2/deeper prefetch, serial LUT build,
-  ordinary QKV concatenation (~-0.31%), norm-bias hoist, sinkpair, silu4,
-  FP16 taps, approximate math, tier stride sweeps, unsafe 120 MHz.
-  No broad compiler-flag change, quality-threshold relaxation, or new dependencies.
-- Do not compose A/B/C until their own readings exist. If complementary small
-  wins emerge, measure one justified combination; do not add estimated gains.
-- Pi recovery: Ctrl-C cleared the editor but did not stop the stale sleep;
-  Escape aborted that turn. Only use abort after confirming no live board job.
+## Limits and handoff
 
-Next mentor: verify all three workers actually progressed; harvest the real
-A/B/C source identities, target equality, primary timings and heap. Check the
-main coverage half-state and whether the two frozen failures were explained
-with input/provenance evidence rather than relabelled. No more acceptance
-packets or repeated gate falsifications in place of performance discovery.
+- Keep failed cases heldout_interval_one / heldout_long_tools_note_only frozen.
+  Their cause is UNRESOLVED. #589 changes generated tool calls, not merely
+  runtime status fields: interval=120 loses get_status; the long case changes
+  interval=300 into interval=45 plus timer/status calls. Model input is prefix
+  + query; dispatch follows generation. Timer-state narration and drop=0 do
+  not prove input/token identity. No owner admission can waive unchanged quality.
+- Main still has 24 prompts / 23 host / 20 device despite #606's restore claim:
+  HEAD already contained additions. Workers have complete original device cases.
+  Verified pre-addition backup: /tmp/coverage-backup-279218 (20 prompts,
+  19 host, 20 device). Preserve widened artifacts in exp88 and reconcile main
+  from that backup when convenient; never overwrite old golden expectations or
+  sync incomplete main fixtures onto workers. Do not bypass rc=42 for coverage.
+- Recent closures: prepare+LUT join fusion #584 = 0; LUT quartet barriers
+  #579 = -0.090%, pointer hoist #582 = -0.060%; fw_scale is cold. Old tie2,
+  deeper prefetch, serial LUT, ordinary QKV concatenation, norm-bias hoist,
+  sinkpair, silu4, FP16 taps, tier sweeps and unsafe 120 MHz stay down.
+  Those results do not establish a universal scheduling ceiling.
+- Seed retained ADD(+0,value) in both old/new walkers. Its host add-vs-MOV
+  sweep does not prove the transformed target's multi-group/row cursor
+  equivalence; preserve guards and the target-differential obligation.
+- Measure separate candidates before composing. Only one justified combination
+  after complementary measured wins; no additive percentage estimates.
+
+Next mentor: inspect A3's preserved winner, target equality and new quality
+breadth/cross-board confirmation; ensure B1 B and B3 C
+became real jobs instead of another implementation-handoff loop. Check main's
+coverage half-state and the frozen-failure cause before any acceptance change.
+Pi recovery: Ctrl-C only cleared the editor; Escape aborted the stale turn.

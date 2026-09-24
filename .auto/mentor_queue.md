@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24, updated 15:52 UTC; through #492 + actual lane logs.
+Mentor pass 2026-09-24, updated 15:53 UTC; through #492 + actual lane logs.
 Read at lane turnover. Preserve all dirty work, locks, anti-repeat guard, 240/80
 MHz limits and every quality gate. Mentor has launched/reserved NO board.
 Never cancel a live build/flash/benchmark to incorporate this guidance; prepare
@@ -40,6 +40,12 @@ restored spin. HEAD is not automatically the accepted or intended experiment.
   raised ValueError yet launch continued, on older arithmetic. Preserve any
   live job and mark this attempt invalid for that hypothesis; no killing or
   source changes mid-run. Prepare a fail-closed successor for lock release.
+  Researcher replaced it with **`08cc6f60300f` under the same log name**. At
+  15:53 this corrected image is live: engine matched to b2, old early call
+  removed, install verified at main.c:543 AFTER prefixes and BEFORE the timed
+  boot loop. This satisfies the hypothesis; no extra rerun for anchor cosmetics.
+  Its EVT ready heap print precedes driver installation, so it is NOT evidence
+  of post-driver heap savings. B2 is idle; its provenance trace is next.
 
 ## Critical interpretation corrections — retain these after compaction
 
@@ -119,8 +125,9 @@ Candidate: SAME full engine/ASM/config as M-rx-b2 (b1's old engine must not leak
 in; preserve dirty snapshots before researcher-owned staging), same 1 KiB RX
 driver/config/baud/ISR, but initialize it AFTER
 model open + prefix snapshots and BEFORE the existing boot benchmark/READY.
-Exact anchor: after `if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;`,
-before router_init. Assert exactly one call exists there and none at app entry.
+Suggested anchor: after `if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;`.
+The corrected live image calls it after router_init but before the timed boot
+loop, which is also valid. Assert exactly one late call and none at app entry.
 Preserve original hot-buffer allocation order; record actual buffer locations,
 heap and allocation success, and boot benchmark on FLASH_PORT. This is an
 allocation-order hypothesis, not an assumed fix or a device decode claim.

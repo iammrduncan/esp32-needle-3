@@ -34,6 +34,14 @@ shipping_signature() {
                 if [ -f "$f" ]; then sha256sum "$f"; fi
             done
         if [ -f esp32/sdkconfig ]; then sha256sum esp32/sdkconfig; fi
+        # The configure line is part of the image, so it belongs in the image identity. Until now
+        # it was not: a build that differed only by an idf.py -D flag (NEEDLE_PROFILE, or the
+        # NEEDLE_THERMAL_DIAG diagnostic this guard then refused as an "unchanged shipping image")
+        # hashed identically to the accepted image. That blind spot cut both ways - it hid genuinely
+        # different images AND let a config-only relink masquerade as a new candidate, which is the
+        # exact failure #377's -O3 contamination showed was possible with build files. Sources were
+        # edited in that incident, so the signature moved; a -D would not have moved it.
+        printf 'CFG profile=%s extra=%s\n' "${AUTO_PROFILE:-0}" "$(tr -d '\n' < .auto/diag_build_cfg 2>/dev/null)"
         true
     } | sha256sum | cut -d' ' -f1
 }
@@ -151,6 +159,16 @@ cmake --build host/build -j8 >> "$AUTO_LOG_DIR/auto_host.log" 2>&1 || {
 
 CFG=(-DNEEDLE_PROFILE=OFF)
 [ "${AUTO_PROFILE:-0}" = 1 ] && CFG=(-DNEEDLE_PROFILE=ON)
+# File-form extra build config, for harnesses that forbid env prefixes. Contents are appended to
+# the idf.py configure line verbatim. WARNING printed at run time because it changes the IMAGE:
+# metrics from such a build are diagnostic-only and must never be logged as a speed result, which
+# is why this is not a silent default and is echoed in the log next to PROVENANCE.
+if [ -s .auto/diag_build_cfg ]; then
+    EXTRA_CFG=$(tr '\n' ' ' < .auto/diag_build_cfg)
+    # shellcheck disable=SC2206
+    CFG+=(${EXTRA_CFG})
+    echo "DIAG_BUILD_CFG=$EXTRA_CFG (metrics from this image are diagnostic-only)"
+fi
 t0=$(date +%s)
 idf.py -C esp32 ${CFG[@]+"${CFG[@]}"} build > "$AUTO_LOG_DIR/auto_build.log" 2>&1 || {
     echo FIRMWARE_BUILD_FAILED

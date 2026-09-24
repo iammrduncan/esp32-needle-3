@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor pass 2026-09-24, updated 18:16 UTC; through #576 and actual lane logs.
+Mentor pass 2026-09-24, updated 18:21 UTC; through #578 and actual lane logs.
 Read at lane turnover. Preserve worker dirt, locks, anti-repeat, 240/80 MHz,
 all frozen inputs/goldens and quality gates. Never interrupt a live build,
 flash or benchmark; prepare its successor. Mentor launched no experiment.
@@ -49,21 +49,34 @@ scheduling. Initial mentor inspection found ALL boards idle and researcher in
 `sleep 1500` on already-finished M-can1; resume discovery, not poll logging.
 
 **NEW: B1 accumulator seed WINS its primary screen.** `M-b1-seed.log` finished
-rc=0: **5.6117 vs b1 5.5783 (+0.599%)**, prefill 5.9267, min_case 5.35,
+rc=0: **5.6117 vs b1 5.5783 (+0.599%)**, prefill **5.9267** (not #577's
+guessed 5.99), min_case 5.35,
 boot 5.659, gen_tokens 99, heap 8,415, PSRAM 2,052,252, device **6/6**,
 missing=0, delta=0. Mentor independently read the ELF: first four adds use
 f6, second four keep f0..f3; source has zero of the eight old seed/reset moves.
 Snapshot this exact assembly before reuse. This is a speed candidate, NOT a
 full-quality acceptance. The real target multi-group/row differential is still
-owed; host gates cannot exercise this assembly.
+owed; host gates cannot exercise this assembly. Snapshot now exists at
+`.auto/exp87/lut2_tie728.S.seed`, md5 `3a2e522e3f38`; full winning tree
+`61861dd9886c`. **B2 CONFIRMS 5.6117**, primary 6/6, missing=0, delta=0,
+rc=0 in `M-b1seed-b2.log`, prefill 5.925, boot 5.658, same heap. Two boards,
+same primary rate; no third primary confirmation is useful.
+
+B3 quartet barriers finished **5.575 vs 5.580 (-0.090%)**, primary 6/6,
+rc=0 (`M-b3-bar.log`, `cd49e54f9ea9`): reject this form. It does NOT show
+spills are free; removing spills also added context reloads and loop overhead.
+B1 now runs `M-fws-b1.log` (`328118911d23`) on top of seed. Preserve that live
+run, but **fw_scale is field-dead on ngroup 6/24**, already measured #396/#404;
+the real triple path is nd_fwht4s with rescale folded in. Do not extend that
+cold fallback family or mistake its instruction count for hot-path evidence.
 
 ## Next three lanes — distinct changes, no unchanged live control
 
 | Board | First experiment | Why now |
 |---|---|---|
-| 1 | Preserve seed winner; next group-owned prepare + LUT on CLEAN base | Keep the B2 recipe below as an independent test, not an unmeasured stack. |
-| 2 | Seed winner cross-board + bounded target row differential | An above-bar winner now justifies ONE confirmation lane; compare to b2 5.5767. |
-| 3 | LUT builder with short-lived output quartets | Actual clean-stack object spills three floats per pair; stop holding all 16 outputs live. |
+| 1 | Let live fw_scale finish; group-owned prepare + LUT on CLEAN base next | Use the "B1 next" recipe below; restore only after preserving the seed and fw_scale variants. |
+| 2 | Seed target row differential + ONE full unchanged quality gate | Two-board speed is settled; this asks whether any outputs beyond the known two regress. Respect the anti-repeat guard; no further primary controls. |
+| 3 | LUT quartet form with context/codebook locals outside the loop | Remove the collateral reload cost identified in the actual object, then compare to b3 5.580. |
 
 If a lane is already genuinely running something else, leave it and apply this
 at turnover. Small build/target-equivalence screens are fine; do not spend a
@@ -118,6 +131,16 @@ object from 4 mul.s + 16 madd.s to **16 mul.s + 16 madd.s**. No equality or
 speed claim follows; researcher is preparing the store-barrier form instead.
 Keep that first source as a snapshot. A changed operation count is a warning,
 not proof of changed answers; inspect operands and do the target comparison.
+The store-barrier form finished at -0.090% in `M-b3-bar.log`. Mentor read its object:
+zero stack float loads/stores, 4 mul.s + 16 madd.s, same operands and table
+indices, no memw. It also moved context-pointer reloads into the pair loop and
+replaced the hardware loop with bnez. If neutral/slower, the targeted successor
+is to capture cb/xh/lut pointers and four codebook floats in locals BEFORE the
+pair loop, retaining the quartet scheduling. Check spills and mul/madd graph
+again. This separates spill removal from the barrier's collateral reload cost.
+An alternative is a precise quartet memory-input operand rather than a global
+memory clobber; do not sweep both at once. [GCC documents that clobbers force
+reloads and that precise memory operands can avoid them](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Extended-Asm.html#Clobbers-and-Scratch-Registers).
 
 Read-only objdump of b3's clean-stack `nd_quant.c.obj`, `lutb_rows`:
 three `ssi ... a1,0/4/8` at offsets 0x4c/0x5e/0x70, reloaded at

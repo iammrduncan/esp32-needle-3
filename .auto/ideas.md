@@ -2923,3 +2923,45 @@ tap matmul +0.04 %. Bundle them (#431/#439: sub-bar halves of the same phase com
 above-bar levers compose sub-additively) as `bundle87 = bundle78 + those splits`, predicted ~+0.3 %,
 one change, host-proven byte-exact first (the odd-split guard `.auto/exp41/test_odd_split.c` is the
 right oracle - the device splits 3+3 where the host runs `rows_serial`).
+
+# The real cost of one nd_parallel_rows split: 3,973-4,603 cycles (16.6-19.2 us), nearly state-independent
+# (measured run #451, board 1, boot-only capture on the USB-JTAG leg, .auto/exp79/main_screen2.c)
+
+`#344`'s "23 cycles, hot or parked" is dead: a kbench image never reaches `worker_start()`, so
+`nd_parallel_rows` was `rows_serial` there and the bench timed a plain indirect call. This screen runs
+in `app_main` right after `worker_start()`, where the helper really is `rows_dual_core`, and proves
+participation from the per-core slot counters (`c0=62568 c1=37752` for the same job).
+
+| body | peer | units | split (cycles) | same work serially |
+|---|---|---|---|---|
+| empty | hot | 4 | 3,973 | 11 |
+| empty | hot | 128 | 4,112 | 11 |
+| empty | parked (20 ms sleep first) | 4..128 | 4,428 | 11 |
+| busy | hot | 32 | 3,969 | 133 |
+| busy | parked | 32 | 4,486 | 133 |
+| busy | parked | 128 | 4,603 | 421 |
+
+So: **~4,000 cycles against an already-running peer, ~4,430 against a parked one, and flat in the
+job size** - the handshake is a fixed ~16.6 us toll, exactly the magnitude `main.c`'s own comment
+assumed and ~170x the void #344 figure. Wake-from-park is worth only ~450 cycles.
+
+Three previously unexplained field numbers now reconcile arithmetically (no inference needed):
+* `tap96` -0.094 % for +8 splits: 8 x 16.6 us = 133 us = 0.069 % of a 192 ms token - measured 181 us.
+* `bundle86` -0.336 % for -18 splits: serialising a 135.8 us build costs +68 us each (+1.22 ms) and
+  saves 18 x 16.6 us (-0.30 ms) => predicted +0.92 ms, measured +0.65 ms. The 5x "gap" of #447 is gone.
+* `lutserial`'s direction: the build is big enough that its split earns the toll; the tap unit was not.
+
+## New candidate class this opens (ranked, all bit-exact by construction)
+
+Rule: a split pays only if the serial cost exceeds roughly twice the toll (~8,000 cycles / 33 us),
+because the split halves the work but adds the full toll. Enumerate every `nd_parallel_rows` call
+site and de-split the ones below it:
+
+1. `zcsplit_rows` (`zcrms`, n/128 = 6 units, n=768): a 768-element emit is ~3,000 cycles serially,
+   so splitting it *adds* ~1,500 cycles per call. Same for the small `zcsplit` shapes.
+2. attention per-head splits where each head is ~10K MACs - above the bar, keep.
+3. rope/tap/per-head-norm splits already measured ~+0.13 % when *added*; they were measured against
+   a wrong model of the toll, so their sign may be a board-quantum artefact - do not re-run without
+   a like-for-like base.
+4. The general lever is the opposite of the campaign's habit: fewer, larger splits - or one job that
+   carries build-then-rows so the toll is paid once per stage instead of once per projection.

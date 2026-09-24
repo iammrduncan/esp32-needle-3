@@ -63,62 +63,16 @@ static nd_prefix *s_prefixes[2];
  * needed beyond the start/done handshake. */
 
 static SemaphoreHandle_t s_go, s_done;
-/* Run #452: the semaphore is kept for the SLEEPING case only. Measured on device
- * (one nd_parallel_rows split, helper really is rows_dual_core, board 1, boot
- * capture): a give/take round trip costs 3,973 cycles with the peer already
- * running and 4,428 with it parked - a flat ~16.6 us toll, ~170x the void #344
- * figure, and the engine pays it 150+ times per token. Two plain DRAM counters
- * replace the wake-up on the common path: the worker spins briefly for a new
- * sequence number before it blocks, and the caller spins briefly for the
- * completion number before it waits. On this part internal DRAM is write-through
- * and the cache does not route it the way PSRAM is, so a volatile load sees the
- * peer's store - which is what FreeRTOS spinlocks rely on.
- *
- * Ordering is the whole hazard, so the payload is published BEFORE the sequence
- * number and everything the peer reads is volatile; a compiler barrier keeps the
- * stores on that side. Correctness does not depend on the spin at all: the worker
- * still gives s_done after every job, and the caller drains any stale token
- * before publishing so a binary semaphore can never be pre-accounted. */
-static volatile nd_row_fn s_fn;
-static volatile void     *s_ctx;
-static volatile uint32_t  s_r0, s_r1;
-static volatile uint32_t  s_seq, s_done_seq;
-
-/* Spin budgets in iterations of the empty poll loop. The worker's is the larger:
- * core 1 runs nothing else, so an idle spin there is free, while the caller's
- * has to stay well under the toll it is trying to avoid paying. */
-#define ND_WORKER_SPIN 20000u
-#define ND_CALLER_SPIN 600u
+static nd_row_fn         s_fn;
+static void             *s_ctx;
+static uint32_t          s_r0, s_r1;
 
 static void worker_task(void *arg)
 {
-    uint32_t seen = 0;
     for (;;) {
-        uint32_t spin = 0;
-        while (s_seq == seen && spin++ < ND_WORKER_SPIN)
-            ;
-        if (s_seq != seen) {
-            seen = s_seq;
-            s_fn((void *)s_ctx, s_r0, s_r1);
-            s_done_seq = seen;
-            xSemaphoreGive(s_done);       /* keeps the blocking caller honest */
-            /* The caller always posts s_go, so a job taken by the spin path
-             * leaves a token behind. Drain it: otherwise the next blocking Take
-             * returns at once, and the sequence-number guard below is the only
-             * thing stopping a re-run of a job whose stack ctx is long gone. */
-            xSemaphoreTake(s_go, 0);
-        } else {
-            xSemaphoreTake(s_go, portMAX_DELAY);
-            if (s_seq != seen) {          /* a spurious wake does no work: the
-                                           * descriptor is a single slot, and
-                                           * re-running one would read a ctx the
-                                           * caller has already returned from. */
-                seen = s_seq;
-                s_fn((void *)s_ctx, s_r0, s_r1);
-                s_done_seq = seen;
-            }
-            xSemaphoreGive(s_done);
-        }
+        xSemaphoreTake(s_go, portMAX_DELAY);
+        s_fn(s_ctx, s_r0, s_r1);
+        xSemaphoreGive(s_done);
     }
 }
 
@@ -133,21 +87,13 @@ static void rows_dual_core(nd_row_fn fn, void *ctx, uint32_t nrows)
         fn(ctx, 0, nrows);
         return;
     }
-    const uint32_t job = s_seq + 1u;
-    xSemaphoreTake(s_done, 0);            /* drop any token from the last job */
-    s_fn  = fn;                           /* payload first, ... */
+    s_fn  = fn;
     s_ctx = ctx;
     s_r0  = half;
     s_r1  = nrows;
-    __asm__ volatile("" ::: "memory");
-    s_seq = job;                          /* ... then the publication */
-    xSemaphoreGive(s_go);                 /* only wakes it if it did block */
+    xSemaphoreGive(s_go);
     fn(ctx, 0, half);
-    uint32_t spin = 0;
-    while (s_done_seq != job && spin++ < ND_CALLER_SPIN)
-        ;
-    if (s_done_seq != job)
-        xSemaphoreTake(s_done, portMAX_DELAY);
+    xSemaphoreTake(s_done, portMAX_DELAY);
 }
 
 static void worker_start(void)

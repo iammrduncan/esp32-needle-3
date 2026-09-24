@@ -1,0 +1,287 @@
+diff --git a/.auto/diag_repeat_ok b/.auto/diag_repeat_ok
+deleted file mode 100644
+index 594a3d7..0000000
+--- a/.auto/diag_repeat_ok
++++ /dev/null
+@@ -1 +0,0 @@
+-Gate completion attempt 6 on the fusion+cold-refund candidate (engine cdaf284ecce2 including asm), now instrumented with per-attach and per-stall device identity. Run #408 proved the failing state is not heap, PSRAM integrity or temperature: the app was primed, model-open and printing TDIAG when the harness reported no readiness, and the console-leg device nodes were re-created mid-session. This attempt exists to test that reading on a real stall - if the identity differs at the WARN line, the campaign has a rig fault to report and a route to the 20-case gate; if it is identical, the console-leg hypothesis narrows further. Not a speed repeat: the candidate's speed is six agreeing readings and this run's purpose is device_output_exact over all 20 cases. Pool idle, no diagnostic build flags, no prompt/golden/gate/metric touched.
+diff --git a/.auto/diag_request_timeout_s b/.auto/diag_request_timeout_s
+deleted file mode 100644
+index 08839f6..0000000
+--- a/.auto/diag_request_timeout_s
++++ /dev/null
+@@ -1 +0,0 @@
+-200
+diff --git a/.auto/expect_engine_md5 b/.auto/expect_engine_md5
+index 9566f6e..046a8c6 100644
+--- a/.auto/expect_engine_md5
++++ b/.auto/expect_engine_md5
+@@ -1 +1 @@
+-0190834e3488
++d167096a1ba8
+diff --git a/engine/include/nd_quant.h b/engine/include/nd_quant.h
+index c1303c0..e87331b 100644
+--- a/engine/include/nd_quant.h
++++ b/engine/include/nd_quant.h
+@@ -272,6 +272,12 @@ void nd_lut2_rows_tie1m(void *vc, uint32_t r0, uint32_t r1);
+  * touch nd_f16_slow's subnormal/inf path. */
+ int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1);
+ 
++/* Forget every remembered nd_lut2_asm_ok() verdict. Called from nd_model_close: the blob
++ * pointers belong to the mapped archive and the PSRAM tier, and a later open can reuse those
++ * addresses for different tensors, so a memo entry must not outlive its model. */
++void nd_cq_asmemo_reset(void);
++
++
+ /* Context for the handwritten 4-bit row walker in engine/src/gemv4_tie728.S,
+  * which hard-codes these offsets. C resolves every cursor - packed0/norms0/y0 are
+  * already stepped to the first row of the split and rowbytes/normstep step them
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 47bc67b..a4df6d8 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -732,6 +732,7 @@ void nd_model_close(nd_model *m)
+ {
+     if (!m)
+         return;
++    nd_cq_asmemo_reset();   /* blob identity is only valid for this open */
+     if (m->tok_ready)
+         nd_tok_free(&m->tok);
+     ND_FREE(m->layer);
+diff --git a/engine/src/nd_quant.c b/engine/src/nd_quant.c
+index c62d8a4..53a02e0 100644
+--- a/engine/src/nd_quant.c
++++ b/engine/src/nd_quant.c
+@@ -650,23 +650,46 @@ ND_HOT void nd_lut2_rows_c(void *vc, uint32_t r0, uint32_t r1)
+     }
+ }
+ 
+-#if ND_LUT2_ASM
+-/* nd_lut2_asm_ok() walks every norm in the row range, and a projection runs once
+- * per token, so asking it on every call would cost more than the kernel saves.
+- * Its answer depends only on the geometry and on the packed/norm blob - both set
+- * in stone once the model is mapped - so it is remembered per (blob, rows). */
+-static const void *s_asm_blob;
+-static uint32_t    s_asm_rows;
+-static int         s_asm_ok;
++/* One verdict per TENSOR, not per call (kept outside the ND_LUT2_ASM guard because
++ * nd_model_close() clears it, and the host build of the engine has the asm off): 64 slots for the at-most-46 CQ2 blobs a decode
++ * token visits, so the norm walk runs once per tensor per open instead of once per projection.
++ * Keyed on blob + rows + ngroup + g, which is strictly stronger identity than the single entry
++ * replaced here, and a probe that finds no free slot recomputes the verdict instead of guessing.
++ * Written only from the core that runs the dispatch - the row split happens after this returns. */
++#define ND_ASM_MEMO_SLOTS 64u
++typedef struct { const void *blob; uint32_t rows, ngroup, g; int ok; } asm_memo;
++static asm_memo s_asm_memo[ND_ASM_MEMO_SLOTS];
++
++void nd_cq_asmemo_reset(void)
++{
++    uint32_t i;
+ 
++    for (i = 0; i < ND_ASM_MEMO_SLOTS; i++)
++        s_asm_memo[i].blob = 0;       /* the blob pointer is the validity tag */
++}
++
++#if ND_LUT2_ASM
+ static int lut2_asm_usable(const nd_lut2_ctx *c, const void *blob, uint32_t rows)
+ {
+-    if (blob != s_asm_blob || rows != s_asm_rows) {
+-        s_asm_ok   = nd_lut2_asm_ok(c, 0, rows);
+-        s_asm_blob = blob;
+-        s_asm_rows = rows;
++    uint32_t h = (uint32_t)((((uintptr_t)blob >> 4) * 2654435761u) >> 26)
++                 & (ND_ASM_MEMO_SLOTS - 1u);
++    uint32_t p;
++
++    for (p = 0u; p < ND_ASM_MEMO_SLOTS; p++, h = (h + 1u) & (ND_ASM_MEMO_SLOTS - 1u)) {
++        asm_memo *m = &s_asm_memo[h];
++
++        if (m->blob == blob && m->rows == rows && m->ngroup == c->ngroup && m->g == c->g)
++            return m->ok;
++        if (m->blob == 0) {
++            m->blob   = blob;
++            m->rows   = rows;
++            m->ngroup = c->ngroup;
++            m->g      = c->g;
++            m->ok     = nd_lut2_asm_ok(c, 0, rows);
++            return m->ok;
++        }
+     }
+-    return s_asm_ok;
++    return nd_lut2_asm_ok(c, 0, rows);   /* full table: recompute, never guess */
+ }
+ #endif
+ 
+diff --git a/esp32/main/CMakeLists.txt b/esp32/main/CMakeLists.txt
+index 1a1ab28..51efecf 100644
+--- a/esp32/main/CMakeLists.txt
++++ b/esp32/main/CMakeLists.txt
+@@ -28,7 +28,7 @@ endforeach()
+ # NEEDLE_KBENCH unbuildable). With the option OFF the requirement list is the
+ # same four components, so the shipping image cannot move.
+ option(NEEDLE_THERMAL_DIAG "Log die temperature and PSRAM integrity" OFF)
+-set(MAIN_REQUIRES needle esp_partition esp_timer json)
++set(MAIN_REQUIRES needle esp_partition esp_timer json esp_driver_uart)
+ if(NEEDLE_THERMAL_DIAG)
+     list(APPEND MAIN_REQUIRES esp_driver_tsens)
+ endif()
+diff --git a/esp32/main/kbench.c b/esp32/main/kbench.c
+index 72054e8..f5d51e3 100644
+--- a/esp32/main/kbench.c
++++ b/esp32/main/kbench.c
+@@ -3831,6 +3831,11 @@ int kbench_run(void)
+     s_done = xSemaphoreCreateBinary();
+     xTaskCreatePinnedToCore(worker_task, "kb_worker", 4096, NULL,
+                             configMAX_PRIORITIES - 2, NULL, 1);
++    /* A kbench image has NO other splitter: without this, nd_parallel_rows stays
++     * the serial default and every "split" arm silently measures one core - the
++     * exact defect that voided run #344's handshake figure. Install the bench's
++     * OWN sole worker pair, after that worker exists. */
++    nd_parallel_rows = split_rows;
+ 
+ #if ND_KBENCH_ASM
+     probes();          /* the ISA probes live in the assembly translation unit */
+diff --git a/esp32/main/main.c b/esp32/main/main.c
+index 67c9308..34bf182 100644
+--- a/esp32/main/main.c
++++ b/esp32/main/main.c
+@@ -39,6 +39,36 @@
+ #include "tools_schema.h"
+ #include "routes_schema.h"
+ 
++#include "driver/uart.h"
++#include "esp_vfs_dev.h"
++
++/* The default console VFS is POLLED: stdin reads a 128-byte software FIFO and
++ * getchar() sleeps 20 ms on EOF. At 115200 8N1 a 20 ms window admits ~230 wire
++ * bytes, so a request longer than the FIFO loses characters, the terminating
++ * newline never arrives, and the reader waits for the rest of a line that has
++ * already been dropped. The frozen suite's cases 1-16 are all <= 89 bytes; case
++ * 17 is the FIRST request over 128 bytes (232), and the note-only tools case is
++ * 135 - which is exactly the observed 16-17 requests-per-boot ceiling, and why
++ * no amount of reconnecting recovered it.
++ *
++ * Installing the UART driver replaces that FIFO with an ISR-fed ring, and
++ * esp_vfs_dev_uart_use_driver() routes stdin through it. Bytes are retained
++ * rather than dropped, so this is lossless rather than a bigger drop window. */
++static void console_rx_ring_enable(void)
++{
++    uart_config_t cfg = {
++        .baud_rate = 115200,
++        .data_bits = UART_DATA_8_BITS,
++        .parity    = UART_PARITY_DISABLE,
++        .stop_bits = UART_STOP_BITS_1,
++        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
++        .source_clk = UART_SCLK_DEFAULT,
++    };
++    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0));
++    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &cfg));
++    esp_vfs_dev_uart_use_driver(UART_NUM_0);
++}
++
+ /* The schema is generated from tools/demo-tools.json at build time; see
+  * main/CMakeLists.txt. Edit that JSON, not this file. */
+ static const char TOOLS_RAW[] = ND_TOOLS_JSON;
+@@ -63,16 +93,62 @@ static nd_prefix *s_prefixes[2];
+  * needed beyond the start/done handshake. */
+ 
+ static SemaphoreHandle_t s_go, s_done;
+-static nd_row_fn         s_fn;
+-static void             *s_ctx;
+-static uint32_t          s_r0, s_r1;
++/* Run #452: the semaphore is kept for the SLEEPING case only. Measured on device
++ * (one nd_parallel_rows split, helper really is rows_dual_core, board 1, boot
++ * capture): a give/take round trip costs 3,973 cycles with the peer already
++ * running and 4,428 with it parked - a flat ~16.6 us toll, ~170x the void #344
++ * figure, and the engine pays it 150+ times per token. Two plain DRAM counters
++ * replace the wake-up on the common path: the worker spins briefly for a new
++ * sequence number before it blocks, and the caller spins briefly for the
++ * completion number before it waits. On this part internal DRAM is write-through
++ * and the cache does not route it the way PSRAM is, so a volatile load sees the
++ * peer's store - which is what FreeRTOS spinlocks rely on.
++ *
++ * Ordering is the whole hazard, so the payload is published BEFORE the sequence
++ * number and everything the peer reads is volatile; a compiler barrier keeps the
++ * stores on that side. Correctness does not depend on the spin at all: the worker
++ * still gives s_done after every job, and the caller drains any stale token
++ * before publishing so a binary semaphore can never be pre-accounted. */
++static volatile nd_row_fn s_fn;
++static volatile void     *s_ctx;
++static volatile uint32_t  s_r0, s_r1;
++static volatile uint32_t  s_seq, s_done_seq;
++
++/* Spin budgets in iterations of the empty poll loop. The worker's is the larger:
++ * core 1 runs nothing else, so an idle spin there is free, while the caller's
++ * has to stay well under the toll it is trying to avoid paying. */
++#define ND_WORKER_SPIN 20000u
++#define ND_CALLER_SPIN 600u
+ 
+ static void worker_task(void *arg)
+ {
++    uint32_t seen = 0;
+     for (;;) {
+-        xSemaphoreTake(s_go, portMAX_DELAY);
+-        s_fn(s_ctx, s_r0, s_r1);
+-        xSemaphoreGive(s_done);
++        uint32_t spin = 0;
++        while (s_seq == seen && spin++ < ND_WORKER_SPIN)
++            ;
++        if (s_seq != seen) {
++            seen = s_seq;
++            s_fn((void *)s_ctx, s_r0, s_r1);
++            s_done_seq = seen;
++            xSemaphoreGive(s_done);       /* keeps the blocking caller honest */
++            /* The caller always posts s_go, so a job taken by the spin path
++             * leaves a token behind. Drain it: otherwise the next blocking Take
++             * returns at once, and the sequence-number guard below is the only
++             * thing stopping a re-run of a job whose stack ctx is long gone. */
++            xSemaphoreTake(s_go, 0);
++        } else {
++            xSemaphoreTake(s_go, portMAX_DELAY);
++            if (s_seq != seen) {          /* a spurious wake does no work: the
++                                           * descriptor is a single slot, and
++                                           * re-running one would read a ctx the
++                                           * caller has already returned from. */
++                seen = s_seq;
++                s_fn((void *)s_ctx, s_r0, s_r1);
++                s_done_seq = seen;
++            }
++            xSemaphoreGive(s_done);
++        }
+     }
+ }
+ 
+@@ -87,13 +163,21 @@ static void rows_dual_core(nd_row_fn fn, void *ctx, uint32_t nrows)
+         fn(ctx, 0, nrows);
+         return;
+     }
+-    s_fn  = fn;
++    const uint32_t job = s_seq + 1u;
++    xSemaphoreTake(s_done, 0);            /* drop any token from the last job */
++    s_fn  = fn;                           /* payload first, ... */
+     s_ctx = ctx;
+     s_r0  = half;
+     s_r1  = nrows;
+-    xSemaphoreGive(s_go);
++    __asm__ volatile("" ::: "memory");
++    s_seq = job;                          /* ... then the publication */
++    xSemaphoreGive(s_go);                 /* only wakes it if it did block */
+     fn(ctx, 0, half);
+-    xSemaphoreTake(s_done, portMAX_DELAY);
++    uint32_t spin = 0;
++    while (s_done_seq != job && spin++ < ND_CALLER_SPIN)
++        ;
++    if (s_done_seq != job)
++        xSemaphoreTake(s_done, portMAX_DELAY);
+ }
+ 
+ static void worker_start(void)
+@@ -373,6 +457,8 @@ static size_t model_length(const esp_partition_t *part)
+ 
+ void app_main(void)
+ {
++    console_rx_ring_enable();   /* before any console input is read */
++
+     const esp_partition_t     *part;
+     esp_partition_mmap_handle_t handle;
+     const void                *blob = NULL;

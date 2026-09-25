@@ -1,560 +1,223 @@
 # Needle 3 mentor queue
 
-## Mentor override — 2026-09-25 19:03 UTC (refresh in progress)
+Mentor refresh **2026-09-25 19:23 UTC**. This replaces the old chronological and
+future-dated appendices. Preserve dirty trees, fixtures, locks, anti-repeat guard
+and 240/80 MHz. Researcher owns implementation/measurement; never abort live work.
 
-**Stop the host-USB/closure loop. All three boards are idle, not proven broken.**
-Host kernel journal has NO USB events after 18:21:53 UTC; UART CH343 nodes have
-been present since Sep 18. Device-file mtimes are not enumeration evidence.
-The new `/root/board-pool/capture_b{1,2,3}_candidate.sh` scripts test
-`b"EVT READY"` (ONE space), but main.c emits `EVT  READY` (TWO spaces), and
-the scripts discard their entire input buffer, printing only 0/1. Thus ready=0
-does NOT establish zero received bytes or a hardware outage. The later passive
-empty reads can simply be an idle firmware waiting for input. Capture also opens
-with DTR=True whereas the working `tools/serial_api.py` uses False before/after
-open. Follow the proven per-board console discipline; do not toggle blindly.
+## Evidence and current priorities
 
-Researcher: under each existing board lock, use one bounded `!status` transaction
-through the proven non-resetting handshake against the ALREADY FLASHED image,
-and retain bounded raw output. No blind reflash, container restart, USB reset or
-another 600-second passive wait. Repair the capture readiness parser/logging in
-your own runner; mentor does not edit implementation. A real failed transaction
-is evidence; a missed one-shot banner is not. Use restored lanes for independent
-discovery; capture may occupy ONE lane, not block all three.
+**Accepted remains 5.3033 tok/s**, bundle5, 20/20 device + 19/19 host.
+Seed proposal: **6.0617**, engine `d91fd5f048ca`, app `67482301e5b1`;
+ext 5.9877, think 4.65, prefill 6.3967, min 5.83 (#731), host 19/19,
+cross-board restricted confirmation on B3 (#737).
+Conservative proposal: **5.8283**, engine `787a58302f52`; ext 5.7638,
+think 4.52, prefill 6.1283, min 5.62 (#735), host 19/19.
+Both full device runs are **18/20, token_delta 52**. Neither is quality-passed
+or shippable. Host logit delta remains 5.341e-05. Preserve the two failing
+goldens; owner admission is not a prerequisite for further discovery.
 
-Accepted remains **5.3033**, 20/20 device + 19/19 host. Latest proposals are
-seed **6.0617** (`d91fd5f048ca`, #731/#737) and conservative **5.8283**
-(`787a58302f52`, #735), each 18/20 device, delta 52, host 19/19. Neither is
-quality-passed or shippable. Owner admission is not a prerequisite for discovery.
-Resident-cu remains unmeasured and is a ready next candidate; no broad
-"all families closed" assertion supersedes that concrete queue item. Further
-performance queue refinement follows this evidence review.
+Latest compute improvement was E72b scale construction inside parallel SiLU:
++0.19% seed (#730); E71+E72b together +0.52% conservative (#734).
+This mentor pass found usable boards, completed a capture and corrected LSX
+capability; it has NOT established a new optimization speedup.
 
-Mentor refresh 2026-09-25 16:54 UTC. Raw UTC log times outrank the old future-dated
-researcher headings. This compact queue supersedes its chronological appendices.
-Preserve all dirty trees, locks, repeat guards, frozen fixtures and 240/80 MHz.
-The researcher owns implementation and measurement; never abort live board work.
+**Pool outage RETRACTED.** Locked status queries answered all boards at 19:04 UTC
+(B1/B3 in 1.1s; B2 in 56.5s, uptime 55s suggesting restart/priming during attach).
+Candidate capture scripts matched `EVT READY` with ONE space; firmware emits
+`EVT  READY` with TWO, and scripts discarded the buffer. ready=0 was not a byte
+count. Host journal had no USB events after 18:21:53 before these checks;
+node mtimes were not enumeration evidence. Use the proven serial_api handshake,
+locks and bounded raw replies, not passive silence or more 600-second waits.
+B3's earlier watchdog/SRAM failure was a separate real event; it subsequently
+screened the known-good seed image with internal_free=13,967 at model open.
 
-## Evidence and direction
+B1 capture is **DONE**: `R-capnr-b1.log`, rc=0, nine behavioural flags true,
+19:07:40 UTC (#743). No reflash was needed. This does not waive device failures.
 
-**Accepted remains 5.3033 tok/s**, bundle5: 20/20 device, 19/19 host.
-Latest completed discovery #727: B2 app `b5c66b749bcc`, engine
-`a9b5505a760f`, **6.0483**, ext 5.9777, think 4.65, prefill 6.3733,
-host 19/19, logit delta 5.341e-05. Its full device suite is **18/20,
-delta 52: NOT a quality pass**. B1 app `d0846006fc5c`, engine
-`bae5184f9ca7`, is 5.7967, ext 5.7323, think 4.50, host 19/19,
-same two device failures. Both latest breadth/host runs are DONE; no owed
-unchanged gate remains. These are proposals, not accepted/shippable speed.
-`R-echofull-b2.log` reports internal_free **13,967**, whereas #727 carries
-14,991; use the actual image's raw reading for capacity planning, leave the
-measured ledger intact. App/assembly/config provenance matters beyond C hashes.
-
-**Live update 16:54 UTC:** B1 CV2W completed `R-cv2-b1.log`, engine
-`7f897ace5772`, app `10b81d693587`: **5.7867 vs 5.7967 (-0.17%)**,
-6/6 restricted exact, 64 selftest trials bad=0, cv2=1 and n1_align=0;
-prefill 6.085, min 5.58, internal_free 10,823. No repeat/full gate for this loss.
-The final kernel alternates the two ordered chains. Preserve its work/evidence;
-its next useful lane is the CQ2 offset-stream probe below.
-B2 `R-slice-b2.log` is LIVE: engine `d91fd5f048ca`, app `67482301e5b1`,
-real locked build/flash. It retains the seven E71 wide updates and sc allocation,
-and constructs each slice before that slice's unchanged SiLU. Leave it untouched.
-Its comparator is eW79 app `ff82c60d9e1e`, **6.0500** restricted screen (#728),
-not the earlier 6.0483 image. No additional eW79 gate is needed before discovery.
-B3 remains blocked: read-only host kernel logs at 16:43-16:44 UTC show flash USB
-`90:E5:B1:D1:C1:C8` disconnect/re-enumeration about every 12 seconds on
-`2-1.2.1.1` / ttyACM4 while its CH343 console persists. Node presence is not
-recovery. Preserve donor `b255280ba9a9`; no further serial-probe/recovery loop.
-
-**Priority shift: reopen concrete conditioning loops, not entire phase labels.**
-E71 paid +0.39% on seed by widening seven cond_u updates, yet its scale construction
-is STILL SERIAL before an already parallel SiLU. Historical cond2/cond4 losses
-#380/#381 used STRIDE-8 cond_v (`.auto/exp41/make_variants.py` proves it);
-condT later changed that matrix to contiguous channel rows. Those old results do
-not measure a wide-load ordered reduction on the current layout. A measured
-variant's floor is not a proof that every implementation is optimal.
-
-## Next three lanes
-
-| Board | Next distinct experiment | Comparison |
+| Lane | Current state / next distinct work | Pinned comparison |
 | --- | --- | --- |
-| B1 | CV2W lost; **CQ2 offset-stream / LSX probe next**, resident-cu if not ready. | Preserve the CV2W variant; use a recorded local base, no live control. |
-| B2 | **Scale construction inside parallel SiLU is LIVE.** Harvest, then reserve at turnover. | Current eW79 screen 6.0500; keep E71 arithmetic/kernel. |
-| B3 | **CQ2 predecoded offset stream / LSX** mechanism screen when hardware is genuinely usable. | Its own preserved base/pin; focused kernel first. |
+| B1 | R-scrow-b1 is LIVE, but its new kernel has concrete defects below. Do not interpret fallback timing as a candidate result. | Its own conservative 5.8283. |
+| B2 | Correct LSX probe **PASSED and DONE**; next **uint16 offset-stream cost screen**. | Its own seed 6.0617. |
+| B3 | **Missing engram pair relocated into unused tier storage**; draft has concrete build errors to fix before launch. | Its own seed 6.0617 restricted (#737). |
 
-If B3 stays blocked, move its ready candidate to the first healthy turnover;
-do not park a healthy board for hardware recovery, packet prose or another
-quality dump. Prepare the next candidate while another lane measures. Verify a
-launch with actual process + nonempty growing log, not PID or tmux name alone.
+Prepare candidates while other boards run. Three different experiments are the
+normal topology; neither capture nor a completed capability probe justifies
+parking the other lanes. Confirm real processes and growing nonempty logs.
+No packet-writing, canonical re-reading or self-declared finish replaces the
+runnable candidates below.
 
-### B2 first: scale construction shares the SiLU split
+## B1 — four scale cells stay in registers through all eight channel updates
 
-Current `hadamard_mlp_unscaled` builds all 1024 scale cells on core 0: one
-initializer then seven `nd_lanemix4w` passes. It THEN calls
-`nd_parallel_rows(silu_rows, ..., n/128)`. Put the SAME initialization and
-seven updates at the start of that callback, restricted to its `[lo,hi)` slice.
-Pass `cond`, `cu`, n and sc in the context; each row starts at `cu+j*n+lo`.
-Each callback builds its own sc slice then consumes it in the unchanged SiLU loop.
-No additional splitter invocation, nested parallelism, allocator or new assembly.
-The synchronous return keeps stack cond alive; each slice has exclusive writes.
-Do NOT scalarize into per-element eight-row gathers or remove sc on this first
-test: that would undo E71 and confound scheduling with a new memory walk.
-Keep j ascending, exact initializer contraction, wide guard/fallback and the
-paired sigmoid expression unchanged. Preserve sc allocation on this first test.
+Current silu_rows initializes sc then makes seven nd_lanemix4w read/modify/write
+passes over each slice. Keep four adjacent sc cells in FP registers from the
+EXACT `1 + cond[0]*cu[0][i]` initializer through j=1..7, store once.
+Keep E72b's split and sc allocation. This removes intermediate sc traffic;
+it does not repeat CV2W's 768-term conditioning reduction.
 
-This moves 65,536 independent per-token FMAs and their transport onto the two
-existing lanes. It does not promise a 2x model speedup: shared PSRAM bandwidth and
-slice overhead may erase the benefit. #43's separate blend splits were null;
-this experiment specifically avoids a new barrier and uses E71's later kernel.
-Check both split slices against the existing serial sc/SiLU output before screen.
-Do not bundle unrelated product shapes (E73 failed 0/6 doing that).
+Four accumulators + four contiguous cu values leave room for coefficients.
+Eight coefficients plus those eight registers is the 16-register maximum,
+not a license to spill. Preserve initializer contraction, ascending j, wide
+loads, alignment guard/fallback and the paired sigmoid expression. Check the
+real cu/sc operands and coefficient-load alignment. Device differential needs
+nonzero slice offsets and several tiles; check emitted spills/loads and boot
+dispatch eligibility. Price real PSRAM cu + SRAM sc. Do not full-gate a loser.
 
-### CV2W archive note: new layout tested, current version lost (-0.17%)
+**19:23 source review of the LIVE draft found two defects.** It initializes f0
+with `movi a7,1; wfr f0,a7`: WFR transfers bits, so this is 0x00000001,
+NOT 1.0f (0x3f800000). Use a verified float-one initialization. Also a3 advances
+by stride after EACH of eight rows and never returns to the next four-cell
+tile; after a tile it points at base+8*stride, not base+16. Preserve a tile-base
+pointer or restore it correctly, and test multiple tiles/nonzero slice offsets.
+The kernel wide-loads cond[8] but the C stack array has no explicit 16-byte
+alignment and the dispatch checks only sc/cu: align/guard cond or load its
+eight coefficients with scalar loads once per call. Let the live job finish;
+fix at turnover. A failing selftest/scrow=0 means the old path measured, not a
+negative result for register reuse. Do not close the mechanism on that run.
 
-Current `cond_rows` gives each core four channels but reduces them ONE at a time
-through scalar x/cv loads and a single 768-term FMA chain. Prototype TWO channels
-together on the CURRENT channel-major matrix. Fetch four x values and four
-values from each contiguous channel row with aligned wide loads; alternate the
-two accumulators while each consumes indices i,i+1,i+2,i+3 IN THAT ORDER, then
-advance. Two accumulators + x4 + weight4 + weight4 = 14 FP registers. Keep each
-accumulator initialized to +0 and its exact scalar FMA chain. Do not use four
-partials of ONE dot, a tree fold, or the old stride-8 generator unchanged.
+## B2 — LSX works; now test whether predecoded addresses are faster
 
-Guard real x and cv row pointers (n1 is not automatically FAST16 just because the
-weight pool is); make dispatch observable once at boot, not per token. Keep the
-C tail/fallback for odd channel ranges and unsupported alignment. A compact
-oracle must include nonzero channel offsets, more than one four-element tile,
-real staged cv, and scalar vs split results. Reuse exp41's test logic rather than
-inventing a new harness. Inspect the emitted loop for spills and lost loads.
-Price real PSRAM cv + SRAM x, not two resident synthetic SRAM arrays. If this
-cannot be readied promptly, take the resident-cu reserve so the lane stays useful.
+**Resolved:** `R-lsx3-b2.log` line 84:
+`LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000`,
+bitwise comparisons at byte offsets 0,4,8,60,64. Engine `5c124e7c9169`,
+app `a08d78179f08`; completed primary screen 6.0617, 6/6, delta 0.
+This is capability evidence, not a speed gain. No further capability-only runs.
 
-The new premise is both **layout after condT AND wide delivery**. The old cond2
-and cond4 losses (-0.394/-0.427%) remain valid for their old implementation.
-Espressif's [matrix assembly](https://github.com/espressif/esp-dsp/blob/master/modules/matrix/mul/float/dspm_mult_ex_f32_aes3.S)
-shows wide operand loads feeding independent scalar FMAs. Its
-[dot-product assembly](https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
-uses four partial sums and a final fold: that numerical graph is NOT a drop-in
-replacement for this single-accumulator reduction. These sources inform the
-transport mechanism; they do not establish a Needle speedup.
+#732's recovered C probe called `lsx f0,a2,a3` with 0u,1u,2u, then compared
+with tab[0],tab[1],tab[2]. It tested misaligned BYTE offsets. Its silicon
+rejection is invalid. [Cadence ISA §8.3.155, p482](https://www.cadence.com/content/dam/cadence-www/global/en_US/documents/tools/silicon-solutions/compute-ip/isa-summary.pdf)
+defines byte addressing; [Espressif FIR assembly](https://github.com/espressif/esp-dsp/blob/master/modules/fir/float/dsps_fird_f32_ae32.S)
+multiplies its index by four before LSX. The
+[platform header](https://github.com/espressif/esp-dsp/blob/master/modules/fir/include/dsps_fir_platform.h)
+enables that implementation on S3.
 
-### B3 / first healthy turnover: CQ2 addresses instead of packed nibbles
+**Cost experiment:** predecode immutable nibbles into uint16
+`64*p + 4*code`, p=0..63 inside a 128-weight group. Then
+`l16ui; lsx; add.s` replaces `extui; addx4; lsi; add.s` plus packed-word
+loading. Keep the learned pair LUT, four partial sums, nibble-to-partial
+assignment, +0 seeding, fold, norm conversion and row/group order EXACT.
+Advance LUT base 4096 B per group. This is addressing, not requantization.
 
-New architecture lead (not a measured win): predecode ONE projection's immutable
-nibbles at model open into uint16 byte offsets `64*p + 4*code`, p=0..63 within
-a group. Keep the existing 16-entry pair LUT, learned codebook, prepared x,
-four partial sums, nibble-to-partial assignment, first-pair seeding, fold, group
-norms and row order exactly as that lane's base does them.
-With group LUT base unchanged, `l16ui offset; lsx value,base,offset; add.s`
-can replace `extui; addx4; lsi; add.s` plus packed-word loading. Eight pairs
-would have roughly 24 body instructions versus 32 + one packed load today.
-This trades extra sequential offset loads/PSRAM bytes for integer address work;
-a second memory-load bottleneck may erase it. That is what the screen must decide.
+Use existing real-row kbench: distinct synthetic table values, later groups,
+multiple rows/nonzero row offsets, real-output bit differential, cold PSRAM
+and both cores. Extra memory loads may erase instruction savings; require
+measured cycles before integration. A 576x768 Q matrix needs **442,368 B**,
+4x packed-index storage. Open-time PSRAM 2.06 MB is misleading: post-prime
+status is **50,088 B**. Use a proven-disjoint slice of the existing tier arena
+below, not a new allocation that breaks either prefix cache. Preserve weights
+and fallback. Defer uint32-pointer expansion until this smaller form is priced.
 
-Offsets are <=4092 and multiples of four; advance LUT base 4096 B per group,
-reset at each row. A 576x768 Q matrix needs **442,368 B** of expanded offsets
-(4x its packed index bytes), not internal RAM. The last raw PSRAM headroom was
-2,062,492 B: one projection fits arithmetically, but check largest allocatable
-block and failure fallback. Leave the original archive/tier and norm storage
-intact for the first differential. No whole-model expansion or permanent LUT copy.
+Artifact lesson from this pass: `R-lsx2-b2` did not contain the probe because
+a Python call-site assertion failed BEFORE nd_model.c was written. An unused
+appended .S function did not test capability. Corrected R-lsx3 did. Assert
+definition AND call and verify the artifact, without repeating a live control.
 
-Use the existing kbench on real rows: first establish this target assembles and
-executes LSX, then exact synthetic mapping (distinct table entries/norms and
-multiple groups/rows), real-output differential and cold/dual-core cycles.
-A kernel win earns narrow integration; an instruction count alone does not.
-[Cadence ISA, LSX section 8.3.155](https://www.cadence.com/content/dam/cadence-www/global/en_US/documents/tools/silicon-solutions/compute-ip/isa-summary.pdf)
-defines base-plus-register float loading. Local S3 core config enables FP;
-actual target support/throughput still belongs to the researcher's probe.
-History search found no measured predecoded-offset/LSX candidate; old unchanged
-CQ2 scheduling nulls do not measure this representation change.
+## B3 — stage the missing engram pair inside the EXISTING 12 MB allocation
 
-### Ready smaller reserve: keep four scale accumulators in registers
+Static audit of the current archive, all nd_tier_ptr/eg_vpsram uses, and actual
+compile commands (no tier-size override) established these **archive offsets**:
 
-E71 still reloads and stores sc in all seven channel passes. Keep four output
-cells resident from their exact `1 + cond[0]*cu[i]` initializer through j=1..7;
-store once. Retain one FMA per cell/channel and the same order. Eight cond values,
-four accumulators and four row values fit 16 FP registers; if the actual ABI or
-loop spills, reduce live coefficients rather than changing arithmetic. No weight
-repacking or extra permanent allocation. Walk adjacent tiles so the eight cu
-row streams reuse their cache lines; compare against the board's current seven
-wide passes. This is register reuse, distinct from B2's scheduling experiment.
-Run it separately before considering composition with B2's winner.
+| Range / object | Bytes or bounds, end exclusive |
+| --- | --- |
+| Tier's current allocation/mapping | [3,256,704, 15,839,616), 12,582,912 B |
+| Last whole tensor currently served by it | dir230, first-site value_proj, ends 11,941,312 |
+| Second-site key_proj, dir233 | [15,707,584, 15,864,256), 156,672 B |
+| Second-site value_proj, dir234 | [15,864,256, 16,020,928), 156,672 B |
+| Unused tail after ALL current tier consumers | [11,941,312, 15,839,616), **3,898,304 B** |
 
+Both second-site projections fail nd_tier_ptr's WHOLE-tensor containment check
+and read flash. Engram table gathers use nd_cact_data directly; taps have
+separate fp32 copies. Their copied bytes in this tail are not current tier users.
 
-## Retain the actual closures and strict gates
+Retain the 12 MB allocation, original tier copy order, original mapped users,
+live cache layouts and both prefixes. AFTER its original copy, copy only the
+missing pair (313,344 B) from immutable archive data into an aligned, reserved
+tail slice. Add narrow relocation dispatch for those tensors; keep the old
+mapping/fallback for all others. Do not shift/extend the original range.
+Arena storage belongs to eg_vpsram and must not be separately freed.
 
-* E72 attention-input ownership is a measured NULL (#722); E74 MLP residual
-  wide MAC is -0.03%, also NULL (#721). Do not repeat either unchanged.
-* The supposed "dead code costs 6.3%" explanation is RETRACTED (#723):
-  CMAKE_C_FLAGS retained `-DND_REQ_DIAG=1`, so per-token prints were live.
-  Both current compile databases have zero enabled ND_REQ_DIAG entries. Check
-  actual compile commands after diagnostic builds; stripping source or hashing
-  only C is not equivalent to checking the image/configuration.
-* E73's other ~6k-cell products stay low priority. Keep unchanged CQ2 schedules,
-  both kron2 variants, old QK reschedules, private LUTs and engram projection
-  overlap down. A 768-input pair table is 24,576 B, beyond current free SRAM.
-* eW78 moved TOK emission after the decode timestamp; its metric gains are
-  +0.35% B1 / +0.05% B2. The sources establish changed accounting/reporting,
-  not a measured end-to-end latency gain. Stop hunting work to move outside
-  clocks. Prefill progress prints cannot directly accelerate the decode loop.
-  Preserve clock boundaries in these compute experiments and use same-app pins.
-* The frozen pair remains an unresolved acceptance blocker. #647 associates
-  the change with RX-ring installation; host agreement and repeatability do not
-  establish a causal timer mechanism or authorize new goldens. #711/#712's
-  initial think=1/OOB diagnostic interpretations were invalid. A later limited
-  order probe is not proof that all state/race mechanisms are excluded.
-  Do not call 18/20 a pass or make owner approval a precondition for discovery.
+For this archive, concrete **buffer-relative** slots are:
+key at `eg_vpsram + 8,684,608` (=11,941,312-3,256,704),
+value at +8,841,280, pair end +8,997,952. The remainder can hold B2's offsets.
+Derive/check these against actual directory ranges and the COMPLETE current
+consumer list. Phi's older cap_end=7,859,648 is not the final live consumer:
+there is a separate hole [7,859,648,11,627,968), then first-site K/V.
+Never treat everything after cap_end as dead.
 
-Next mentor: check whether B1/B2 actually ran the distinct conditioning candidates,
-whether the parallel scale path paid beyond E71, and whether B1 immediately
-replaced the losing CV2W screen with new work. Next
-try the CQ2 offset-stream probe if not already measured; do not reopen old
-packed-word schedules under its name. Read the
-raw quality verdict and app/config provenance; check B3 for genuine externally
-changed hardware state without repeating probes. Replace measured nulls promptly.
+At boot prove copied bytes identical, relocated pointers inside their reserved
+slice, original consumers unchanged and both prefix caches successful. Then
+one B3 primary screen against 6.0617 (or existing cold real-pair kbench first
+if convenient). No numerical changes, no compact-prefix/LSX bundled into B3.
 
----
+**Draft blockers at 19:20:** nd_model.c was edited but nd_model.h field insertion
+asserted; the copy refers to cap_end outside its scope. Preserve the draft,
+add its actual fields and compute a valid disjoint slot; do not launch a stale
+ELF after a failed patch/build. The researcher has been told both blockers.
 
-## RESEARCHER STATE -- 2026-09-26 ~07:30Z (runs #729-#730: one negative, one small keep, one repair)
+History matters: #49 staged the old engram span; #55's second SEPARATE allocation
+lost -1.15%; #129-135 varied the WHOLE span. None measured this fixed-allocation
+relocation on the current assembly stack. Changed premise is coverage with
+unchanged footprint. A null should close this specific variant promptly.
+Even if staging is null, the disjoint arena can enable B2 without snapshot surgery.
 
-**CV2W (two-channel ordered conditioning reduction) DISCARDED at -0.17 % (#729).** Kernel
-correct and proven live (CV2W selftest bad=0, `cv2=1`, `n1_align=0` - the E66 lesson
-satisfied), arithmetic order-preserving per channel, and still slightly negative: the
-conditioning reduction is limited by its 768 dependent madds per channel, so halving the
-load count does not pay. Measured on the CONTIGUOUS row layout, so the family is closed on
-its own terms rather than by inheritance from the old stride-8 cond2 result.
+## Keep the useful closures; retire the invalid ones
 
-**E72b KEPT (+0.19 %, #730): the conditioned-scale construction now happens inside the
-parallel SiLU slices** instead of a separate whole-row pass, riding the split the callback
-already had, with E71's kernel retained and the per-element fold order unchanged. Seed
-line reads **6.0617** (screen, sub-bar but positive; full gate owed if quoted).
+* CV2W on current contiguous cond_v: -0.17%, exact and live (#729). No repeat.
+  E71/E72b already landed; scale-in-slice is not a new experiment.
+* E72 attention input ownership: 0.00% (#722); E74 residual MAC: -0.03% (#721).
+  Keep both kron2 variants, old QK/wide schedules, unchanged CQ2 schedules,
+  private LUT copies and engram overlap down.
+* #742's 33 instructions / 16.4 cycles "dual-issue floor" is unproved.
+  #330's table explicitly used SHIPPING tie1n: cold 42.93-42.94 cycles/word,
+  resident 37.70. Recover scope/core count before inferring IPC. One packed
+  representation's instruction count is not a bound over all lossless layouts.
+* #723 retracted the 6.3% "dead code" story: ND_REQ_DIAG remained active in
+  compiler flags. Check source, app/assembly/config provenance and actual
+  diagnostics. At 19:16 B3 still defined that flag but had no matching source
+  hooks/ELF diagnostic strings; don't infer live printing from the flag alone.
+* eW78/eW79 moved console work outside clocks: accounting/transport evidence.
+  Keep clocks fixed in compute experiments; more print hunting and tiny
+  RoPE bookkeeping are low priority.
+* #647 associates RX-ring installation with the two frozen failures; it does
+  not prove a timer mechanism or authorize new goldens. Host agreement and
+  deterministic outputs do not replace the required device quality gate.
 
-**Repair note (B1):** reverting CV2W with a line-range deletion overshot and removed the
-PV/kron declaration block; the tree was rebuilt from the compiler's own undefined-symbol
-list and now builds as `f02762ca5dbb`, which differs from the measured `bae5184f9ca7` by
-declarations only. **B1's next lane must re-anchor with a screen before any candidate is
-priced on it** - a declaration-only diff still invalidates the tree as a baseline.
+**Reserve only:** compact prefix KV could save 791,040 B:
+(2*384-143-213)*8*(96+128+2*2*4). The tier arena is simpler and larger, so do not
+start snapshot surgery first. Preserve any draft. If ever needed, compact only
+per-layer live KV/scales, preserve histories/metadata, guard pos==sink && pos<=window,
+keep full-copy fallback, and validate alternating schemas plus long continuation.
+Memory-only evidence is not a decode speed gain.
 
-**Next lanes:** (1) B1: the CQ2 uint16-offset/LSX kbench probe (predecode one projection
-into uint16 group-LUT byte offsets, then l16ui + LSX + the same add chain; ~24 body
-instructions per eight pairs against 32 plus a packed-word load; 442,368 B PSRAM for a
-576x768 matrix) - target support and the extra-load tradeoff need the existing kbench with
-exact mapping/row/group checks, and resident-cu is the ready fallback if the probe cannot
-be prepared promptly; (2) B2: full gate on the 6.0617 tree when a number is wanted;
-(3) B3: hardware blocker confirmed (host kernel shows the flash USB cycling ~every 12 s,
-so node presence is not recovery) - prepare the resident-cu reserve for a healthy turnover.
+Next mentor: check B1's actual scrow dispatch/result; get B3 past its concrete
+draft errors with a proven-disjoint arena; ensure B2 moved from the now-settled
+LSX probe to a COSTED offset kernel. Restore three distinct active lanes.
+Read raw verdicts/current artifacts, not carried dashboard metrics or closure prose.
 
 ---
 
-## RESEARCHER STATE -- 2026-09-26 ~08:20Z (runs #731 + B1 re-anchor)
-
-**Seed line gated at 6.0617 (#731):** decode 6.0617, ext 5.9877, think 4.65, min 5.83,
-18/20 (the two #647 goldens) = **+14.29 %** over the 5.3033 pin - the campaign's best
-fully-gated reading, carrying the lane-block sweep, the E68/E69 lifetime work, E71/E72b
-conditioning work and the deferred console echo. Host gates owed on this exact image if
-the number is to be submitted.
-
-**B1 re-anchored after the repair: 5.7983** (its pre-repair same-mode value was 5.7967),
-so the declaration-only reconstruction of `f02762ca5dbb` is performance-neutral within the
-quantum and the tree is usable again - **its own same-mode baseline is 5.7983**, which is
-what any B1 candidate must be priced against.
-
-**Next lanes:** (1) B1: the CQ2 uint16-offset/LSX kbench probe (predecode one projection
-into uint16 group-LUT byte offsets, `l16ui` + LSX + the same add chain; ~24 body
-instructions per eight pairs against 32 plus a packed-word load; 442,368 B PSRAM for a
-576x768 matrix) with exact mapping/row/group checks against its 5.7983 anchor, resident-cu
-as the ready fallback; (2) B2 host gates if the 6.0617 number is to be submitted;
-(3) B3 remains hardware-blocked (flash USB cycling ~12 s), resident-cu reserve prepared for
-a healthy turnover.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~09:20Z (run #732: LSX is not there; best line packet complete)
-
-**CV3W (uint16-offset / LSX predecode) CLOSED ON CAPABILITY, not on cost (#732).** The
-probe ran `lsx f0, a2, a3` three times on the device against a known float table:
-`LSXPROBE ok0=1 idx1_matches=0 idx2_matches=0 v1=0.0000 v2=0.0000`. Index 0 returns the
-right value (so the opcode is decoded and does not trap), but indices 1 and 2 return ZERO -
-neither the plain C index nor any shifted variant. The address arithmetic the mechanism
-needs is therefore not available on the ESP32-S3 as documented, and no amount of body
-scheduling can rescue it. The assembler accepts the opcode, so this could only be settled
-on the board - which is exactly what the mentor's addendum asked for. Probe code removed;
-B1 restored byte-exactly to `f02762ca5dbb` (anchor 5.7983).
-
-**The campaign's best line is now a complete submission candidate:** seed `d91fd5f048ca`
-= **6.0617 gated** (ext 5.9877, think 4.65, min 5.83, 18/20 with only the two #647 goldens)
-**plus host gates 19/19 with logit_max_delta 5.341e-05 unchanged and top1 10/10** on the
-same image - device breadth and host quality on one tree, +14.29 % over the 5.3033 pin.
-The shippable line stands at 5.7967/5.7983 (+9.31 %) with the same gate structure.
-
-**What remains:** (1) the owner's decision on the two ring-related goldens - the only item
-with real upside, with evidence in #647/#711/#712/#718/#719; (2) B3's hardware blocker
-(flash USB cycling ~12 s; node presence is not recovery) with the resident-cu reserve
-prepared for a healthy turnover; (3) optionally B2's capture (`make capture`) if the owner
-wants the submission packet tightened. Every lever family this campaign built is now
-either kept-and-gated or closed by measurement or capability.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~09:55Z (run #733: capture blocked by board state; two of three boards need a physical check)
-
-**The owed behavioural capture of the seed-line candidate did not complete, and the cause
-is board state, not code.** The capture runner flashed the 6.0617 tree successfully
-(flash_rc=0, hash line present, engine `d91fd5f048ca`) and then waited for `EVT READY`;
-board 2's console produced **zero bytes** - no boot banner at all - through the scripted
-600 s wait and a further 280 s manual read with the documented DTR/RTS discipline. Nothing
-was reflashed, no loop was attempted, no process holds the lock, and the tree is unchanged.
-
-**Hardware picture at this point: board 3 has the visibly cycling USB node (refreshed again
-at 17:40) and board 2's console is silent after a successful flash, so TWO of three boards
-need a physical/host-side check before more device work.** Board 1 last read 5.7983 and is
-otherwise the healthiest.
-
-**Nothing measured is in doubt:** seed `d91fd5f048ca` 6.0617 gated + host 19/19, shippable
-`f02762ca5dbb`/`bae5184f9ca7` 5.7983/5.7967 with host 19/19. The only outstanding capture
-debt is the behavioural suite on a candidate image.
-
-**Harness note:** the existing capture lane only handles the ACCEPTED image on board 1 (it
-resets the worker from the branch and copies sources from the main checkout). Capturing a
-candidate in place is a new path and must start with a board-health check - a successful
-flash does not imply a live console.
-
-**Next window should begin with hardware triage, not another device experiment**, unless the
-owner's decision on the two ring-related goldens arrives first.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~11:00Z (run #734: the conditioning levers compound on the shippable line)
-
-**E71 + E72b ported to the shippable line and they are ADDITIVE: 5.8283 vs its own 5.7983
-anchor = +0.52 %** (prefill 6.1283 vs 5.9517, min 5.62, boot 5.924, 6/6 exact). On the seed
-line E71 was +0.39 % and E72b +0.19 %; together +0.52 % here, which matches their different
-shapes - E71 shortens each of the seven conditioning passes, E72b removes the separate pass
-altogether - so the two do not overlap. Shippable line: **5.8283 = +9.90 %** over the
-5.3033 pin on a restricted screen; full gate + host gates owed on this tree.
-
-**Hardware:** board 2's console is still silent (one further 20 s read, zero bytes, no loop
-attempted) and board 3's flash node remains the cycling one - two boards need a physical
-check before more device work there. Board 1 is healthy and is now the only lane that ran
-this window.
-
-**Lane economy note:** with B2 and B3 down, the productive move is to keep B1 discovering
-and re-anchor its own numbers after each change (its tree changed, so the 5.7983 anchor
-belongs to the pre-port image and the new anchor is 5.8283).
-
-**Next:** (1) full gate + host gates on the 5.8283 shippable tree if that number is to be
-quoted; (2) port any remaining seed-only measured lever - with E71/E72b done, the seed
-line's extra content versus shippable is the quant/asm stack itself, which is a larger
-question than a lane; (3) hardware triage remains the gate to using B2/B3 at all.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~12:00Z (run #735: both lines fully gated at their newest revisions)
-
-**Both packets complete, both at their best-ever numbers:**
-* **seed `d91fd5f048ca` 6.0617** (ext 5.9877, think 4.65, min 5.83, 18/20) + **host 19/19** =
-  **+14.29 %** over the 5.3033 pin.
-* **shippable `787a58302f52` 5.8283** (ext 5.7638, think 4.52, min 5.62, 18/20) +
-  **host 19/19** = **+9.90 %**.
-Both carry the same kept families (lane-block sweep, E68/E69 lifetime, E71/E72b conditioning,
-deferred console echo) and both are outstanding only on the owner's disposition of the two
-ring-related goldens.
-
-**Hardware:** board 2's console still returns zero bytes (single probe, no loop) and board
-3's flash node changed mtime again inside the window, i.e. the USB path is still cycling -
-**both need a physical check; board 1 is the only healthy lane and it is now idle.**
-
-**Lane economy:** with one healthy board and every lever family either kept-and-gated or
-closed by measurement/capability, the productive options are (1) hardware triage for B2/B3,
-(2) the owner's decision on the two ring-related goldens (evidence in #647/#711/#712/#718/#719),
-(3) optional `make capture` on the shippable tree via the adapted candidate-capture runner
-(`/root/board-pool/capture_b2_candidate.sh` shows the shape; board 1 would need the same
-adaptation, and it must start with a board-health check).
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~12:40Z (run #736: the serial path itself is down for all three boards)
-
-**Correction to #733's story:** board 2's console silence was NOT board 2's fault. Board 1 -
-the last healthy lane, which had just completed a full gate plus host checks - was flashed
-successfully with the 5.8283 tree and its console then returned **zero bytes** as well
-(600 s scripted wait, then a 30 s manual read with the documented DTR/RTS discipline). One
-check across all three device nodes shows every console silent while the node mtimes keep
-refreshing (board 1 console 17:56:49 / flash 18:00:00, board 3 flash 18:06:42), i.e. the
-USB path is re-enumerating without delivering data. **This is one host/container serial
-state, not three board faults.** No further probes were spent and nothing was reflashed.
-
-**All measured numbers stand untouched:** seed `d91fd5f048ca` **6.0617 + host 19/19**, and
-shippable `787a58302f52` **5.8283 + host 19/19** - both packets complete, both outstanding
-only on the owner's disposition of the two ring-related goldens.
-
-**Next window must start with host-side serial/USB triage on all three boards** (a
-container restart or a host USB reset is the natural first move; the container's view of
-`/dev/needle-pi` is a mount, so node presence there proves nothing). Only after a console
-answers should device work resume, and the first device item is the owed behavioural
-capture, whose runner shape is preserved at `/root/board-pool/capture_b1_candidate.sh`
-(start with a board-health check; a successful flash does not imply a live console).
-
-**Record correction (same window):** the capture script did NOT exit early as first
-reported - it was still inside its 600 s ready-wait and then concluded cleanly with
-`ready=0` / `BOARD_NOT_READY`. The diagnosis is unchanged and now carries the script's own
-verdict: the console delivered nothing for the whole window, so the capture is blocked on
-the serial path, not on the candidate image. All three device nodes remain silent with
-refreshing mtimes; host-side USB triage is the gate to any further device work.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~13:30Z (run #737: board 3 is HEALTHY again, and 6.0617 is cross-board confirmed)
-
-**Board 3 was never hardware-blocked - its image was.** Reading its console showed a reset
-loop: boot, `EVT ready`, then `RTCWDT_RTC_RST` / `TG1WDT_SYS_RST` during priming with
-`internal_free=1311` (an SRAM-starved build of the old E67-only tree), and each reset
-re-enumerated its USB - which is exactly what produced the "cycling flash node" that had
-been read as a failing port. Flashing a known-good image took one retry and the board has
-since run a full screen with **no resets**.
-
-**Cross-board confirmation:** board 3 carrying board 2's seed-line tree (`d91fd5f048ca`)
-reads **6.0617 / prefill 6.3967 / min 5.83 / 6-6 exact / internal_free 13967** - identical
-to board 2's numbers to the digit. The campaign's best packet is therefore confirmed on a
-second board, not merely a second run, and board 3 is a usable lane again.
-
-**Triage order extracted (cost: most of a window):** (1) read the console and look for
-reset lines; (2) if it is looping, reflash a known-good image; (3) only then suspect the
-port/host path. A watchdog loop and a dead USB path are indistinguishable from the host
-side, and I twice reported the first as the second.
-
-**Current pool:** board 3 healthy with the 6.0617 tree (screen; full gate + host gates
-owed if that board's number is quoted); boards **1 and 2 remain console-silent** (zero
-bytes on repeated single reads with the documented DTR/RTS discipline) and still need
-host-side USB triage - their trees are untouched (`787a58302f52` and `d91fd5f048ca`).
-Both packets stand: seed 6.0617 (+14.29 %), shippable 5.8283 (+9.90 %), each with host
-19/19 on its own tree.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~14:10Z (run #738: serial path down for all three boards - host action required)
-
-**Board 3's console went silent too, so the pool is now fully offline for device work.** Its
-capture attempt flashed successfully (`flash_rc=0`, hash line present, engine
-`d91fd5f048ca`) and then reported `ready=0` / `BOARD_NOT_READY` after the full 600 s window
-plus a further 25 s single read returning zero bytes. Board 3 had been healthy minutes
-earlier (its screen 6.0617 completed at 18:2x), so this is not the board and not the image:
-all three consoles are silent while every node mtime keeps refreshing (b3 console 18:23:24 /
-flash 18:30:08), i.e. host-side re-enumeration without delivery. The container's
-`/dev/needle-pi` is a mount, so node presence there proves nothing.
-
-**What is NOT in doubt:** seed `d91fd5f048ca` **6.0617 + host 19/19**, cross-board confirmed
-on board 3 (#737); shippable `787a58302f52` **5.8283 + host 19/19**. Both packets complete
-on their own trees, both outstanding only on the owner's disposition of the two
-ring-related goldens.
-
-**Required before any further device work: host-side USB recovery** (container restart or a
-host USB/udev reset). The container cannot fix this from inside. Once a console answers:
-(1) verify with a single read, (2) then run the owed behavioural capture
-(`/root/board-pool/capture_b3_candidate.sh` is the preserved runner shape), (3) then resume
-discovery.
-
-**Triage rules learned this window (both cost board time):** a watchdog reset loop is
-indistinguishable from a dead USB path unless the console is read for reset lines, and a
-successful flash says nothing about the console being live - so read the console before
-concluding anything about a port.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~14:45Z (run #739: the in-window-printing class is exhausted; pool still offline)
-
-**Audit result (host-side, no board time):** the class that paid twice - printing inside the
-firmware's own timed windows (eW78's per-token TOK echo, +0.35 % on the shippable line;
-eW79's per-token prefill progress line) - is now **empty on the measured path**. main.c's
-decode loop contains only the sampler, the detokenizer, the segment bookkeeping, the text
-copy and the model step; the prefill loop contains only the model step; every summary and
-verdict line prints after its clock stops. The only prints still inside a window are two
-terminal error paths (`no_legal_token`, and the truncation notice that fires only when the
-answer hit MAX_NEW and is invalid anyway). The engine has no hot-path printing at all -
-every `printf` in `nd_model.c` is an open-time selftest verdict or a tier/dir diagnostic,
-and `nd_quant.c`/`nd_sample.c`/`nd_grammar.c` contain none.
-
-**Pool:** one bounded read per board returned **zero bytes on all three consoles** (no
-loops, nothing reflashed), so device work remains blocked on host USB recovery - a
-container restart or host udev/USB reset. The container cannot fix it from inside.
-
-**Packets stand unchanged and complete:** seed `d91fd5f048ca` **6.0617 + host 19/19**
-(cross-board confirmed on board 3), shippable `787a58302f52` **5.8283 + host 19/19**; both
-outstanding only on the owner's disposition of the two ring-related goldens. The owed
-behavioural capture is the one open evidence item and needs a live console; its runner shape
-is preserved at `/root/board-pool/capture_b3_candidate.sh`.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~15:20Z (run #740: per-token overhead class closed by numbers; pool still offline)
-
-**Audit result (host-side):** the per-token bookkeeping path is closed by inspection with
-numbers, the way the in-window-printing class closed in #739. Items and their sizes:
-(1) rotary tables - 24 positions x (cosf + sinf) ~ 17k cycles ~ 0.07 ms ~ **0.04 %** of a
-170 ms token, and the recurrence that would remove it is a rounding change (incremental
-rotation accumulates error) so it is forbidden by the byte-exact goldens and the fidelity
-veto; (2) embedding dequant + scale (already `nd_mul4w`) + the four-lane broadcast ~0.01 ms;
-(3) the engram step's 15.2 ms is the two 2-bit LUT GEMVs, already closed; (4) everything else
-in the step is the model's real work.
-
-**Hardware unchanged:** all three consoles silent on one bounded read each; no loops, nothing
-reflashed. Device work still needs **host USB recovery**.
-
-**Packets stand, complete:** seed `d91fd5f048ca` **6.0617 + host 19/19** (cross-board
-confirmed on board 3, #737), shippable `787a58302f52` **5.8283 + host 19/19**; both
-outstanding only on the owner's two-case disposition. The owed capture is the one open
-evidence item and needs a live console (`/root/board-pool/capture_b3_candidate.sh`).
-
-**Campaign position for the next window:** every lever family is kept-and-gated or closed by
-measurement/capability; two overhead classes are now closed by audit with numbers; the
-remaining work is (a) host USB recovery + the capture, (b) the owner's decision, (c) a new
-*mechanism* rather than another pass - and the cost model says the dominant 2-bit stream is
-neither memory- nor compiler-limited, so such a mechanism would have to change what is
-computed, which the frozen-quality constraints forbid.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~15:55Z (run #741: owner packet refreshed; pool still offline)
-
-**`.auto/OWNER_ACCEPTANCE_PACKET.md` now leads with the current candidates** (host-side work,
-no device time): seed `d91fd5f048ca` **6.0617 (+14.29 %)** and shippable `787a58302f52`
-**5.8283 (+9.90 %)**, each with device 18/20 (only the two demo-timer goldens, delta 52),
-extended/think/min_case, host 19/19 with fidelity unchanged, the seed line cross-board
-confirmed on board 3, plus the full lever list with measured values, the closed families with
-their reasons, and the blockers. The single owner decision is stated with its evidence: keep
-the lossless RX ring and re-baseline/replace the two cases, or drop the ring and lose the
-lossless-input fix and the 20-case suite.
-
-**Pool:** still offline - all three consoles silent on the last bounded probe (host-side USB
-re-enumeration without delivery). Device work resumes only after host USB recovery; the first
-device item is the owed behavioural capture (`/root/board-pool/capture_b3_candidate.sh`),
-which must start with a console read.
-
-**For the next window, in order:** (1) host USB recovery; (2) capture on the first board whose
-console answers; (3) the owner decision; (4) if more speed is genuinely wanted, it needs a new
-mechanism rather than another pass - every family is kept-and-gated or closed by measurement
-or capability, and two overhead classes are now closed by audit with numbers attached.
-
----
-
-## RESEARCHER STATE -- 2026-09-26 ~16:30Z (run #742: the dominant path is proven to be at the ISA floor)
-
-**Closure derived from the source, not from memory.** The live 2-bit walker's hot body is the
-`W8D` macro in `engine/src/lut2_tie728.S`: per 32-bit weight word it is exactly
-**8 lsi + 8 extui + 8 addx4 + 8 add.s = 32 instructions**, plus one word load - **33 per 16
-weights (2.06 per weight)**. Every one is irreducible on this ISA: the pair table is the
-largest granularity that still fits a cache line (the quad-table variant measured 38 % slower),
-a lookup needs extract + scaled-index form + load because there is no base+scaled-index load,
-8 lookups cover 16 weights because each entry folds two codebook products, and the 8 adds ARE
-the accumulation. Field cost is ~16.4 cycles/word ~ 2 instructions/cycle = dual-issue
-saturation. **The phase that is 59 % of the token is at the ISA floor**, which is why every
-load-form, scheduling, register and layout attempt there came back neutral or negative: there
-is no instruction left to remove. The same walker serves the engram's GEMVs, and
-`nd_cq_gemv_lut2` already splits across both cores, so there is no idle-core lever either.
-
-**Pool:** all three consoles silent on one bounded probe each; no loops, nothing reflashed.
-Both packets stand: seed `d91fd5f048ca` 6.0617 (+14.29 %, cross-board confirmed), shippable
-`787a58302f52` 5.8283 (+9.90 %), each with host 19/19.
-
-**Campaign position:** the lever surface is now closed from four directions - kept-and-gated
-levers, measurement negatives, capability limits (LSX absent), and this ISA-level instruction
-budget for the dominant phase. Remaining work is host USB recovery, the owed capture, and the
-owner's two-case decision.
+## RESEARCHER STATE -- 2026-09-26 ~18:20Z (run #744: LSX is REAL; scrow is a small negative)
+
+**LSX capability: CONFIRMED, #732 retracted.** The first probe passed indices 0,1,2 but
+LSX takes a **BYTE offset** (Espressif's FIR multiplies by 4 first), so 1/2 were misaligned
+- not evidence of absence. Corrected probe on an aligned table, byte offsets 0/4/8/60/64:
+`LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000`. **The uint16 offset-stream
+mechanism (`l16ui -> lsx -> add.s` in place of `extui -> addx4 -> lsi -> add.s`) is capable
+on this silicon; its remaining question is cost, and the kbench for that is the ready B2
+lane.** (Also: the 442 KB it needs should come from the tier tail, not a fresh allocation -
+post-prime PSRAM is only 50,088 B.)
+
+**B1's four-resident-accumulator scale fold: measured NEGATIVE at -0.09 %.** Bit-exact and
+live (SCROW selftest 64/64, `scrow=1`, 6/6 exact) but slower: keeping four cells in
+registers replaces E72b's independent whole-row passes (which the parallel split overlaps)
+with one serial eight-madd chain per tile, so the removed intermediate loads do not pay for
+the exposed latency. Two self-inflicted bugs were caught by the oracle first (`movi a7,1`
+is the denormal 0x00000001, not 1.0f; the row pointer never rewound per tile) - the first
+run's `bad=1024` and its speed were the fallback, not evidence. B1 restored byte-exactly to
+`787a58302f52`.
+
+**Ready lanes:** B1 free (5.8283 base), B2 free (6.0617 base; LSX cost kbench next - needs a
+real-row fixture with distinct LUT entries, several groups/rows and nonzero row offsets,
+then cold-PSRAM pricing and both cores), B3 free (the engram relocation draft needs its
+concrete blockers fixed: the header fields never landed, `cap_end` is not the end of the
+actual tier users, and the copy must use the specified slot coordinates with a disjointness
+assert and a byte-compare). Compact-prefix stays the reserve.

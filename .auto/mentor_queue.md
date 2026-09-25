@@ -264,3 +264,24 @@ avoided defect are in `.auto/exp92/`.
 **Owed:** host gates on both promoted trees; a combined-tree composition check (the two levers live
 on different boards today). **Also open:** B3's `qk_dot8` row-level differential (its arithmetic is
 statement-identical C, so the risk is lower than the asm lane's, but the check is still owed).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~07:00Z (run #761: the two seed-line levers COMPOSE - new best 6.1100, +0.80 %)
+
+| tree | decode | prefill | min | device | internal_free |
+|---|---|---|---|---|---|
+| seed pin | 6.0617 | 6.3967 | 5.82 | 18/20 δ52 | — |
+| + group `loop` (B2) | 6.0883 | 6.4283 | 5.86 | 18/20 δ52 | 11,795 |
+| + `qk_dot8` (B3) | 6.0750 | 6.41 | 5.85 | 18/20 δ52 | 12,035 |
+| **both (B3, #761)** | **6.1100** | **6.4483** | **5.88** | 6/6 (screen) | 12,035 |
+
+**+0.80 % against the pin, versus +0.66 % for the sum of the halves** - additive to slightly
+super-additive, which is worth recording because most of this campaign's compositions have been
+sub-additive. Prefill and min_case are both campaign bests and no monitor regressed.
+Transplant was clean (B2's inert edit to the non-dispatched `.Lt1_*` kernel was reverted first, so
+the two files differ only by the live `.Ltn_*` change). Assets refreshed: `.auto/exp90` and
+`.auto/exp91` (md5-verified against the live workers), composition noted in `.auto/exp93`.
+
+**Owed:** (1) breadth promotion of the composed tree; (2) host gates on it; (3) the row-level
+differential for `qk_dot8` (loop half already green at chunk 1/12/24); (4) B1's `EG2` boot capture.

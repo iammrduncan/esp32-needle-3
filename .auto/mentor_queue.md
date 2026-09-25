@@ -310,3 +310,37 @@ together - each was sub-bar alone, and this campaign has crossed the bar before 
 combining two measured sub-bar halves of the same phase; (3) with ~15.6 KB internal
 free, re-price the two RAM-gated ideas (16 KiB private LUT2 tables is now borderline
 feasible; phi row residency at ~18 KB/core is not); (4) B3 when its USB returns.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~14:20Z (runs #701-#702: the composition crossed 6.0)
+
+**Seed line at 6.0150 tok/s (screen) = +13.42 % over the 5.3033 pin.** The two banked
+sub-bar halves of the mHC lane phase - E65's tiled mix (+0.17 %) and E67's wide lanepre
+(+0.146 %) - clear the bar together: +0.22 % as an increment over E65 alone, +0.39 %
+over the line's E64-only pin. Bit-exact on device with both verdicts live
+(`lanemix_row=1 lanepre=1`), 6/6 exact. This is the #371 pattern again: two measured
+sub-bar halves of ONE phase are worth checking before either is deleted.
+
+**Both lines are now evidenced on their current trees except one item:**
+* shippable **5.7583 full gate + host 19/19** (B1, `0f0d3668d71f`) - complete.
+* seed **5.9917 full gate + host 19/19**; its newest composition tree
+  (`a003340489c2`, 6.0150 screen) still owes host gates and a full gate before it can
+  claim that number.
+
+**Budget note for the next session:** the seed line now has ~15 KB internal free, and
+the composition shows the lane phase still had ~0.4 % left in it. Two directions look
+worth a board and are cheap to try in this order: (1) finish the seed line's gates
+(host 19/19 is minutes; the full gate is the number the owner would see); (2) the same
+"two sub-bar halves" question on the OTHER phases that have one half banked and one
+still missing - the mix kernels now have `mul4w`/`lanemix4w`/`lanemix_row4`/`lanepre4w`
+and their guard pattern, so any other `dst[i] = k*src[i]` or `dst[i] += k*src[i]` loop
+in the block is a candidate to price; (3) B3 when its USB returns (it still carries E67
+alone, `b255280ba9a9`).
+
+**Standing rules earned this window:** an acceptance test is as likely to be the defect
+as the kernel (E65's first oracle pre-summed its weights; E64's first test raced across
+cores; E67's first kernel walked off its rows) - write the reference from the shipping
+statements and run it single-threaded; a kernel's call convention must be read off the C
+prototype, never copied from a neighbour; and a guard that cannot fire measures as a
+perfect null (E66 while `nx` was unaligned).

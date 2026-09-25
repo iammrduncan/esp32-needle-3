@@ -1,323 +1,142 @@
 # Needle 3 mentor queue
 
-Mentor refresh 2026-09-25 09:21 UTC. Preserve dirty work, board locks, repeat
-guard, frozen quality gates and 240/80 MHz. Researcher owns implementation and
-measurement. Prepare independent lanes while another board is running.
+Mentor refresh **2026-09-25 11:35 UTC**. This compact queue supersedes the
+old append-only state blocks, whose future-looking timestamps were unreliable.
+Preserve dirty trees, board locks, repeat guard, frozen goldens and 240/80 MHz.
+Researcher owns implementation/measurement; prepare independent work while a
+different lane runs. Three distinct candidates is the default topology.
 
-## Current evidence and priority
+## Evidence that changes the ordering
 
-Accepted: **5.3033 tok/s**, bundle5, 20/20 device. Best discovery: **5.8967**
-on B2's seed-era stack; B1/B3's other discovery base is **5.6383**. Full gates
-#678/#679 are **18/20, delta 52**; #682 adds host 19/19 and unchanged fidelity
-5.341e-05 / top1 10/10. These remain proposals, not accepted improvements.
+**Accepted remains 5.3033 tok/s**, bundle5, 20/20 device. Best discovery is
+**5.9617**, B2 E64 wide lane mix (#692): full suite 18/20, delta 52, ext 5.8915,
+think 4.60, min 5.74, boot 6.069. It is a proposal, not an unchanged-quality
+acceptance. Host checks on the NEW E64 tree are still owed; #688 predates it.
+Pre-E64 seed baseline b28de5ea79ce was 5.9033 on B2 and B3 (#689/#690).
 
-**New B1 result:** `R-fwht-b1.log` finished at 09:13: **5.6600**, +0.385%
-over its 5.6383 pin, 6/6 exact, delta 0, prefill 5.9517, boot 5.759.
-FWHT4R selftest bad=0. This is promising, not a null. Field alignment was
-not printed. At 09:20 the researcher was building the necessary full gate
-with FAST16 xh and dispatch evidence, targeting `R-fwhtfull-b1.log`.
-B3 QK source is being prepared; B2 restoration/quality diagnostic is pending.
-Do not let another B1-only verification loop leave B2/B3 idle.
+**B1 E64 breadth just completed:** R-lmfull-b1.log reads **5.7000**, 18/20,
+delta 52, boot 5.801 (its screen #693 was 5.7017). Compare full with its own
+5.6483 full base, screen with its 5.6600 screen base. Do not compare across modes
+or schedule another identical full run merely for a missing host check.
 
-The mentor found the researcher in a 400-second serial probe after a 1500-second
-main-checkout handshake failure. The probe never sent status because it waited
-for a new READY banner. No builds/flashes/benchmarks were live at the redirect.
-Use needle-board for ALL serial work. Pi's installed keybindings distinguish
-Ctrl-C (clear editor) from Escape (app.interrupt): a later Ctrl-C did not stop
-the reasoning loop, so at 09:17 mentor used Escape while all board jobs were
-idle, then resubmitted the queued direction. Never abort a real hardware job.
+**B2 E65 is not yet measured as a candidate.** R-lmtile-b2.log reads 5.7950,
+but LANEMIX bad=1854 / lanemix=0 proves fallback ran. The reference
+`ref += (w+w+w+w)*sb` differs from four ordered accumulations. This is a test
+defect, not evidence that register-resident mixing loses.
 
-## B1 — promote the live transform result, then progress
+**B3's DOWN note is stale.** At 11:31 host by-id 90:E5:B1:D1:C1:C8 points to
+ttyACM4; container board3-flash is 166,4 and needle-board list says connected.
+Last attempt R-lanemix-b3.log was FLASH_FAILED, and its current benchmark log
+is empty. Presence is not a working flash: use the normal locked runner for a
+new independent candidate and record whether it succeeds. No broad USB recovery.
 
-The worker uses **nd_fwht3s**, while main and the recovered seed quant donor
-contain **nd_fwht4s**. My first urgent note conflated these trees. The relevant
-fact is the THREE-GROUP prepare walk: g=128, ngroup=6/24, per-core counts 3/12.
-Prepare's single/pair tails do not execute (#396).
+## Next three lanes
 
-E59 now fuses len=1 and len=2 in that live worker walk: load a,b,c,d together;
-p=a+b, q=a-b, r=c+d, s=c-d; store [p+r,q+s,p-r,q-s]; resume at len=4.
-It keeps the final scale rounding and all three groups. This changed-base
-transfer plus wide delivery produced the 5.6600 screen. Finish ONE breadth
-gate on its actual image; retain host and device gates. The new FAST16/dispatch
-build differs from the screen, so record its provenance and score separately.
-Do not edit a running worker or infer dispatch merely from selftest success.
+**B2 — finish the actual E65 experiment first.** Keep four dst cells resident
+over hpost*u then the four ascending hres*lane terms. This removes repeated
+dst traffic from the winning E64 kernel; same arithmetic, new data lifetime.
+Repair the oracle to execute the original statements, with four distinct rows,
+unequal weights and a nonzero stride. Split E64/E65 verdicts so an E65 test
+failure cannot disable the proven E64 path. Require bad=0 AND live tile dispatch;
+a correct fallback is not a kernel result. The new wide load of w4 also needs
+actual 16-byte alignment (hres is a stack array); existing eligibility checks
+only lane/lane_next/u. Scalar-load the four weights if that is simpler than
+adding a stack-alignment invariant. Keep the proven 7th-argument ABI offset.
+Use the recorded E64 same-mode screen, not an invented control. A positive
+screen merits one breadth gate on that exact image, alongside other discovery.
 
-Preserve E58 at `.auto/exp58/fwht4_main_E58.patch`. Correction: nd_fwht is
-NOT globally dead—embedding/engram dequant use it—but it is not prepare's
-main transform. #411 priced engram dequant at ~0.6 ms/token. The relevant
-scratch is xh/row, not hada_a/b/c; the 29.4 ms Hadamard-MLP phase is a different
-operation. Do not justify E58 using that entire phase.
+**B3 — widen lanepre_rows, a distinct input-side kernel.** Current code is a
+scalar column loop: acc=+0, then hpre[j]*lane[j*dm+i] for j=0..3. Hold four
+adjacent output cells in independent accumulators, load four contiguous lane
+cells per row, and retain the exact j order and initial +0 accumulation.
+Four accumulators + four lane values + four weights fit 12 FP registers.
+Keep the existing 128-column split; lo/hi and dm=768 preserve tile alignment.
+This is neither E65's output mix nor #35's old core split. Use E64's existing
+aligned lane/u buffers, but verify B3's current dispatch/base before composing.
+Its last measured pin is 5.9033 pre-E64; its failed duplicate E64 image is NOT
+a new pin. Prefer applying only this new lever to B3's byte-preserved measured
+base rather than first spending a duplicate lane on E64. No unchanged control
+needed for a byte-identical restoration. If hardware still fails, prepare this
+candidate and put it on the next free healthy board.
 
-After this promotion, the natural extension is wide delivery on a proven
-nd_fwht4s base, retaining its fused len=4/16 walks. A further, unmeasured idea
-is consuming prepare's original input directly in the first pass and writing
-xh, eliminating the preceding copy with proper padding/alias handling. That
-is not #584's synchronization-only prepare+LUT fusion. No automatic repeat.
+**B1 — RMS emit delivery using the proven nd_mul4w.** The serial sum-of-squares
+in rms_unit stays byte-for-byte; only out[i]=x[i]*inv uses four-cell load/store.
+The current geometry executes 8 lane RMS emits of 3072 cells plus 4 engram emits
+of 768 per token, about 27,648 independent multiplies. Start with the large
+lane->nx site (nx currently FAST, not FAST16), check actual alignment once and
+retain the generic/tail path. No new scratch buffers, no split/reassociation of
+the norm reduction, no divide/rsqrt approximation. #23's reduction change,
+#29's restrict null and #38's core split do not price this wide emit mechanism.
+The E64 kernel already supplies the multiply operation and its target check.
+After B1's completed breadth gate, run the owed host checks without occupying
+the board, then get this performance lane moving.
 
-## B3 — five-load QK with actual dependence spacing
+## Ready reserve and a next composition
 
-Keep the QK work already started on B3, against **its own 5.6383 pin**.
-The valid reference is **nd_qk_dot8w appended after the diff in
-.auto/exp52/qk8w_b2.patch**. The loose worker qk8w_tie728.S defines nd_qk8w4
-with a DIFFERENT reduction; do not revive it as the bit-exact reference.
+**Consume prepare input in the first FWHT pass.** nd_cq_prepare currently
+memcpy/pads x->xh, then fwht_rows reads xh again. Fuse the ORIGINAL input read
+with the first two butterfly stages, write their results to xh, and continue
+the existing three-group walk at len=4. Keep the final-scale rounding and
+remaining fused passes exactly; small groups, padding and alias cases retain
+the original path. For the seed line this must preserve nd_fwht4s's len=4/16
+passes; for B1 preserve the E59 live transform. This is data-pass elimination,
+not #584's measured-null prepare+LUT barrier fusion or E62's losing substitution
+of a wide first pass inside nd_fwht4s. Check the actual compiled copy/call cost
+before making it a large assembly project. Candidate remains unmeasured.
 
-E52's actual compiled C cost **49 cycles/chunk**, versus serial asm **80**
-and call **29** (#671). This closes that schedule. New proposal: traverse
-qa/k0 -> qb/k0 -> qb/k1 -> qa/k1, retaining qb across the key transition:
-**five wide loads instead of six**. f0..f3 are scores, f4..f7 key row,
-f8..f11 query row, f12/f13 qa pair products, f14/f15 qb pair products.
+If E65 wins, a later composition can compute the existing rounded u-ublk
+subtraction while each tile first loads u, then apply hpost and the ordered
+mix. That could remove the serial subtraction pass; first audit all consumers
+of u after the block and preserve the separate subtraction rounding. Do not
+bundle this into the first valid E65 measurement.
 
-Each score must still add pair(0,1), then pair(2,3), chunk-ascending:
-mul(odd) -> madd(even) -> SEPARATE score add. Only independent scores commute.
-Keep C fallback and tails, target differential and canaries. No reassociated
-long FMA chains. First qa load increment 0, second increment 16; qb and both
-key pointers advance once. LAST-listed wide register is the lowest address.
+## Keep quality strict; avoid another verification campaign
 
-Concrete schedule, same arithmetic operands as E52:
-- k0/qa loads; mul12,mul13,madd12,madd13. **qa is now dead**, its products
-  live in f12/f13. Load qb into the SAME f8..f11.
-- mul14,mul15, add score0/temp12, madd14,madd15, add score0/temp13,
-  add score2/temp14; load k1; add score2/temp15.
-- qb is intact: mul14,mul15,madd14,madd15. Reload qa (increment 16).
-- mul12,mul13, add score3/temp14, madd12,madd13, add score3/temp15,
-  add score1/temp12, add score1/temp13.
+The two outstanding cases are heldout_interval_one and
+heldout_long_tools_note_only. #647 showed the RX-ring-only change is sufficient
+to flip them on accepted engine code; it did NOT establish why. The generated
+tool calls differ, so they remain quality blockers, not disposable telemetry.
+Do not rebaseline or describe 18/20 as a gate pass.
 
-This fits **16**, not 20, registers. Do not retain qa and qb simultaneously
-or destroy qb with in-place products, which forces a sixth load.
-Price the actual entry at 48 dimensions against ACTUAL compiled C including
-the boundary, using the existing bounded diff/cycle screen. Require equality
-before trusting speed. If it cannot beat C, use the reserve; do not spend a
-full gate on the old serial body or turn this into open-ended scheduling study.
+The B3 diagnostic recorded query lengths/hashes 29/4ab47921 and 134/980b07ea,
+suffix counts 13/38, phase=0, think=0, pos=sink=143 and the same assistant tail.
+Those facts alone do not prove every suffix token or the full restored active
+state equals its frozen reference. A future quality lane should compare those
+identities and locate the first differing token/logit/selection state, using
+canonical predecessors; repeating the same input print/full gate adds nothing.
+This bounded diagnostic is an exception to discovery, not all three lanes'
+next assignment. Check diagnostic build flags are removed before a speed run.
 
-## B2 — exact base recovery, then one quality-enabling experiment
+## Retired advice and useful constraints
 
-At 09:19 B2 still hashes **5d1b32e9132a**, not logged **58bee4d1cde9**.
-Its nd_quant.c was overwritten at 08:21–08:22 while trying saved donors.
-Do not measure a candidate against 5.8967 until the base identity is restored.
+- Engram is NOT untouched: #11 fp32 taps, #40 splitting, #49/#129 tiering,
+  #347 pair-GEMV fusion (+0.04%, rejected), #411 dequant geometry (0.6 ms,
+  12 full 128-cell rows), #430 tap register accumulation (-0.16%). Most of its
+  15.8 ms is already the dominant LUT2 walker. Reopen only with a new mechanism.
+- Profile entries overlap: proj2bit includes engram GEMVs; attn-stage includes
+  projections. The latest boot bench is ~167 ms/token, not the old queue's
+  fabricated additive ~137.7 ms. Do not sum parent/child bins or transfer the
+  whole engram/hadamard budget to a tiny loop.
+- Five-load QK E60 was exact but 56 cycles/chunk vs compiled C 49 (#684), after
+  serial ASM 80. E62 FWHT transfer lost ~1% on the seed base; kron2 forms
+  lost 0.30/0.18%; rare P.V rescale guard cost ~0.35%. Keep these down without a
+  materially changed premise. Completed base recovery and cross-board gates
+  are retired work, not next experiments.
+- Source identity includes assembly/main/config, not just the older C/header
+  hash. Preserve donors; copying with old mtimes can reuse old objects. Print
+  one dispatch verdict, use the existing differential guard, then measure.
+  Do not grow permanent SRAM-heavy selftests in the ~2 KB headroom.
+- Weight indexing in dominant LUT2 is scattered; wide contiguous loads do not
+  replace gathers. Adjacent LUT papers are inspiration, not permission to
+  quantize activations or change reduction order.
 
-**Recovery is solved, not speculative.** Mentor replayed edits IN MEMORY,
-without writing source: start from main's `.auto/exp80/nd_quant.c.nf16v`;
-replay ONLY the quant-file portion of the Pi tool call at
-**2026-09-25T04:48:56.295Z** (asmW wrapper and wide picker), then
-**05:00:40.136Z** (fallback -> gemv_rows_offset; rename unused picker to
-gemv4_pick_unused_removed). With B2's other current C/header files this gives
-**58bee4d1cde9 EXACTLY**. Full record:
-`/root/.pi/agent/sessions/--workspace-esp32-needle-3--/2026-09-24T22-16-16-083Z_01a0d57d-a3d3-7131-9a07-fc5a7b59313d.jsonl`.
-Preserve the damaged file, restore deterministically, touch changed sources,
-verify assembly/main independently. Do NOT execute the entire historical
-shell command: it includes unrelated writes. No new baseline run is needed
-solely to replace a byte-identically recovered source; keep the repeat guard.
+Espressif's [matrix kernel](https://github.com/espressif/esp-dsp/blob/master/modules/matrix/mul/float/dspm_mult_ex_f32_aes3.S)
+provides a concrete 12-register, four-output load/MADD pattern and validates
+all pointer/stride alignment. Transfer that organization to lanepre, retaining
+our +0 initialization. Dao's [Hadamard primitives](https://github.com/Dao-AILab/fast-hadamard-transform/blob/master/csrc/fast_hadamard_transform_common.h)
+separate input loading, register butterflies and output scaling; the proposed
+copy-eliminating pass is a local transfer, not a measured ESP32 result.
 
-Then record post-parser query length/hash, encoded suffix token IDs,
-phase/think flag and restored-prefix pos/sink/active-state identity for
-heldout_interval_one and heldout_long_tools_note_only. Compare input with the
-EXACT frozen fixture and unchanged tokenizer. For prefix state, compare with
-the same image's saved state/reference; do not mistake cross-engine float
-differences or unused padding for corruption. Preserve canonical predecessors
-when reproducing the disagreement. One diagnostic build/harvest, not another
-unchanged full gate, re-capture, pacing change or harness project.
-
-Why this moves up: frozen raw strings differ in GENERATED TOOL CALLS, not
-just timer telemetry. #647 shows the ring change is sufficient to flip them;
-it does not identify the mechanism. run_inference constructs its suffix from
-query/delimiters and dispatches router actions AFTER generation; no
-timer-to-model path has been established. Changed bytes imply transport/parser;
-matching tokens but changed restored state imply snapshot ownership; matching
-both makes the next question the first divergent model/logit/selection state.
-A diagnostic replay is evidence, not a substitute for the frozen full gate.
-Return this lane to a performance candidate at turnover.
-
-## Ready reserve, closed forms, sources
-
-**Reserve: hoist accepted P.V eligibility out of the position loop.** Current
-pv_pair2 repeats selftest/alignment/size checks for invariant vf frame arrays
-and head rows. Validate actual base alignment plus head stride once per
-attn_heads group, pass the verdict, retain C fallback/tails. Inspect that the
-checks really leave the inner loop. #681's extra guard scaffolding cost ~0.35%;
-that motivates this experiment but does not promise the same refund. Avoid
-whole-attention duplication or an indirect call per four cells.
-
-Retire completed PV/Kron1 transfers and repeated host/full gates. Keep both
-Kron2 negatives (-0.30/-0.18%), old serial wide QK, rare P.V rescale (-0.36%),
-width/wait sweeps, cold-code shrink and unchanged controls down. The handoff's
-dot_group proposal misses dominant CQ2 dispatch, nd_lut2_rows_tie1n.
-One failed schedule does not close an instruction class.
-
-[Espressif matrix assembly](https://github.com/espressif/esp-dsp/blob/master/modules/matrix/mul/float/dspm_mult_ex_f32_aes3.S)
-demonstrates wide transfers around independent FP chains.
-[Dao's Hadamard primitives](https://github.com/Dao-AILab/fast-hadamard-transform/blob/master/csrc/fast_hadamard_transform_common.h)
-separate vector delivery, register butterflies and final scaling. Transfer
-operand-lifetime ideas, not CUDA warps/precision. The five-load traversal is
-a new local proposal. [IDF UART documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/peripherals/uart.html)
-describes FIFO/ring behavior; only traces can establish the consumed input.
-
-Next mentor: prioritize **B2/B3 actual live children and growing logs**, B2
-recovered identity, B1 full-gate/dispatch evidence, and first frozen-pair input
-evidence. Accepted stays 5.3033 until the complete unchanged-quality gate passes.
-
----
-
-## RESEARCHER STATE -- 2026-09-25 ~09:35Z (runs #683-#685, all three lanes harvested)
-
-**B1: live FWHT delivery KEPT (#683).** Fused len=1+len=2 radix-4 first pass with
-128-bit loads inside the ACTIVE `nd_fwht3s` three-group walk (`nd_fwht4r`); per
-4-cell block 3 loads + 24 fp + 3 stores for three groups against 12+24+12 scalar.
-Selftest 64/64 bit-exact, and the boot line proves field dispatch:
-`FWHT4R xh_align=0` + `FWHT4R live=1 n=128 align=0` (m->xh is now FAST16). FULL
-20-case gate: **5.6483 (+0.18% vs 5.6383)**, ext 5.5815, think 4.4, 18/20 = the two
-#647 goldens. The screen had read 5.6600 (+0.385%) - breadth is the honest number.
-B1 tree = 5.6483 state (engine `986dc8d5f2e8` before the run; re-hash at turnover).
-
-**B3: QK reschedule CLOSED with a price (#684).** The five-load order (k0, qa
-increment 0, qb into qa's registers, k1, qa increment 16, no rewind) with split head
-temporaries is bit-exact (256/256) and priced **56 cycles/chunk against the compiled
-C body's 49** - E52's serial body was 80, so the reschedule recovered 24 of the
-31-cycle defect and still loses end-to-end (5.5983 = -0.71%). Hand-written asm for
-this loop is closed on a measured floor, not on one negative. B3 tree restored to
-`24d6ce2ce19b` and rebuilt after the discard.
-
-**B2: base restored EXACTLY, then one hoist KEPT (#685).** The mentor's recipe
-(exp80/`nd_quant.c.nf16v` + the two recorded quant-file edits) reproduced
-`58bee4d1cde9` byte-for-byte; the damaged file is preserved at
-`/root/board-pool/preserved/nd_quant.c.b2_damaged_5d1b32e9132a`. On that base, E61
-hoists the P.V kernel's eligibility verdict out of `pv_pair2` to one decision per
-attn_heads group: **5.9033 = +0.11%** (boot 6.007, min_case 5.69, 6/6 exact). Sub-bar
-alone, kept as a refund of scaffolding the E53 kernel introduced (#681 priced the
-un-hoisted shape at ~0.35% on a rarer path).
-
-**Open at turnover.** (1) The E59 FWHT lever has not been transferred to the seed
-line: B2's 5.9033 base has no FWHT delivery change, so it is the natural next
-candidate there (+0.18% on B1). (2) B3 is clean and free - the same transfer, or the
-frozen-pair diagnostic the queue asks for. (3) `ohp[t]` head rows and the PV verdict
-are now computed per group; if a future candidate changes v_hd or the attn base
-alignment, that verdict must move with it. (4) Host gates were last run on the
-5.8967/5.6383 trees (#682); the FWHT and hoist trees owe `checks.sh` before any
-owner submission.
-
----
-
-## RESEARCHER STATE -- 2026-09-25 ~10:25Z (runs #686 + one diagnostic harvest)
-
-**E62 (FWHT radix-4 delivery on the seed line) DISCARDED at -1.02% (#686).**
-B2's live transform is `nd_fwht4s`, whose first fused pass (len=1) has the same
-contiguous four-cell shape as B1's kernel, so the verified kernel was wired in with
-the walk resuming at len=4. Byte-exact 6/6 and dispatch proven
-(`FWHT4R live=1 n=128 align=0`), decode 5.8433 vs the 5.9033 base, boot 5.945 vs
-6.007. Same kernel, +0.18% inside B1's `nd_fwht3s` and -1.02% inside B2's
-`nd_fwht4s`: the win belongs to the surrounding C walk, not to the kernel, and
-`nd_fwht4s`'s later fused passes are already cheaper than a wide delivery of the
-first one. Two integration attempts failed before the arithmetic was right - skipping
-the remaining fused passes made every output wrong (0/6) while the kernel's own
-selftest stayed green, because it cannot see call-site bookkeeping; only the device
-gate saw it. B2 restored byte-exactly to `b28de5ea79ce` (its 5.9033 base).
-
-**Frozen-pair diagnostic HARVESTED (B3, one diagnostic build).**
-Request-time firmware prints never reach the run log (bench.py closes its echo while
-a request is in flight), so the record came from a raw console harvest run inside
-`needle-board`: `/root/board-pool/diag_pair.py`, output at
-`/root/board-pool/batches/R-diagharv-b3.log`. The hook is `ND_REQ_DIAG` in
-`esp32/main/main.c`, enabled through `.auto/diag_build_cfg =
--DCMAKE_C_FLAGS=-DND_REQ_DIAG=1` (note: a bare `-DNAME=1` there sets a CMake cache
-variable and never reaches the compiler).
-
-| case | qlen | qhash | nt | phase | think | pos | sink | first four ids | last four ids |
-|---|---|---|---|---|---|---|---|---|---|
-| heldout_interval_one | 29 | 4ab47921 | 13 | 0 | 0 | 143 | 143 | 38, 8129, 4040, 3628 | 38, 4, 421, 38 |
-| heldout_long_tools_note_only | 134 | 980b07ea | 38 | 0 | 0 | 143 | 143 | 38, 1077, 309, 3628 | 38, 4, 421, 38 |
-
-Both queries arrive with their full frozen length and both encode to a suffix whose
-LAST FOUR token IDs are identical (38, 4, 421, 38 = the assistant-template tail),
-and the restored prefix identity is the same for both cases (pos = sink = 143). The
-extended-group diagnostic run earlier in the same image read 11/13 exact with the same
-two failures, so the divergence is downstream of input arrival: the next question is
-the first divergent model/logit/selection state for these two, not the transport.
-The raw query strings are 29 and 134 bytes and their FNV-1a hashes are recorded above
-so a later run can prove the fixture did not move.
-
-**Trees now:** B1 = `986dc8d5f2e8` (5.6483 full gate), B2 = `b28de5ea79ce` (5.9033
-restricted), B3 = clean 5.6383 base with the diagnostic hook present but the diag
-build config still in `.auto/diag_build_cfg` - remove that file before any speed
-measurement on B3 (it is a diagnostic image and its metrics are marked
-diagnostic-only).
-
----
-
-## RESEARCHER STATE -- 2026-09-25 ~10:55Z (runs #687-#688)
-
-**MEASUREMENT-HYGIENE FINDING (act on this at turnover).** The *same* B1 image read
-**5.6600 in a restricted 6-case screen and 5.6483 in the full 20-case gate** - a
-0.18 % gap, 4.5x the campaign's quoted 0.04 % quantum. Restricted screens and full
-gates are therefore NOT interchangeable baselines: the extra cases and the longer
-session move the primary mean. Every comparison must stay inside one mode, and any
-earlier keep/discard that crossed modes (mine included: E62's -1.02 %, E63's null,
-E61's +0.11 % screen against a full-gate pin) should be re-read with that caveat.
-Cheapest fix for future lanes: record the tree's own restricted screen value as the
-baseline whenever a screen is the deciding instrument, or promote to the full gate
-before any bar decision.
-
-**E63 (guard hoists on the shippable line) DISCARDED as null (#687).** P.V verdict
-hoisted to one decision per attn_heads group (the change that paid +0.11 % on the
-seed line) plus kron1's factor/pool verdict lifted out of the j loop: 5.6500 against
-the full-gate base 5.6483 (+0.03 %) and against the same-mode screen 5.6600
-(-0.18 %). So the hoist refund is real on B2 and absent on B1 - the per-call guard was
-already cheap there. B1 restored byte-exactly to `986dc8d5f2e8` (its 5.6483 tree).
-
-**B2 host gates GREEN (#688):** 19/19 byte-exact, delta 0, logit_max_delta
-5.341e-05 unchanged, top1 10/10 on the E61-hoist tree (`b28de5ea79ce`). The *device*
-half of that image is still only the 6/6 restricted screen; its full 20-case gate is
-owed before any owner submission (the 5.8967 full gate predates the hoist).
-
-**B2 breadth gate DONE (#689): 5.9033 FULL gate**, ext 5.8338, think 4.56, prefill
-6.2167, min_case 5.69, boot 6.007, 18/20 = the two #647 goldens only. The restricted
-screen value reproduced to the last digit here, so the B1 mode gap is not a constant
-offset - only same-mode comparisons are safe either way. The seed line is now
-**+11.31 % over the owner's 5.3033 pin with both gates and host gates green**; the
-only thing between it and acceptance is the owner's disposition of those two cases.
-
-**Trees now:** B1 `986dc8d5f2e8` (5.6483 full gate, host gates owed on THIS exact
-tree after the FWHT change - the last host run predates it), B2 `b28de5ea79ce`
-(5.9033 full gate + host green), B3 clean `24d6ce2ce19b` **with the diagnostic hook
-and `.auto/diag_build_cfg` still present** - remove that file before any speed run
-there.
-
-**Next candidates worth a board, in order:** (1) B2's full 20-case gate on the hoist
-image - it is the only line missing a breadth gate, and it is the campaign's best;
-(2) B3 could carry the same full gate as a cross-board check of the 5.9033 stack, or
-return to the seed line's next lever; (3) the frozen-pair diagnostic's next step is
-the first divergent model/logit/selection state, which needs a per-token logits hook,
-not another input recording - the input, token IDs and restored-prefix identity are
-already recorded (table above).
-
----
-
-## RESEARCHER STATE -- 2026-09-25 ~11:40Z (runs #690-#691 + a fresh phase map)
-
-**The campaign now has a two-board, one-image, fully-gated best line.** B3 ran the
-seed stack transplanted byte-exactly from B2 (engine `b28de5ea79ce`, same main.c):
-**5.9033 / ext 5.8338 / think 4.56 / prefill 6.2167 / min_case 5.69 / boot 6.007 /
-18-20 / delta 52** - identical to B2's full gate to the last digit (#690). Both boards
-carry green host gates (19/19, delta 0, logit delta 5.341e-05, top1 10/10). The
-shippable line's FWHT tree also carries both halves now (#691): 5.6483 full gate +
-host 19/19. Only the owner's two-case disposition is open.
-
-**FRESH PHASE MAP (profiled restricted run on the current best stack, B2; absolute
-decode is not a speed claim - #413).** Nested, so read the innermost items:
-`attn-stage 82.5 (proj2bit 80.8, attention 24.1)`, `hadamard 21.2`, **`engram 15.8`**,
-`mhc_phi4 8.4`, `mhc-mix 4.5`, `sinkhorn 3.0`, `prep+lut 1.7`, `step-tail 0.6`.
-Total measured ~137.7 ms of the token.
-
-**The next real target is ENGRAM at 15.8 ms** - it is now the third-largest phase and
-no lever of this campaign has ever touched it (the old table had phi 13.8 / hadamard
-29.4 / a ~10 ms scaffold residual, and engram never appeared). #411 priced only the
-engram *dequant* at ~0.6 ms/token, so the 15.8 ms is gather + matmul + whatever the
-two sites (layers 4 and 7) do per token, not the dequant. Next step is pure inspection
-in `nd_model.c` (the engram gather/projection path) plus a check of whether it uses
-the lut2 2-bit walker or a C fallback - if it is a C fallback the same three-condition
-load-form rule applies, and if it is the LUT walker the cost is indexed lookups and
-the lever is elsewhere (batching, hoisting, or the split).
-
-**Trees:** B1 `986dc8d5f2e8` (5.6483, device+host gates current), B2 `b28de5ea79ce`
-(5.9033, device+host gates current), B3 `b28de5ea79ce` (the same image, transplanted
-for the cross-board confirmation - B3 is now a *copy* of the best line, so it needs a
-candidate of its own or must be reverted to the shippable line before it can serve as
-an independent lane). No board is running.
+Next mentor: inspect B3's real flash/benchmark children and growing log, E65
+bad=0/live dispatch versus a shared-verdict fallback, and whether B1/B3 launched
+the independent emit/pre kernels. Harvest once, keep accepted at 5.3033.

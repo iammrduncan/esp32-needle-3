@@ -3212,3 +3212,30 @@ b1 kvstage4 (staging 4 words/iter, nwords 12 = 3x4 exact), b2 DOT12W (QK dot 12 
 DOT8W was +0.53, P.V width saturated at 4 - this prices whether the QK curve has a third point),
 b3 selsweep4 (rescale sweeps 4 cells/iter). Width axis read-out after these: P.V saturated, QK
 4->8 won, staging/ sweeps TBD.
+
+# 2026-09-26 ~02:35Z: acceptance-evidence completion and end-to-end attribution at the new pins
+
+## Evidence now COMPLETE on both lines (nothing owed but owner decisions)
+* SEED-ERA 5.8083/5.8050 (composition + KV staging helper): two boards' full gates, capture
+  GREEN on the tree (CAP-kvst-b3 rc=0), ext 5.7331, think 4.51, boot 170 ms/token.
+* SHIPPABLE 5.4650 = +3.048 % over accepted 5.3033 (bundle5 + attention family + helper + ring):
+  full gate done, capture GREEN on the tree (CAP-shp-b3 rc=0, 7/7 scenarios, engine 5a9b75f4c948),
+  all 20 cases complete. The only shared blocker is the two demo-timer goldens, which #647 showed
+  flip under a PURE transport change - i.e. the blocker is input/ISR-state sensitivity of those
+  cases, demonstrated on the accepted engine.
+
+## kvstage4 breadth = null CONFIRMED (closes the last width thread)
+Full gate of the 4-word staging unroll on the shippable tree: decode 5.4650 (identical),
+ext 5.3969 vs 5.3992 (-0.04 pct), think 4.30 identical. Width axis now measured on four loops
+with points on both sides of both peaks (P.V peak 4, QK peak 8, staging flat at 1, sweeps -0.11).
+
+## Request-path FULL phase table at the new stack (raw prof_dump, all 19 phases, route request)
+whole 189.4 = attn-stage 117.4 (inside it: proj2bit 111.1, attn head-split 36.7, taps 2.3,
+norms 0.6, rope 0.2, kv-store 1.1) + hadamard 29.4 (kron 14.2) + phi 13.8 + sinkhorn 3.7 +
+mix 6.1 + step 0.7 + sampler-arithmetic 0.4 (sample 6.8 minus logits4 6.4) + a ~10 ms scaffold
+residual (lane init, tier pointer math, and the profile timers' own cost in this image).
+Every named phase is at a measured floor; the residual is bookkeeping, not compute. No new
+target surfaced. (Remember #413: a profiled image's ABSOLUTE decode is not a speed claim.)
+
+## Boards at window end: b1 and b3 carry the shippable+helper tree (5a9b75f4c948), b2 the
+seed-era pin (91e79eeeb304). All captures current. Discovery pin 5.8083; shippable +3.048 %.

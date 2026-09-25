@@ -181,3 +181,34 @@ try the CQ2 offset-stream probe if not already measured; do not reopen old
 packed-word schedules under its name. Read the
 raw quality verdict and app/config provenance; check B3 for genuine externally
 changed hardware state without repeating probes. Replace measured nulls promptly.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~07:30Z (runs #729-#730: one negative, one small keep, one repair)
+
+**CV2W (two-channel ordered conditioning reduction) DISCARDED at -0.17 % (#729).** Kernel
+correct and proven live (CV2W selftest bad=0, `cv2=1`, `n1_align=0` - the E66 lesson
+satisfied), arithmetic order-preserving per channel, and still slightly negative: the
+conditioning reduction is limited by its 768 dependent madds per channel, so halving the
+load count does not pay. Measured on the CONTIGUOUS row layout, so the family is closed on
+its own terms rather than by inheritance from the old stride-8 cond2 result.
+
+**E72b KEPT (+0.19 %, #730): the conditioned-scale construction now happens inside the
+parallel SiLU slices** instead of a separate whole-row pass, riding the split the callback
+already had, with E71's kernel retained and the per-element fold order unchanged. Seed
+line reads **6.0617** (screen, sub-bar but positive; full gate owed if quoted).
+
+**Repair note (B1):** reverting CV2W with a line-range deletion overshot and removed the
+PV/kron declaration block; the tree was rebuilt from the compiler's own undefined-symbol
+list and now builds as `f02762ca5dbb`, which differs from the measured `bae5184f9ca7` by
+declarations only. **B1's next lane must re-anchor with a screen before any candidate is
+priced on it** - a declaration-only diff still invalidates the tree as a baseline.
+
+**Next lanes:** (1) B1: the CQ2 uint16-offset/LSX kbench probe (predecode one projection
+into uint16 group-LUT byte offsets, then l16ui + LSX + the same add chain; ~24 body
+instructions per eight pairs against 32 plus a packed-word load; 442,368 B PSRAM for a
+576x768 matrix) - target support and the extra-load tradeoff need the existing kbench with
+exact mapping/row/group checks, and resident-cu is the ready fallback if the probe cannot
+be prepared promptly; (2) B2: full gate on the 6.0617 tree when a number is wanted;
+(3) B3: hardware blocker confirmed (host kernel shows the flash USB cycling ~every 12 s,
+so node presence is not recovery) - prepare the resident-cu reserve for a healthy turnover.

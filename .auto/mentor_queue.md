@@ -213,3 +213,54 @@ md5-verified against the live worker files.
 **B1 next:** its packet is complete (device breadth + host gates on the wide-phi tree); only the
 missing **engram[1]** pair (dir233/234, 313,344 B) remains, staged in compact-prefix capacity with the
 guard kept and the pair proven by offsets before any run.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~05:40Z (runs #758/#759: two seed-line keeps PROMOTED; engram[1] prepared, unmeasured)
+
+**Both above-bar levers are now breadth-gated on the seed line** (each reproducing its screen exactly):
+
+| lane | change | decode | ext | think | min | device | internal_free |
+|---|---|---|---|---|---|---|---|
+| B2 | CQ2 group **hardware loop** (+ row differential green, chunk 1/12/24, `mismatch=0`) | **6.0883** | 6.0162 | 4.67 | 5.86 | 18/20, delta 52 | 11,795 |
+| B3 | QK dot **`noinline qk_dot8`** | **6.0750** | 6.0069 | 4.66 | 5.85 | 18/20, delta 52 | 12,035 |
+
+Neither monitor regressed (ext and think both rise), so the wins are not paid for elsewhere.
+Seed line: 6.0617 pin -> +0.44 % and +0.22 % on distinct boards.
+**Owed:** host gates on both promoted trees; a combined-tree composition check.
+
+**B1 engram[1] (`EG2`) - PREPARED, UNMEASURED, tree state unresolved.** Implemented exactly per the
+queue: own narrow `ND_ALLOC` copy of the pair that lies outside the span (dir233/234,
+`[15,707,584,16,020,928)`, 313,344 B), served by `nd_tier_ptr` through two extra ranges, selection
+**by offset** (never index), both copies byte-compared, plus an `EG2 ok=1 ...` proof line. The engram
+GEMVs already fetch their pointers through `nd_tier_ptr` (`nd_model.c` ~1428-1431), so the dispatch
+is genuinely reached - the earlier draft's defect (selecting the already-staged `engram[0]`) is not
+reproduced. The lane ran ~17 minutes with 3 processes alive but emitted no `EG2` line and no metrics,
+so the screen is **inconclusive** - and B1's tree carries this change, so its provenance hash no
+longer matches the 5.8633 wide-phi pin. Assets: `.auto/exp92/`. Next window: read
+`R-eng2-b1.log`, complete the screen or revert the asset before any other B1 measurement.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~06:20Z (run #760: EG2 inconclusive and reverted; B1 back on its 5.8633 pin; seed line carries two promoted levers)
+
+**B1 engram[1] staging (EG2): NO measurement, tree restored byte-exactly.** Built and flashed
+(engine `a67a3d7c55a6`, app `df4fdb6b815b`), then the lane produced nothing - no `EG2` proof line,
+no `EVT READY`, no metrics - for ~20 minutes; killed inside its boot window. Because the harness
+writes its boot capture only when the boot completes, an app that never reaches `EVT READY` looks
+exactly like this, so the state is **inconclusive**, not negative. B1 reverted to provenance
+`ac2387bfb11ea0a0fb9bdf197c9ef44f` = the wide-phi pin (#755), zero `EG2`/`eg2_` traces, clean build.
+**Next step for this candidate: a boot-only console capture on B1's own `$SERIAL_PORT`** (the `EG2`
+line prints during `nd_model_open`, so where the boot stops is the whole diagnosis). Asset and the
+avoided defect are in `.auto/exp92/`.
+
+**Seed line (B2/B3) now carries two promoted, above-bar levers on top of the 6.0617 pin:**
+
+| lever | board | decode | ext | think | device | evidence |
+|---|---|---|---|---|---|---|
+| CQ2 group **hardware loop** | B2 | **6.0883** | 6.0162 | 4.67 | 18/20 δ52 | full gate + row differential (chunk 1/12/24, `mismatch=0`) |
+| QK dot **`noinline qk_dot8`** | B3 | **6.0750** | 6.0069 | 4.66 | 18/20 δ52 | full gate |
+
+**Owed:** host gates on both promoted trees; a combined-tree composition check (the two levers live
+on different boards today). **Also open:** B3's `qk_dot8` row-level differential (its arithmetic is
+statement-identical C, so the risk is lower than the asm lane's, but the check is still owed).

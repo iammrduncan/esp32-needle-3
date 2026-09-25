@@ -451,3 +451,71 @@ B1's cache flag is cleared (0 lines), the include reverted, and the tree is byte
 are packet-complete (seed **6.0450** / shippable **5.7767**, host 19/19 each); every phase
 above ~8 ms is at a measured floor; the only open item with real upside is the owner's
 decision on the two ring-related goldens. B3 EIO.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~04:15Z (runs #724-#725: a new lever class, +0.35%)
+
+**Deferred console echo KEPT and gated (#724/#725).** The firmware's decode clock runs
+from the top of the generation loop to its end, and inside that window it printed
+`TOK <piece>` + flush for every generated token. At 115200 baud those ~8 bytes per token
+block the caller ~0.7 ms each - about 69 ms of a 16 s request, i.e. ~0.4 % of the metric,
+and it grows with the answer length. The pieces are now recorded (offset/length into
+`out[]`) and emitted byte-identically after the clock stops: same TOK lines, same text,
+same tokens, same gates, and the request also finishes sooner in wall-clock terms.
+* Shippable line: screen 5.7967 (+0.35 % over the clean same-mode 5.7767), **full gate
+  5.7967 / ext 5.7323 / think 4.5 / min 5.59 / 18-20 / host 19-19** = **+9.31 %** over
+  the pin. Packet complete on the new tree.
+* The seed line carries the same echo pattern and should get the same fix at its next
+  build - it is a handful of lines in `run_inference` and worth ~0.35 % there too.
+
+**New lever class worth remembering:** *work inside the firmware's own timed window that
+is not decoding.* The campaign had been treating the metric as "the model's time", but the
+device times the whole generation loop, so anything the loop does per token - reporting,
+per-token bookkeeping, a second pass over a buffer - is charged to it. This is the class
+the eW78 fix came from, and it is the only lever this window that paid.
+
+**Also corrected this window:** #720's "dead code is not free" is retracted (#723) - the
+real cause was a sticky diagnostic configure (`-DND_REQ_DIAG=1` left in
+`esp32/build/CMakeCache.txt` by `measure.sh`, which never resets `CMAKE_C_FLAGS`), so the
+hooks were compiled live and printed per token over the UART. Rule: after any diagnostic
+build, check `grep -c ND_REQ_DIAG esp32/build/compile_commands.json` is 0 before quoting a
+speed reading.
+
+**State:** seed `a9b5505a760f` 6.0450 (+13.98 %, host 19/19; echo fix not yet applied),
+shippable `d0846006fc5c` 5.7967 (+9.31 %, packet complete), B3 EIO.
+
+**Provenance note for the eW78 packet:** the fix lives in `esp32/main/main.c`, so B1's
+C-only *engine* hash is still `bae5184f9ca7` while the image that measured 5.7967 is the
+one whose PROVENANCE is recorded in `R-echofull-b1.log` (app_md5 d0846006fc5c). When
+quoting the 5.7967 packet, quote the image, not the engine hash alone - the transport
+change is app-side.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~05:00Z (runs #724-#726: the timed-window class)
+
+**eW78 (deferred console echo) is on BOTH lines now, with different measured gains.**
+* Shippable `d0846006fc5c`: screen +0.35 %, **full gate 5.7967 / ext 5.7323 / think 4.5 /
+  host 19-19** - packet complete, +9.31 % over the pin (#724/#725).
+* Seed (B2, `b5c66b749bcc` app): screen **6.0483** vs its 6.0450 gate = +0.05 %, prefill
+  6.3733 vs 6.3433, 6/6 exact (#726). Banked, no repeat, no full gate. **Its 6.0450 gate
+  now belongs to the previous image, so a full gate is owed on this tree if the number is
+  to be quoted.**
+
+**The discrepancy is recorded, not smoothed:** both images echo the same case set with
+the same token counts, so the absolute console bytes per request should be nearly equal,
+yet B1 gained 0.35 % and B2 0.05 %. One reading is baseline provenance (B1's baseline was
+a screen taken hours earlier on the same tree, B2's a full gate taken shortly before);
+another is console buffering differences between the lines. The direction is consistent on
+both, and the lever class is confirmed: **per-token work inside the device's own timed
+window counts against the metric** - it is the only lever this window that paid.
+
+**Also verified (no action needed):** `thermal_diag.c` is OFF in every measured build
+(0 compile lines) and ND_REQ_DIAG is 0 everywhere, so no other diagnostic sits in the
+timed path.
+
+**Next lanes:** (1) a full gate on the seed line's eW78 tree (the only owed number);
+(2) if the seed's +0.05 % is really small, the timed-window class is worth a *second*
+member - the prefill path's own prints and any per-token bookkeeping in
+`run_inference` are the remaining candidates; (3) B3 EIO (no further probes).

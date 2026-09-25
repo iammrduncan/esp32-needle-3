@@ -336,3 +336,118 @@ that calculus.
 complete except the E71 boot verdict owed at B2's next normal build; B3 EIO (three
 probes, none repeated). Every lever that landed is bit-exact on all 18 unaffected cases,
 and the frozen-pair evidence is now complete enough for the owner decision.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~01:00Z (run #720: DEAD CODE IS NOT FREE - two results retracted)
+
+**Finding (#720).** B1's tree carrying the inert `DIAGPICK`/`DIAGREQ` hooks (every added
+line behind `#ifdef`, plus one `#include <stdio.h>` in `nd_sample.c`) measured **5.4100**
+(boot 5.893) against **5.7767** (boot 5.877) for the same stack without them - a **6.3 %
+decode regression from scaffolding that compiles to nothing**, with the short cold boot
+bench unmoved. A contemporaneous control on the untouched B2 tree still read **6.0450**
+(boot 6.155, 18/20), so the boards and environment did not drift: the loss is real and
+reproducible. Stripping the hooks restored B1's C-only engine hash **exactly** to
+`bae5184f9ca7`, the tree that measured 5.7767.
+
+**Retractions that follow:**
+* **E72 (attention in-place prepare, logged -6.3 %) is NEUTRAL, not a regression** - it
+  was priced against a contaminated baseline. Its "buffer interaction" story is withdrawn.
+* **E74 (`dst += a*b` MLP residual, same window, -6.4 %) is NEUTRAL too.** Its kernel and
+  oracle were correct (MAC2W selftest 64/64, dispatch live, device 6/6 exact).
+* Neither candidate has actually been measured yet. Both are cheap to redo on the clean
+  tree (`bae5184f9ca7`) and should be, before the family is judged.
+
+**New standing rule for every lane:** diagnostic scaffolding is NOT inert - an `#ifdef`
+hook plus an include in a hot translation unit moved the decode metric by 6.3 %. Strip
+the scaffolding (and re-verify the engine hash) before measuring a candidate, or measure
+that tree's own baseline first. The C-only engine hash is the reliable witness: if it
+differs from the last measured value, the tree is not the tree you think.
+
+**State:** B1 `bae5184f9ca7` (5.7767, clean, builds), B2 `a9b5505a760f` (6.0450 gated +
+host 19/19), B3 EIO. Next: re-run E74 and E72 on the clean tree, one at a time, and keep
+the scaffolding out of measured trees.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~01:45Z (run #721: E74 closed as a measured null)
+
+**E74 re-measured on the clean tree and it is a NULL (#721).** `dst += a*b` for the MLP
+residual fold via `nd_mac2w` - kernel oracle 64/64, dispatch verdict `mac2=1`, device 6/6
+exact - reads **5.7750** against the clean same-mode baseline **5.7767** (-0.03 %, inside
+the quantum). The widening runs and does not matter at this size: about 6k cells per
+token against a 170 ms token. That closes the retraction cleanly: the earlier -6.4 %
+belonged entirely to the inert-scaffolding artifact of #720, and E74 is now measured,
+neutral, discarded. B1 restored byte-exactly to `bae5184f9ca7`.
+
+**Same family, remaining, with expected size stated:** E72 (attention in-place prepare,
+24 KB/token of copies) has still never been measured against a clean baseline and is the
+only one with a plausible tenth-of-a-percent; E73's other shapes are each ~6k cells like
+E74, i.e. their ceiling is smaller than the metric's quantum and they should not be
+pursued.
+
+**The campaign's position, stated plainly for the next window:** two packet-complete lines
+(seed **6.0450** = +13.98 %, shippable **5.7767** = +8.58 %, both host 19/19, the same two
+ring-related goldens outstanding), a measured floor on every phase above ~8 ms, and a
+cost model that says the remaining 2-bit stream is issue-bound. The only lane with real
+upside left is the owner decision on those two cases; the only unmeasured candidate with
+a plausible gain is E72; and the one hard-won process rule from this window is that
+diagnostic scaffolding must be stripped (and the engine hash re-verified) before any
+candidate is priced.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~02:20Z (run #722: the frontier is measured, not estimated)
+
+**E72 measured properly and it is NULL (#722): decode 5.7767 against the clean same-mode
+baseline 5.7767** - exactly zero. The attention's input norm emits into xh and the
+projection prepare's 768-float copy per layer (24 KB/token) is skipped with identical
+arithmetic, and nothing moves. Both retractions are now closed by direct measurement:
+E72 was never a 6.3 % regression (that was the inert-scaffolding artifact of #720 and the
+hook-tree inference predicted 0.00 %, which the clean tree confirmed), and it is not a
+gain either. With E74's null (#721), **no remaining member of the elementwise/lifetime
+family is above the metric's quantum.**
+
+**The campaign's lever families are now all swept** - load-form delivery, tile/register
+scheduling, buffer lifetime, alignment-plus-guard, elementwise shapes - with everything
+either kept-and-gated or measured-neutral. Every phase above ~8 ms sits at a floor
+established by measurement: proj2bit and engram on the issue-bound 2-bit LUT path (about
+2 instructions per weight, dual-issue saturated), phi already wide, kron2 negative twice
+(register file), the FWHT's strided passes register-limited, qk negative against GCC's
+schedule, sinkhorn transcendental-bound with n=4, mix and prep swept.
+
+**Final state:** seed **6.0450** (`a9b5505a760f`, +13.98 %, device breadth + host 19/19),
+shippable **5.7767** (`bae5184f9ca7`, +8.58 %, same), B3 EIO. The single remaining item
+with real upside is the **owner's decision on the two ring-related goldens** - keep the
+ring and re-baseline/replace them, or drop the ring and lose the lossless-input fix and
+the 20-case suite. A new speed direction would need a different mechanism than any this
+campaign has used; the cost model says the dominant stream is not memory-bound and not
+compiler-limited, so it would have to change what is computed, which the frozen-quality
+constraints forbid.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~03:05Z (run #723: #720's finding retracted, real mechanism found)
+
+**"Dead code is not free" was WRONG - retracted.** Bisect: adding only `#include <stdio.h>`
+to `nd_sample.c` (no code) reads 5.7767, the clean baseline exactly. The real cause is
+mundane and important: **a diagnostic configure is STICKY.** B1's
+`esp32/build/CMakeCache.txt` still carried `-DND_REQ_DIAG=1` in `CMAKE_C_FLAGS`
+(929 lines in `compile_commands.json`), because `measure.sh` reconfigures only the options
+it names and never resets `CMAKE_C_FLAGS`. Every "normal" build after a diagnostic build
+therefore compiled the hooks **live**, and a per-token `printf`+`fflush` of ~60-80 bytes
+on a 115200-baud console blocks the caller for several milliseconds - two lines per token
+is ~6 % of a 170 ms token, which is exactly the 6.3 % observed, and it explains the
+boot-bench/decode split (the boot bench prints nothing) that I twice mis-attributed to
+codegen.
+
+**Rules added for every lane:** after ANY diagnostic build, verify
+`grep -c ND_REQ_DIAG esp32/build/compile_commands.json` is 0 (or clear the build dir)
+before quoting a speed reading; and never let a per-token print into a measured image.
+B1's cache flag is cleared (0 lines), the include reverted, and the tree is byte-exactly
+`bae5184f9ca7` again.
+
+**Unchanged conclusions:** E72 and E74 are nulls measured on the clean tree; both lines
+are packet-complete (seed **6.0450** / shippable **5.7767**, host 19/19 each); every phase
+above ~8 ms is at a measured floor; the only open item with real upside is the owner's
+decision on the two ring-related goldens. B3 EIO.

@@ -191,3 +191,34 @@ Next mentor: harvest B2 E71 and establish its new guard really fired before
 interpreting a null; harvest the mode-correct B1 result without carrying old
 conclusions, and check B3's actual
 usability. Demand process + nonempty growing log + provenance, not a printed PID.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~20:10Z (run #714: 6.0450, and a diagnostic correction)
+
+**E71 KEPT: conditioning-accumulation wide delivery, +0.39 % (#714).** The hadamard MLP's
+scale row was built by an initializer plus seven scalar `sc[i] += cj*row[i]` passes
+(7,168 independent FMAs per layer, 57,344 per token; the scalar update was confirmed in
+the e9d8ede39d76 ELF). They now go through `nd_lanemix4w` with the initializer untouched
+and `scale_row` FAST16. Seed line: **6.0450** (boot 6.155, min 5.82, 6/6 exact) =
+**+13.98 %** over the 5.3033 pin - new campaign best. The run and sources were kept
+untouched per instruction; the boot-time `scale_row`/cu-row dispatch verdict is owed at
+the next normal build (E66's lesson: an inert guard measures as a null, so a positive
+here implies the guard fired, but the cursor in the boot line is still owed).
+
+**Diagnostic correction, and it matters for the acceptance packet.** The earlier
+"interval_one answers seconds=300" claim came from probes that never set `!think 0`;
+the bench runs the frozen cases with reasoning OFF, and in that mode the same case reads
+RAW `seconds 120` - matching the host text after newline decoding. So the frozen pair's
+real defect is narrower than the ledger said: **the device's interval_one already agrees
+with the host; what remains is a missing extra `get_status` call in the golden
+comparison**, and the host also counts four forced tokens the device omits. Compare RAW
+text before attributing anything to arithmetic. The old `DIAGTOK` hook (which indexes a
+d_model-sized hidden vector as if it were vocab-sized logits) is an invalid OOB reader
+that should be deleted at the next diagnostic build; `DIAGPICK` is the valid one.
+
+**Next lanes:** (1) at B2's turnover, the owed dispatch verdict plus a full gate for the
+6.0450 tree; (2) B1 takes the attention in-place prepare (n1 -> xh and attn -> xh copies,
+~49 KB/token, the same lifetime family that has paid four times); (3) B3 still EIO;
+(4) then look for more `dst += k*src` / `dst = k*src` passes - E71 shows the family still
+has members outside the lane block (this one was in the MLP conditioning path).

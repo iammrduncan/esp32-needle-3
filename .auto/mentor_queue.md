@@ -317,3 +317,237 @@ staged_rel=12450880`.
 **Program status:** step 1 (free capacity) needs compact-prefix; step 2 (the offset stream,
 measured 27 % cheaper addressing) is ready to integrate on whichever board first has the
 bytes. B1 is free at 5.8283; B2 and B3 build at `59fabc46c29b` (6.0617 base + boot-time probes).
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~21:50Z (run #748: CAPACITY IS FREE - 768 KB reclaimed, quality-safe)
+
+**Compact saved prefixes: the program's step 1 is COMPLETE and measured.** The two prefixes
+are 143/213 slots but `prefix_copy` saved the whole 384-slot KV window for each. The four KV
+buffers now copy only the prefix's **live** slots through a strided `prefix_kv` helper (same
+layout, order and values for everything that is read - only the image is smaller), and the
+restore assigns the prefix state **before** the copy so the live count is the prefix's own.
+
+| evidence | value |
+|---|---|
+| host prefix-isolation test | **PASS** ("alternating prefixes reproduce identical logits", rc=0) |
+| device decode | 5.8283 = base unchanged (the restore sits outside the decode clock) |
+| device exactness | 6/6 |
+| **post-prime PSRAM free** | **818,596 B vs the 50,088 B baseline = +768,508 B reclaimed** |
+
+That is more than the 442,368 B a 576x768 offset stream needs, so the measured **27 %-cheaper
+addressing** (#745, 34 -> 25 cycles per word, fixture-verified) now has room to be
+integrated. (Evidence-line bug noted: the `PREFIXKV` print derived both figures through the
+compacted path, hence `saved=0`; the status-API number is the authoritative one and the print
+should compute the full size independently.)
+
+**The program now reads:**
+1. ~~Free capacity~~ **DONE (#748): +768 KB, quality-safe.**
+2. **Integrate the offset stream (B2, or B1 now that the bytes exist):** predecode nibbles to
+   `64*p + 4*code`, then `l16ui; lsx; add.s` in place of `extui; addx4; lsi; add.s` + the
+   packed word load, preserving the pair LUT's values, the four partial chains, the
+   nibble-to-partial assignment, +0 seeding, fold, norm conversion and group/row order;
+   price it on real rows with distinct LUT entries, several groups/rows and nonzero row
+   offsets before any full-suite run.
+3. B3's tier-tail relocation is closed by measurement (#747): the span's unused tail is only
+   132,032 B, too small for the 313,344-byte pair.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~23:10Z (run #749: CV3W CLOSED ON THE BYTE BUDGET, 2.8x against it)
+
+**The predecoded offset stream cannot work, and the campaign's own measured numbers say so:**
+
+| quantity | value | source |
+|---|---|---|
+| proj2bit weight stream | 3.59 MB/token in 80.8 ms = **44 MB/s** | phase map |
+| measured octal bus peak | **64 MB/s** | #287 GDMA, #330 |
+| utilisation today | **69 %** | the two above |
+| offset stream (1 B/weight = 4x) | **14.36 MB/token -> 224 ms at 100 % bus** | arithmetic |
+| the addressing win it buys | 8 `addx4` of 33 instr/word = 24 % of issue slots = **<= 19.6 ms** | #745 |
+
+So the lever is **2.8x slower even at an unattainable 100 % bus utilisation**, and the 19.6 ms it
+could win cannot pay a 143 ms byte increase. **#745's 34 -> 25 cycles/word was measured on a
+64-word fixture that lives in the 64 KB data cache** - its streaming cost never appeared. That is
+the third instance of the warm-fixture trap (#295 phi, #364 transform, now #745), and it is worth
+stating as a rule for this campaign: *an addressing/algebra change must be priced in BYTES per
+token before it is priced in cycles per word.*
+
+**What stands from the CV3W window, on its own merits (not as enablers):**
+* **compact-prefix (#748): +768,508 B of post-prime PSRAM** (818,596 vs 50,088), quality-safe
+  (host prefix-isolation passes), decode unchanged because the restore is outside the decode clock.
+  Free memory is now ample; the byte budget, not capacity, is what blocks weight-stream ideas.
+* B3's tier-tail relocation stays **closed by measurement** (#747: unused tail 132,032 B).
+
+**What this leaves as the campaign's honest targets** (all cheap, none a weight-stream change):
+1. **Profile-guided pairing of the remaining unpaired transcendental loops** - not blind pairing:
+   instrument the host engine, find the loops > ~5k calls/token with independent arguments, pair
+   them with NO added guard (the class that won #229/#290/#291, and the class #292 showed loses when
+   a guard is added).
+2. **`nd_sample`'s per-token legality path** - the sampler is ~0.7 ms of a ~150 ms token and its
+   enumeration was already indexed (#288); re-check for a per-token rebuild that could be cached
+   across steps.
+3. **The idle-peer split review** (the mentor's #46 item): one audit of every `nd_parallel_rows`
+   call site against the measured ~4,000-cycle handshake (#451) and the interleaved-tick
+   consistency argument, prompted by the RX-ring ISR.
+4. Anything that changes *what is stored* in the weight stream needs a byte budget first - the
+   offset stream is the proof of why.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~23:55Z (run #750: the hottest kernel is AT ITS FLOOR, by inspection)
+
+Dumped the live `nd_lut2_rows_tie1n` from board 2's 6.0617 ELF and read it as a sequence
+(316 instructions total):
+
+| op | count | role |
+|---|---|---|
+| `add.s` | 67 | 64 accumulate + 3 fold |
+| `extui` | 64 | nibble extraction, 8 per 32-bit word |
+| `addx4` | 64 | the nibble's x4 byte scaling (required: `lsi` is base+immediate only) |
+| `lsi` | 64 | pair-LUT lookups |
+| `l32i.n` | 16 | **all in the PROLOGUE** (arg struct, 2 slice loads, group norm) - per call, not per group |
+| rest | ~44 | group bookkeeping (slli/add.n/addmi/addi.n/mull/wfr/j/mov.s/entry/bgeu/sub/beqz) |
+
+The body is exactly the documented W8D floor - `extui x4 / addx4 x4 / lsi x4`, then `add.s x8`,
+repeated for the eight words of a 128-weight group - with **no redundant instruction, no spill,
+no reload**. So the 49%-of-token phase is instruction-exact, and the campaign's analytic floor
+(2 instructions/weight at IPC ~1.33) now has instruction-level evidence.
+
+**Audit technique worth reusing (zero board cost):** objdump the *live* ELF, group the
+instruction mix, then read the sequence to separate per-call setup from per-group body. Next
+candidates for the same treatment: the attention P.V kernel (the wide form that shipped at
++0.63 %), the QK dot that GCC owns, and `gemv4_tie728` (phi, 8.1 ms).
+
+**Standing closures this window (do not re-screen):** CV3W offset stream (byte budget, #749);
+tier-tail relocation (#747); tier-tail tail = 132,032 B; warm-fixture pricing is now a named
+trap (3 instances: #295, #364, #745). **Standing keeps:** compact-prefix +768 KB (#748).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~00:30Z (run #751: the whole kernel set is clean; spill class verified absent on the newest tree)
+
+Second peephole pass, on every other shipped kernel of the 6.0617 image, against the two failure
+modes the load-form program identified (register pressure and redundant loads):
+
+| kernel | instrs | notable | stack refs |
+|---|---|---|---|
+| `nd_gemv4_rows_tie1W` (wide phi) | 76 | 2 wide loads, 8 lsi, 9 madd.s | **0** |
+| `nd_gemv4_rows_tie1` (plain phi) | 85 | 16 lsi, 8 addx4 | **0** |
+| `nd_kron1_w` (kept wide kron) | 33 | 8 wfr / 8 madd.s / 8 ssi | **0** |
+| `fwht_rows` | 414 | 46 l32i.n, 39 ssi, 38 lsi | **0** |
+| `nd_fwht3s` (fused stage-pair) | 230 | 36 lsi / 36 ssi / 20 addx4 (float-stride address) | **0** |
+| `lanepre_rows` | 67 | - | **0** |
+
+**So the spill class is absent on the newest tree by direct inspection**, not by inheritance from
+the older whole-ELF scan, and no kernel carries a redundant memory operation in its body. With
+`nd_lut2_rows_tie1n` (audited last run: exactly the W8D floor) this covers the hot path.
+
+**Hot-path inventory for whoever runs next:** `attn_heads` (6,486 B of C, kernels inlined),
+`nd_model_step_hidden` (7,241 B), `nd_lut2_rows_tie1n` (918 B), `nd_gemv4_rows_tie1W`,
+`nd_kron1_w`, `fwht_rows`, `nd_fwht3s`. **The most promising remaining host-only action** is the
+same dump-and-read treatment applied to `attn_heads`' inlined body (the 24.1 ms phase), because it
+is the only hot code that has never been read instruction by instruction - its 6.5 KB of C carries
+the QK dot, the paired exp, the P.V wide kernel and the staging, and the load-form rule (wide wins
+where the compiler re-reads, loses where a serial chain is exposed) is exactly the kind of thing
+that is visible there.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~01:10Z (run #752: attention's instruction budget is REGISTER-limited, not redundant - and that explains three nulls)
+
+Read `attn_heads` (24.1 ms, never audited) instruction by instruction from the live 6.0617 ELF:
+
+| measurement | value |
+|---|---|
+| instructions | 2,414 |
+| **frame accesses (spills)** | **0** |
+| backward branches (nested loops) | 33 |
+| `movi` + `l32r` (constant materialization) | **412 = 17 %** |
+| same share inside the hot loops | 406/2,255 = 18 %, 288/1,696 = 17 %, 201/1,202 = 17 %, 132/818 = 16 % |
+
+With **zero** frame traffic, those constants are not spill refills - GCC is **rematerializing**
+addresses and float constants rather than keeping them live, the trade it makes when the 16-entry
+float register file is the binding resource (the same pressure that decided kron2 vs kron1).
+
+**This closes the last open explanation in the attention phase:** the live-range/hoist family
+measured THREE nulls (#579 quartet barriers -0.090 %, #582 pointer+codebook hoist -0.060 %,
+E-live-range edits -0.06 %) even though the constants are visibly there - forcing them live costs
+registers the loop does not have, so the instruction count does not move. The other direction
+(reducing the constant *count* by restructuring the exp polynomial or the clamp bounds) is a
+rounding change, refused by the byte-exact and fidelity gates.
+
+**Per-kernel audit status (all read from the live ELF, zero board cost):** walker at the W8D
+floor (#750); wide phi, plain phi, wide kron, `fwht_rows`, `nd_fwht3s`, `lanepre_rows` all clean
+with zero frame refs (#751); `attn_heads` register-limited by construction (#752). **The kernel
+set is now audited; further speed work needs a change in what is stored or computed, both of
+which are frozen by the gate.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~02:00Z (run #753: compact-prefix promoted to breadth; the packet is complete again)
+
+Full 20-case gate on the compact-prefix tree (B1, engine `c69648d2784a`):
+
+| metric | value |
+|---|---|
+| decode | **5.83** (= the restricted screen 5.8283, reproduced on breadth) |
+| ext / think / min | 5.7623 / 4.52 / 5.62 |
+| prefill / boot bench | 6.1283 / 5.925 |
+| device exact | 18/20, token_delta 52 = **only** the two #647 ring-related demo-timer goldens |
+| host | 19/19, fidelity 5.341e-05, top1 10/10 |
+| internal_free | 11,023 (restricted run printed 14,171 - measurement-point difference: 14 more requests, sampler structures allocated) |
+
+So the prefix compaction adds **no** divergence of its own, and the shippable packet stands with
+screen + breadth evidence. The runner required the one documented `AUTO_ALLOW_REPEAT` allowance
+for a restricted-to-full promotion (a restricted screen appends the shipping signature) - **budget
+one allowance per tree**, as the ledger already warns.
+
+**Also closed off-device this window:** the conv-tap history is a **ring** (`(pos - j) % taps`,
+no per-token shift) with an existing `nt == 3` fast path that reads the freshly written projection
+instead of a copied history row; the general path's per-element modulo compiles to inline
+`quou`/`remu` (no `__umodsi3` call in the image), and the whole tap phase is measured at 2.3 ms of
+a ~165 ms token, so the modulo is sub-bar by the phase's own size. No candidate.
+
+**The complete state:** seed line 6.0617 (+14.29 % over the owner's 5.3033 pin, host 19/19,
+cross-board confirmed), shippable line 5.8283 (+9.90 %, host 19/19, breadth + compact-prefix).
+Both blocked only on the owner's disposition of the two #647 goldens. Every hot kernel audited at
+the instruction level; every phase closed by measurement; the remaining above-bar routes are owner
+decisions (re-baseline/replace the two goldens; admit the seed-era stack; 120 MHz is vendor-blocked;
+assertion-level RAM has no collectable buyer).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~02:55Z (run #754: a lever's SIGN is tree-specific - NF16V port INVERTED)
+
+Porting the seed line's NF16V (five-instruction fp16->fp32 rebias + its load-bearing
+sign/exponent predicate) to the shippable line:
+
+| evidence | result |
+|---|---|
+| host oracle over all 65,536 encodings | `in_domain=30720 rejected=34816 mismatch=0 guard_miss=0`, `0x3c00 -> 3F800000` |
+| macro after the edit | byte-identical to the seed line's |
+| device exactness | 6/6, token_delta 0, boot bench unchanged (values right) |
+| **decode** | **5.765 vs this board's 5.83 = -1.11 %** (seed line: **+0.642 %**) |
+
+**New lesson, stronger than sub-additivity: a lever's SIGN depends on the tree it lands in.**
+The +0.642 % was never a property of the transformation. Reverted byte-exactly (worker
+provenance hash back to `c69648d2784a6422139c201c1627a0ea`, verified with the harness's own
+**concatenation** form - my first check used the old path-dependent form and mismatched, the
+campaign's recorded path-string trap for the third time).
+
+**Two harness facts recorded:**
+1. `measure.sh`'s reported `engine_md5=` metric line (line ~197) hashes only `engine/src/*.c` +
+   `engine/include/*.h` **by path**, while `PROVENANCE`'s `PROV_ENGINE` **concatenates**
+   `engine/src/*.c *.S engine/include/*.h esp32/main/*.c`. They are different numbers for the
+   same tree - compare like with like, and prefer PROV_ENGINE.
+2. **B1's baseline is not a pure shippable+compact-prefix tree**: it carries an E59 fused
+   transform (`nd_fwht4r`, prints `FWHT4R live=1` at boot). Any future per-board claim must be
+   read against that board's own tree, not against a line description.
+
+**Where the +3.8 % between the lines really lives (diffed, not guessed):** `nd_quant.c` 224 lines,
+`nd_model.c` 334, `gemv4_tie728.S` 440, `lut2_tie728.S` 81, plus `qk8w_tie728.S` which is an
+**unused asset** (referenced only by kbench; garbage-collected from the shipping ELF - the wide QK
+loss was correctly not shipped). `nd_gemv4_rows_tie1W` (wide phi) is called in the seed tree and
+**not** in the shippable tree - that is the next portable candidate, and #754 says to measure it
+against the receiving board's own tree rather than trusting its +0.36 %-class predecessor.

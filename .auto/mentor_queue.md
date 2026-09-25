@@ -221,3 +221,99 @@ then cold-PSRAM pricing and both cores), B3 free (the engram relocation draft ne
 concrete blockers fixed: the header fields never landed, `cap_end` is not the end of the
 actual tier users, and the copy must use the specified slot coordinates with a disjointness
 assert and a byte-compare). Compact-prefix stays the reserve.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~19:20Z (run #745: CV3W is a MEASURED cost lever - 27% on addressing)
+
+**The LSX reopen paid.** With an identical work loop - eight lookups plus eight adds per
+32-bit weight word, four partials with two adds each, exactly the shipped W8D structure -
+and only the addressing changed:
+
+| form | cycles per word |
+|---|---|
+| shipped: `extui` + `addx4` + `lsi` | **34** |
+| proposed: `l16ui` (predecoded uint16 byte offset) + `lsx` | **25** |
+
+**27 % cheaper**, with the capability probe green (`mask=1f`) and the fixture integrity
+asserted (`fixture_bad=0`: 64 words of distinct nibbles, a 16-entry LUT, the predecoded
+offsets checked against the nibbles). Both loops sink their partials into the returned cycle
+count so neither can be optimised away.
+
+**The gating question is now CAPACITY, not capability or cost:** the offset stream is 4x the
+packed indices (442,368 B for a 576x768 Q projection) while post-prime PSRAM is only
+50,088 B - which is exactly what B3's engram relocation into the tier buffer's unused tail
+is for (~791 KB reclaimable).
+
+**Two-step program, both halves now measured or precisely specified:**
+1. **B3: free the tier tail** - copy the engram key/value pair into the span buffer's unused
+   tail at the specified relative slots (key at +8,684,608, value at +8,841,280, ending
+   +8,997,952 inside the 12,582,912-byte allocation) with a disjointness guard against the
+   max whole-contained consumer, a byte-compare of the copy, and no shift or extension of
+   the original mapping.
+2. **B2: integrate the offset stream one projection at a time** - predecode nibbles into
+   `64*p + 4*code`, then `l16ui; lsx; add.s` in place of `extui; addx4; lsi; add.s` plus
+   the packed word load, preserving the pair LUT's values, the four partial chains, the
+   nibble-to-partial assignment, +0 seeding, fold, norm conversion and group/row order.
+   Price it on real rows with distinct LUT entries, several groups/rows and nonzero row
+   offsets before a full-suite run.
+
+**Also this window:** B1's four-resident-accumulator scale fold measured NEGATIVE (-0.09 %,
+bit-exact, oracle green after fixing the 1.0f constant and the per-tile row rewind) - E72b's
+independent whole-row passes beat a serial eight-madd chain. B1's tree is byte-exactly
+`787a58302f52` (5.8283) and free.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~20:00Z (run #746: B3 draft failed on editing, tree recovered; the CV3W program stands)
+
+**B3's engram-relocation draft did not land** - the block replacement's end anchor matched a
+later occurrence of the same text and cut into the function structure (12 compile errors,
+nothing flashed, no board time). Recovery was mechanical because B3's tree is byte-identical
+to B2's by construction: engine + main.c re-copied from B2, **both boards now hash
+`59fabc46c29b`** and build. The *recipe* is untouched by the failure and stays as written:
+key slot +8,684,608, value slot +8,841,280, end +8,997,952 inside the 12,582,912-byte
+allocation; disjointness guard against the highest CONTAINED tier consumer (not the draft's
+`cap_end`, which was a local of another scope); byte-compared copies; no shift or extension
+of the original mapping; two-range dispatch in `nd_tier_ptr` for key and value separately
+(they are not contiguous with each other, which the draft's single pair range assumed).
+
+**Editing rule this campaign has now paid for three times:** replace a block by anchoring on
+its own UNIQUE text, never on an end pattern that occurs elsewhere, and build before
+believing the patch landed (E72's `#endif`, the CV2W kernel's duplicated body, and now this).
+
+**The CV3W program stands unchanged and is the campaign's live direction:**
+1. **B3: free the tier tail** (the relocation above) - the capacity enabler.
+2. **B2: integrate the offset stream** - measured 27% cheaper addressing (34 -> 25 cycles per
+   word, fixture checked); predecode nibbles to `64*p + 4*code`, `l16ui; lsx; add.s` in place
+   of `extui; addx4; lsi; add.s` + the packed word load, preserving every reduction detail.
+3. **B1** is free with the 5.8283 base; its four-resident-accumulator fold is a measured
+   negative (#744) and should not be retried in that form.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~20:50Z (run #747: the tier tail cannot host the relocation - capacity must come from compact-prefix)
+
+**B3's engram relocation is implemented, guarded and MEASURED - and the guard refuses it, with
+numbers that change the plan.** Boot print: `EGRELOC ok=0 need=8997952 span=12582912
+staged_rel=12450880`.
+
+* `need` (the value slot's end) and `span` match the plan exactly; the copy, the byte-compare
+  and the two-range `nd_tier_ptr` dispatch are all in place and build.
+* But the highest byte any **contained** tensor stages is 12,450,880 relative to
+  `eg_region_lo` - above the specified key slot 8,684,608 and above the "last actual tier
+  consumer" figure the plan rested on. The guard compares against containment, which is the
+  safe criterion (a contained tensor's bytes are physically copied into the span, so
+  overlapping them corrupts whatever reads them).
+* Therefore the span's genuinely unused tail is **132,032 bytes**, smaller than the
+  313,344-byte key/value pair: **this route cannot host the relocation as specified**, and the
+  CV3W offset stream's capacity must come from the reserve - **compact-prefix (~791 KB)** -
+  rather than the tier tail.
+* Decode 6.0550 with the dispatch off is the base; the candidate did nothing and nothing was
+  weakened. The code stays behind its guard in B3's tree, so a corrected slot derivation is a
+  one-line change if a future window establishes the true consumer set (containment vs
+  consumption is the open question).
+
+**Program status:** step 1 (free capacity) needs compact-prefix; step 2 (the offset stream,
+measured 27 % cheaper addressing) is ready to integrate on whichever board first has the
+bytes. B1 is free at 5.8283; B2 and B3 build at `59fabc46c29b` (6.0617 base + boot-time probes).

@@ -215,3 +215,33 @@ with EIO. **Next: port E68 to the seed line the moment B2 frees** (it is a pure
 lifetime change with no base dependency), then judge it as a composition there; and in
 parallel audit `n1`/`n2`/`ublk`/`tmp2` for the same single-producer/single-consumer
 pattern. Do not spend a board on E67 repeats or engram.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~12:45Z (runs #696-#697: the lifetime family pays twice)
+
+**E68 confirmed on BOTH stacks, with ~10 KB of internal SRAM back on each.**
+* B1: 5.7100 -> **5.7583** (+0.85 %), internal_free 4191 -> 14167 (+9,976 B)
+* B2: 5.9617 -> **5.9917** (+0.50 %), internal_free 2087 -> 12531 (+10,444 B)
+  seed line = **+12.96 %** over the 5.3033 pin (restricted; full gate owed), shippable
+  line's last full gate 5.7000 (its E68 tree now reads 5.7583 restricted).
+
+Both trees keep E65's tiled mix compiled but DISABLED (its lane never handshook, so it
+is unmeasured, not negative) - no unmeasured lever is inside the numbers above.
+
+**The lesson worth repeating: this was a LIFETIME defect, not an instruction-count
+defect.** `nx` existed only because a producer (lane RMS) and a consumer (phi prepare)
+did not share storage; following its single producer/consumer and the absence of prefix
+ownership found ~98 KB/token of pure copying plus a guard that could never fire (E66's
+null). The same question has not been asked of the other scratch rows: `n1`, `n2`,
+`ublk`, `tmp2`, `row`, `m->u` and the `fp16_slot` staging (`nd_cq_prepare` is also
+called with a scratch in the dequant path - check that call site for the same shape).
+That audit is the highest-value next step; it needs no board and it has already paid
+once at +0.5-0.85 % per stack.
+
+**Board state:** B1 `0f0d3668d71f` (5.7583 screen, E68 + banked E67; full gate + host
+gates owed), B2 `1f17fa25e179` (5.9917 screen; full gate + host gates owed), B3
+`b255280ba9a9` (E67 only, E64 disabled; flash still EIO). All boards idle; no job
+running. Next lanes in order: (1) the scratch-lifetime audit above and its first
+candidate; (2) full gates for whichever line the owner wants to submit (both owe them);
+(3) B3 when its USB returns.

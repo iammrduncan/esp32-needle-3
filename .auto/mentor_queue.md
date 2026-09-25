@@ -290,3 +290,28 @@ flash does not imply a live console.
 
 **Next window should begin with hardware triage, not another device experiment**, unless the
 owner's decision on the two ring-related goldens arrives first.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~11:00Z (run #734: the conditioning levers compound on the shippable line)
+
+**E71 + E72b ported to the shippable line and they are ADDITIVE: 5.8283 vs its own 5.7983
+anchor = +0.52 %** (prefill 6.1283 vs 5.9517, min 5.62, boot 5.924, 6/6 exact). On the seed
+line E71 was +0.39 % and E72b +0.19 %; together +0.52 % here, which matches their different
+shapes - E71 shortens each of the seven conditioning passes, E72b removes the separate pass
+altogether - so the two do not overlap. Shippable line: **5.8283 = +9.90 %** over the
+5.3033 pin on a restricted screen; full gate + host gates owed on this tree.
+
+**Hardware:** board 2's console is still silent (one further 20 s read, zero bytes, no loop
+attempted) and board 3's flash node remains the cycling one - two boards need a physical
+check before more device work there. Board 1 is healthy and is now the only lane that ran
+this window.
+
+**Lane economy note:** with B2 and B3 down, the productive move is to keep B1 discovering
+and re-anchor its own numbers after each change (its tree changed, so the 5.7983 anchor
+belongs to the pre-port image and the new anchor is 5.8283).
+
+**Next:** (1) full gate + host gates on the 5.8283 shippable tree if that number is to be
+quoted; (2) port any remaining seed-only measured lever - with E71/E72b done, the seed
+line's extra content versus shippable is the quant/asm stack itself, which is a larger
+question than a lane; (3) hardware triage remains the gate to using B2/B3 at all.

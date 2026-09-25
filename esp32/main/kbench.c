@@ -1710,6 +1710,194 @@ static void bench_rowrange(void)
     heap_caps_free(yr); heap_caps_free(yo);
 }
 
+/* ---- Experiment 49: the phi field-shape kernel at the post-tie0 stack -------
+ *
+ * #295/#296 measured the C-era phi sweep (warm 6.41, cold 7.00 cyc/weight) and
+ * tied the phase's only addressable share to delivery; run #333 then shipped a
+ * DIFFERENT kernel (nd_gemv4_rows_tie1) after that anchor was recorded, and the
+ * sweep has never been re-measured under it. The kbench isolation rules were
+ * fixed afterwards (#374: price the field's call structure, not a cache sweep),
+ * so this is the field-shape rerun: the per-token sequence exactly as
+ * nd_model.c issues it (8 layer slices x 3 tensors, range-form row calls), real
+ * archive bytes staged to PSRAM like the tier, warm vs a 160 KiB-eviction cold
+ * pass, and a per-row differential of the whole sweep against single-row calls
+ * (the #333 rule: a row-range kernel is tested over rows). Both numbers decide
+ * a real question: warm-vs-5.647-isolated says whether the tie0 win survives
+ * field shapes, and cold-minus-warm says whether any delivery headroom is left.
+ */
+static void bench_e49(void)
+{
+    nd_tensor    tt[3];
+    uint32_t     ti[3], nt = 0, i;
+    uint8_t     *blob[3];
+    const uint8_t *packed[3];
+    const uint16_t *norms[3];
+    const float  *cb;
+    float        *xh = NULL, *y[3], *yr = NULL, *yo = NULL, *evict = NULL;
+    uint32_t      in_pad = 0, ngroup = 0, rowbytes = 0;
+    uint32_t      weights = 0, r, li, rd, bad = 0;
+    uint32_t      warm = 0xFFFFFFFFu, cold = 0xFFFFFFFFu;
+    float         sink = 0.0f;
+    nd_gemv4_ctx  a;
+
+    for (i = 0; i < s_c.n && nt < 3u; i++) {
+        nd_tensor t;
+        if (nd_cact_tensor(&s_c, i, &t) != 0) continue;
+        if (t.dtype != ND_DT_CQ || t.bits != 4u || t.group != 128u) continue;
+        /* phi tensors are in=3072; the predicate must NOT pick the 4-bit
+         * embedding (8192x768) which shares dtype/group - first e49 run did
+         * and swept nonsense geometry. */
+        if (t.shape[1] != 3072u || t.shape[0] < 8u) continue;
+        if (nd_cq_groups(&t) < 2u) continue;
+        tt[nt] = t; ti[nt] = i; nt++;
+    }
+    if (nt != 3u) { printf("KB E49 SKIP reason=tensors=%u\n", (unsigned)nt); return; }
+    in_pad   = nd_cq_in_pad(&tt[0]);
+    ngroup   = nd_cq_groups(&tt[0]);
+    rowbytes = nd_cq_row_bytes(&tt[0]);
+    cb       = nd_cact_codebook(&s_c, 4u);
+    for (i = 0; i < 3u; i++) {
+        packed[i] = (const uint8_t *)nd_cact_data(&s_c, &tt[i]);
+        blob[i]   = (uint8_t *)heap_caps_malloc((size_t)tt[i].nbytes,
+                                                MALLOC_CAP_SPIRAM);
+        y[i]      = (float *)ND_ALLOC(sizeof(float) * tt[i].shape[0]);
+        if (!blob[i] || !y[i]) { printf("KB E49 SKIP reason=alloc\n"); return; }
+        memcpy(blob[i], packed[i], tt[i].nbytes);
+        /* norms live INSIDE the copied blob (the archive copy of nbytes covers
+         * packed+norms): pointing them at the mmap'd archive would mix operand
+         * classes in the warm/cold attribution. */
+        norms[i]  = (const uint16_t *)(const void *)(blob[i] +
+                     (size_t)tt[i].shape[0] * rowbytes);
+    }
+    xh    = (float *)ND_ALLOC(sizeof(float) * in_pad);
+    yr    = (float *)ND_ALLOC(sizeof(float) * 192u);
+    yo    = (float *)ND_ALLOC(sizeof(float) * 192u);
+    evict = (float *)heap_caps_malloc(163840u, MALLOC_CAP_SPIRAM);
+    if (!xh || !yr || !yo || !evict) { printf("KB E49 SKIP reason=alloc2\n"); return; }
+    { uint32_t s = 12345u;
+      for (i = 0; i < in_pad; i++) {
+          s = s * 1664525u + 1013904223u;
+          xh[i] = ((float)((s >> 8) & 0xFFFFu) / 32768.0f - 1.0f) * 0.25f;
+      } }
+    {   /* Gate + norm audit: does the SHIPPING route even take tie1 for these
+         * tensors, and are all their norms plain fp16 (the gate's condition)? */
+        extern int nd_gemv4_asm_ok(uint32_t,uint32_t,uint32_t,uint32_t,const uint16_t *);
+        uint32_t odd[3] = {0,0,0};
+        for (i = 0; i < 3u; i++) {
+            uint32_t nn = tt[i].shape[0] * ngroup, k, e;
+            for (k = 0; k < nn; k++) {
+                e = (norms[i][k] >> 10) & 0x1Fu;
+                if (e == 0u || e == 31u) odd[i]++;
+            }
+        }
+        printf("KB E49 gate ok=%d/%d/%d oddnorms=%u/%u/%u of %u\n",
+               nd_gemv4_asm_ok(4u,128u,ngroup,tt[0].shape[0],norms[0]),
+               nd_gemv4_asm_ok(4u,128u,ngroup,tt[1].shape[0],norms[1]),
+               nd_gemv4_asm_ok(4u,128u,ngroup,tt[2].shape[0],norms[2]),
+               (unsigned)odd[0],(unsigned)odd[1],(unsigned)odd[2],
+               (unsigned)ngroup);
+    }
+    printf("KB E49 sel t=%u/%u/%u out=%u/%u/%u in_pad=%u ngroup=%u rowbytes=%u\n",
+           (unsigned)ti[0], (unsigned)ti[1], (unsigned)ti[2],
+           (unsigned)tt[0].shape[0], (unsigned)tt[1].shape[0], (unsigned)tt[2].shape[0],
+           (unsigned)in_pad, (unsigned)ngroup, (unsigned)rowbytes);
+    /* per-token weights: the slice actually swept (per-layer rows 4,4,16) */
+    weights = 8u * (4u + 4u + 16u) * 3072u;
+
+    /* differential first: range-form whole sweep vs single-row calls */
+    memset(yr, 0x5a, sizeof(float) * 192u);
+    memset(yo, 0xa5, sizeof(float) * 192u);
+    for (li = 0; li < 8u; li++) {
+        const uint32_t rc[3] = { 4u, 4u, 16u };
+        for (i = 0; i < 3u; i++) {
+            uint32_t base = li * rc[i], k;
+            kb_row4(&a, blob[i], norms[i], xh, cb, yr, base, rc[i], rowbytes, ngroup);
+            a.y0 = &yr[li * 24u + (i == 0 ? 0u : (i == 1 ? 4u : 8u))];
+            nd_gemv4_rows_tie1(&a);
+            /* kb_row4 takes the ARRAY BASE and adds `row` itself (y0 = y + row,
+             * store = y0[i]) - passing a pre-offset pointer AND row double-counts
+             * (first two runs: 180/192 mismatch, all in slices with base>0). */
+            for (k = 0; k < rc[i]; k++) {
+                kb_row4(&a, blob[i], norms[i], xh, cb, yo, base + k, 1u,
+                        rowbytes, ngroup);
+                a.y0 = &yo[li * 24u + (i == 0 ? 0u : (i == 1 ? 4u : 8u)) + k];
+                nd_gemv4_rows_tie1(&a);
+            }
+        }
+    }
+    { uint32_t shown = 0;
+      for (i = 0; i < 8u * 24u; i++)
+          if (memcmp(&yr[i], &yo[i], 4) != 0) {
+              if (shown < 12u) {
+                  printf("KB E49 bad r=%u (li=%u sl=%u) ref=%.9g got=%.9g\n",
+                         (unsigned)i, (unsigned)(i / 24u), (unsigned)(i % 24u),
+                         yo[i], yr[i]);
+                  shown++;
+              }
+              bad++;
+          } }
+    printf("KB E49 diff rows=%u mismatch=%u\n", 8u * 24u, (unsigned)bad);
+
+    /* Localize by nrows: for each tensor, a range call of R rows vs R single-row
+     * calls, R = 1,2,4,8. This isolates the row-carry path, not the arithmetic. */
+    for (i = 0; i < 3u; i++) {
+        const uint32_t Rs[4] = { 1u, 2u, 4u, 8u };
+        uint32_t z;
+        for (z = 0; z < 4u; z++) {
+            uint32_t R = Rs[z], mm = 0;
+            memset(yr, 0x5a, sizeof(float) * 64u);
+            memset(yo, 0xa5, sizeof(float) * 64u);
+            kb_row4(&a, blob[i], norms[i], xh, cb, yr, 0u, R, rowbytes, ngroup);
+            nd_gemv4_rows_tie1(&a);
+            for (li = 0; li < R; li++) {
+                kb_row4(&a, blob[i], norms[i], xh, cb, yo, li, 1u, rowbytes, ngroup);
+                nd_gemv4_rows_tie1(&a);
+            }
+            for (li = 0; li < R; li++)
+                if (memcmp(&yr[li], &yo[li], 4) != 0) mm++;
+            printf("KB E49 nrows t=%u R=%u mismatch=%u ref0=%.6g got0=%.6g ref1=%.6g got1=%.6g\n",
+                   (unsigned)i, (unsigned)R, (unsigned)mm, yo[0], yr[0],
+                   R > 1 ? yo[1] : 0.0f, R > 1 ? yr[1] : 0.0f);
+        }
+    }
+    if (bad) { printf("KB E49 DIFF_FAIL skip timing\n"); return; }
+
+    for (rd = 0; rd < KB_ROUNDS; rd++) {
+        uint32_t c0, cy;
+        const uint32_t rc[3] = { 4u, 4u, 16u };
+        c0 = esp_cpu_get_cycle_count();
+        for (li = 0; li < 8u; li++)
+            for (i = 0; i < 3u; i++) {
+                kb_row4(&a, blob[i], norms[i], xh, cb, y[i], li * rc[i], rc[i],
+                        rowbytes, ngroup);
+                nd_gemv4_rows_tie1(&a);
+            }
+        cy = esp_cpu_get_cycle_count() - c0;
+        if (cy < warm) warm = cy;
+        for (r = 0; r < 163840u / 4u; r++) sink += evict[r];
+        c0 = esp_cpu_get_cycle_count();
+        for (li = 0; li < 8u; li++)
+            for (i = 0; i < 3u; i++) {
+                kb_row4(&a, blob[i], norms[i], xh, cb, y[i], li * rc[i], rc[i],
+                        rowbytes, ngroup);
+                nd_gemv4_rows_tie1(&a);
+            }
+        cy = esp_cpu_get_cycle_count() - c0;
+        if (cy < cold) cold = cy;
+    }
+    printf("KB E49 t=%u/%u/%u out=%u/%u/%u in_pad=%u ngroup=%u weights=%u "
+           "warm_cyc=%u cold_cyc=%u warm_cpw=%u cold_cpw=%u x1000 cold_warm_x100=%u sink=%d\n",
+           (unsigned)ti[0], (unsigned)ti[1], (unsigned)ti[2],
+           (unsigned)tt[0].shape[0], (unsigned)tt[1].shape[0], (unsigned)tt[2].shape[0],
+           (unsigned)in_pad, (unsigned)ngroup, (unsigned)weights,
+           (unsigned)warm, (unsigned)cold,
+           (unsigned)((uint64_t)warm * 1000u / weights),
+           (unsigned)((uint64_t)cold * 1000u / weights),
+           (unsigned)((uint64_t)cold * 100u / warm),
+           (int)sink);
+}
+
+
 /* ================= Experiment 29: fused/shared-activation CQ2 lanes =========
  *
  * Three questions, one per board, all about the mass the phase map puts in
@@ -3842,6 +4030,7 @@ int kbench_run(void)
     bench_gather();
     bench_wake();
     bench_rowrange();
+    bench_e49();
 #if ND_KB_EXP36
     bench_e36();
 #elif ND_KB_EXP37

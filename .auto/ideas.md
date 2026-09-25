@@ -3252,3 +3252,22 @@ seed-era pin (91e79eeeb304). All captures current. Discovery pin 5.8083; shippab
 * Pool: b1+b3 = shippable+spin e6d55f29e286 (capture current), b2 = seed pin 91e79eeeb304
   (capture current). Both lines fully gated; the sole outstanding item is the two
   ring-proven demo-timer goldens (#647) - owner disposition.
+
+## 04:20Z: wide-load closure REOPENED by probe audit; three lanes launched
+* MENTOR EVIDENCE: #333's "ee.ldf.*.ip lose nibble identity" came from a BROKEN
+  probe (.auto/exp22/kbench_phi22.c: A-init only before the m-loop, ucb/urow
+  overwritten by the B pattern inside it, never reset -> the 4080 answer was the
+  all-one input, not lost nibbles). Also dot4 XH_WIDE lists f4,f5,f6,f7 against
+  Espressif's documented f7,f6,f5,f4 order, and the old unit lacked explicit
+  16-byte alignment. So the +21/+25% wide-load forms are NOT refuted; after the
+  scalar alternating schedule, ONE aligned correctly-ordered 128-bit candidate
+  from the current multirow kernel is justified.
+* E49 placement caveat (mentor): bench xh was ND_ALLOC (PSRAM) while field m->xh
+  is ND_ALLOC_FAST internal SRAM; one 160 KB eviction before a 300 KB sweep
+  cannot bound field delivery (raw cold increment 1.54 pct). phi delivery/scheduling
+  are NOT closed by that screen; fix placement inside the next candidate-vs-ref test.
+* Lanes: B1 row-owned single-dispatch kron halves (+predicate recheck fix restored
+  on b1/b3 - #658 had ported spin without #492/#498); B3 full lean-notification
+  scheduler transfer (b3 keeps its bundle5 engine, s_go/s_done gone, 0 xSemaphore);
+  B2 alternating a15/a9+f12/f15 codebook-load schedule in gemv4_tie728.S (a9 dead
+  after loop latches the count, f15 unused; per-partial chains untouched).

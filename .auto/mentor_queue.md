@@ -345,3 +345,43 @@ gated). Both boards are free and usable.
 **Harness lessons from this window:** a `pkill -f` pattern containing `needle-board run 1` matches the
 **invoking** shell and kills the command before it writes its files - use bracketed patterns; and
 expand `$FLASH_PORT` **inside** the lock's environment, never in single quotes.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~09:20Z (run #764: campaign-best tree gets kernel-level bitwise verification; B1 still needs a power cycle)
+
+**Composed tree (B3) now stands on all three evidence classes at once:**
+
+| class | evidence |
+|---|---|
+| device breadth | decode **6.1117**, ext 6.0415, think 4.68, min 5.89, prefill 6.4533, 18/20 (only the two #647 cases), internal_free 12,035 |
+| host quality | 19/19, delta 0, fidelity 5.341e-05, top1 10/10 |
+| **kernel-level bitwise** | `ROWRANGE` chunk 1/12/24 over rows=24 `mismatch=0`; `E49 diff rows=192 mismatch=0` (R=1/R=2 lines exact) |
+
+Historical benches unchanged under this tree (EXP 129.03/112.04 mismatch 0; DOT c4 139, pair 404,
+reord 214, bad=0; DIV bit_mismatch 0; the Gather 417/512 line is the long-recorded
+gather-vs-pair-LUT reduction difference, not a regression).
+
+**Still owed:** a purpose-built row-level differential for `qk_dot8` (C, statement-identical
+arithmetic; passes screen + breadth). **State:** B3's flash holds the kbench image - re-flash from
+its normal build before the next B3 lane; B2 free at 6.0883; **B1 strap-wedged pending a physical
+power cycle** (operator action), after which EG2 (`.auto/exp92/`) should be re-run as a normal lane.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~10:10Z (run #765: engram[1] staged on the SEED line - built, UNMEASURED; B3 joins B1 in the silent-wedge state)
+
+Implemented per spec on the seed line (B3, the 6.1117 composed tree): own narrow `ND_ALLOC` copy of
+the pair containment leaves outside the span (313,344 B), selection **by offset** (never index), both
+copies byte-compared, dispatch from `m->eg2_psram`, `EG2 ok=1 ...` proof line; the old guarded
+`EGRELOC` draft was replaced rather than patched, and the engram GEMVs' own `nd_tier_ptr` fetches mean
+the path is genuinely reached. Builds clean (app `98c47d4f349e`). Asset: `.auto/exp94/`.
+
+**No measurement:** the lane emitted nothing for ~10 minutes - the same silent-wedge signature as
+board 1 - so **B3 is now suspect for the same strap/host condition** too, and this candidate is
+unmeasured rather than disproven.
+
+**Operator action now covers B1 AND B3:** physical power cycle (or host-side USB port reset) for both;
+afterwards each candidate is a normal lane whose `EG2` line prints during `nd_model_open`, so a
+boot-only console read is the whole diagnosis. **B2 is the only currently usable board** (seed + group
+`loop`, 6.0883 gated) - schedule new work there first.

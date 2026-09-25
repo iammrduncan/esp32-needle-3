@@ -245,3 +245,34 @@ gates owed), B2 `1f17fa25e179` (5.9917 screen; full gate + host gates owed), B3
 running. Next lanes in order: (1) the scratch-lifetime audit above and its first
 candidate; (2) full gates for whichever line the owner wants to submit (both owe them);
 (3) B3 when its USB returns.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~13:15Z (run #698: best line breadth-gated again)
+
+**Seed line FULL GATE: 5.9917 / ext 5.9215 / think 4.61 / min 5.77 / boot 6.10 / 18-20
+(delta 52 = the two #647 goldens) - +12.96 % over the owner's 5.3033 pin.** The image
+carries the nx/xh lifetime change (+0.50 % on breadth, exactly the restricted screen
+value) and E69.
+
+**E69 = null on speed, real on resources.** The dequant path had the same lifetime
+defect E68 removed in the phi path: `nd_cq_dequant_row` transformed into a scratch
+(`m->row`) and then copied the row to its destination. It now writes straight into the
+destination when the caller passes it as both (both field call sites do), and `m->row`
+is retired: `internal_free` 12,531 -> **15,607 B**. Predicted null was correct - the
+copy is ~19 KB/token - so it is banked as a resource change, not a speed claim.
+
+**Lifetime audit result (the family is now empty of *copies*, but not of *buffers*):**
+`memcpy/memset` in the hot path is gone except the prefix snapshot/restore (per
+request, outside the timed region) and the PSRAM staging at open. Remaining scratch
+rows are `n1`, `n2`, `ublk`, `tmp`, `tmp2`, `u`, `gate`, `aout`, `y` - none of them is
+copied, so the next question is not "can this copy go" but "can two of these rows share
+storage without changing arithmetic" (the same reasoning that retired nx and row, now
+applied to whether `ublk` could be folded into its producer, which WOULD change the
+subtract order - do not do that without a differential test).
+
+**Board state:** B1 `0f0d3668d71f` (5.7583 screen; full gate + host gates owed),
+B2 `31e8d04c8120` (5.9917 full gate; host gates owed), B3 `b255280ba9a9` (E67 only,
+flash EIO). All idle. With ~15.6 KB internal free on the seed line, the long-blocked
+RAM-gated ideas come back into range (16 KiB private LUT2 tables; phi row residency
+~18 KB/core is still out of reach) - worth re-pricing before building anything new.

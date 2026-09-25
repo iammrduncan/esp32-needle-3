@@ -279,13 +279,6 @@ nd_lut2_rows_tie1:
 .Lt1_row:
 	l32i	a2, a1, 20
 	l32i	a4, a1, 16
-	/* One hardware loop per row instead of three instructions per group:
-	 * `loop` owns the count (a2 is not touched inside the body) and LEND lands on
-	 * .Lt1_gend, so the decrement + branch + jump disappear from the group tail -
-	 * 3 instructions x 6 groups per row, ~391k instructions per decode token,
-	 * against one loop setup per row. The assembler expands `loop` when the body
-	 * is out of the short range (attn_heads does exactly this at 0x4037c752). */
-	loop	a2, .Lt1_gend
 .Lt1_group:
 	l32i	a10, a5, 0
 	l32i	a11, a5, 4
@@ -315,7 +308,10 @@ nd_lut2_rows_tie1:
 	mov.s	f3, f6
 	addi	a5, a5, 32			/* gbytes */
 	addi	a6, a6, 2			/* one FP16 norm */
-.Lt1_gend:			/* fall-through: `loop` owns the count now */
+	addi.n	a2, a2, -1
+	beqz	a2, .Lt1_gend
+	j	.Lt1_group			/* j reaches; bnez cannot (>.5 kB) */
+.Lt1_gend:
 	ssi	f5, a7, 0
 	addi	a7, a7, 4
 	mov.s	f5, f6

@@ -507,3 +507,40 @@ recovery, which needs the host's USB hub attention rather than another container
 (three EIO checks, no further loops spent); (3) if more speed is required, it has to
 come from a NEW mechanism rather than a re-pass - the campaign's own cost model says
 the 2-bit weight stream is bounded by issue rate, not by memory or by the compiler.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~18:25Z (run #711: the frozen pair now has a mechanism signal)
+
+**A valid probe at last.** `nd_sample.c` behind `ND_REQ_DIAG` now prints, per step, the
+chosen token, how many tokens the grammar left legal, and the margin to the runner-up
+among those legal tokens. Harvest of the two failing cases plus the `sampling5` control:
+
+* **The picks are confident, not razor-thin.** Median margin ~12.8 logits (probability
+  ratio ~3.6e5) on both the failing case and the control; the wrong pick
+  (`seconds=300` where the golden says 1) has margin ~16. So the flips are NOT sampler
+  tie-breaking on near-equal logits.
+* **The failing case and the control are identical for six tokens**
+  (507, 379, 300, 722, 8122, 8100) and separate only at the decision point: the control
+  concludes a single `set_timer` call in 12 steps, the long-tools case degenerates into a
+  repeating `heap high water mark -> seconds 300` chain for 55 steps.
+* The legal set is small (3-14 tokens/step), so the sampler chooses from a handful - but
+  with wide margins, which is what makes the "confident wrong answer" reading safe.
+
+**Combined with the earlier input record (qlen, qhash, encoded suffix ids and restored
+prefix identity all intact and identical between the cases), the divergence is in the
+model's own arithmetic/state on the longer prompt, not in transport, parsing or
+tie-breaking.** The next question is the device's int8 KV cache: the longer prompt fills
+more KV slots, and int8 quantization error grows with the number of accumulated entries
+- a differential that the host (float cache) does not have. #647's transport-only flip
+then needs one of two explanations, both testable: either the ring changes how many
+positions are primed/restored (state, not arithmetic), or the two cases sit close enough
+to a quantization boundary that a different primer timing changes the outcome. The cheap
+first check is to run the two cases with the ring disabled on the same tree and compare
+the per-step DIAGPICK margins - if the margins move, the mechanism is state; if they are
+identical and only the later choices differ, it is quantization.
+
+**Probe hygiene for reuse:** `margin=0` at `legal=1` steps is not razor-thin (the script's
+counter counted those); the DIAGPICK and DIAGREQ hooks are inert behind `ND_REQ_DIAG` and
+B1's `diag_build_cfg` has been deleted, so its tree is a normal speed tree again.
+**Both lines are still packet-complete at 6.0133 / 5.7767 (+13.38 % / +8.93 %).**

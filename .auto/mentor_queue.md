@@ -344,3 +344,35 @@ cores; E67's first kernel walked off its rows) - write the reference from the sh
 statements and run it single-threaded; a kernel's call convention must be read off the C
 prototype, never copied from a neighbour; and a guard that cannot fire measures as a
 perfect null (E66 while `nx` was unaligned).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~14:50Z (runs #701-#703: 6.0133 breadth-gated)
+
+**Seed line is the campaign's first to hold >6 tok/s through a full 20-case gate:
+6.0133 / ext 5.9454 / think 4.63 / min 5.79 / prefill 6.3433 / 18-20 (the two #647
+goldens) / internal_free 14,991 = +13.38 % over the 5.3033 pin.** Engine
+`a003340489c2`; host gates on this exact tree are the only thing still owed.
+
+**The composition rule paid twice now.** E65 (+0.17 %) and E67 (+0.146 %) were each
+sub-bar alone; together they are +0.36 % on breadth (#703), the same shape as #371's
+bundle. When a phase has two measured sub-bar halves, price the pair before deleting
+either.
+
+**Shippable line:** 5.7583 full gate + host 19/19 (`0f0d3668d71f`) = +8.58 %.
+
+**Attempted and REVERTED this window (do not mistake for a result):** porting E65's
+tiled mix to B1 as a cross-line confirmation. The splice pulled an `#endif` with it
+from the seed tree's block structure and the build broke; B1 was restored byte-exactly
+to `0f0d3668d71f` and builds. The lane is worth redoing properly (port the kernel, the
+oracle and its own verdict as three separate anchored edits, never as one slice), but it
+is a *confirmation* of an already-gated lever, not new discovery - lower priority than
+the items below.
+
+**Next, in order:** (1) host gates on the seed line's `a003340489c2` (minutes, and the
+only gap in the acceptance packet); (2) the same two-halves question on the phases that
+still have one banked half - the mix-family kernels now cover `dst=k*src`,
+`dst+=k*src` and the four-lane reduction, so any other loop of those shapes in the block
+is a candidate to price, and pairing is allowed; (3) B3 when its USB returns (it carries
+E67 alone, `b255280ba9a9`). With ~15 KB internal free, the 16 KiB private-LUT2 idea is
+borderline feasible; phi row residency (~18 KB/core) is not.

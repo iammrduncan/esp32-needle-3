@@ -307,3 +307,32 @@ cases run think=0 and any further comparison must set that mode explicitly.
 remain unclosed but each is ~0.05 % (the engram taps are the same size and the FWHT's
 strided passes do not fit 16 registers), so a retry needs oracle-first discipline and is
 lower value than the packet work.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~23:35Z (run #719: the two-case question is an owner choice, with evidence)
+
+**State sensitivity measured, and it is absent.** Both failing cases were run FIRST (right
+after priming) and LAST (after three other requests) in frozen think=0 mode on the same
+image: byte-identical answers both positions (`interval_one` -> `set_sampling_interval
+seconds=120`; long-tools -> the same 45-then-timer chain). With the earlier repeatability
+result, the device is **deterministic and order-independent** within an image, which
+removes within-image state accumulation from the mechanism list. The host (same engine,
+fresh prefill) now produces the SAME interval_one answer, and the host's control answer
+picks a different but equally valid tool than the device while the device passes that
+case - so the goldens are device-derived artefacts of one engine state, and the
+accept/reject difference sits where #647 put it: **the ring's effect on the request path**.
+
+**The decision this supports, stated for the owner:** (a) keep the ring (lossless input,
+the >128-byte request fix, the 20-case suite) and re-baseline or replace those two cases;
+or (b) drop the ring (20/20 returns) and give up the lossless-input fix and the 20-case
+suite. Nothing a further probe or engine change can do resolves it without one of those
+two acts - and the campaign's remaining speed levers (~0.05 % each, transcendental-bound
+sinkhorn, register-limited FWHT passes, dual-issue-saturated 2-bit GEMV) do not change
+that calculus.
+
+**Final state of this window:** seed `a9b5505a760f` **6.0450 gated + host 19/19**
+(+13.98 %), shippable `78c435fec440` **5.7767 + host 19/19** (+8.58 %), both packets
+complete except the E71 boot verdict owed at B2's next normal build; B3 EIO (three
+probes, none repeated). Every lever that landed is bit-exact on all 18 unaffected cases,
+and the frozen-pair evidence is now complete enough for the owner decision.

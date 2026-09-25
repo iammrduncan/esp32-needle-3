@@ -315,3 +315,58 @@ belongs to the pre-port image and the new anchor is 5.8283).
 quoted; (2) port any remaining seed-only measured lever - with E71/E72b done, the seed
 line's extra content versus shippable is the quant/asm stack itself, which is a larger
 question than a lane; (3) hardware triage remains the gate to using B2/B3 at all.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~12:00Z (run #735: both lines fully gated at their newest revisions)
+
+**Both packets complete, both at their best-ever numbers:**
+* **seed `d91fd5f048ca` 6.0617** (ext 5.9877, think 4.65, min 5.83, 18/20) + **host 19/19** =
+  **+14.29 %** over the 5.3033 pin.
+* **shippable `787a58302f52` 5.8283** (ext 5.7638, think 4.52, min 5.62, 18/20) +
+  **host 19/19** = **+9.90 %**.
+Both carry the same kept families (lane-block sweep, E68/E69 lifetime, E71/E72b conditioning,
+deferred console echo) and both are outstanding only on the owner's disposition of the two
+ring-related goldens.
+
+**Hardware:** board 2's console still returns zero bytes (single probe, no loop) and board
+3's flash node changed mtime again inside the window, i.e. the USB path is still cycling -
+**both need a physical check; board 1 is the only healthy lane and it is now idle.**
+
+**Lane economy:** with one healthy board and every lever family either kept-and-gated or
+closed by measurement/capability, the productive options are (1) hardware triage for B2/B3,
+(2) the owner's decision on the two ring-related goldens (evidence in #647/#711/#712/#718/#719),
+(3) optional `make capture` on the shippable tree via the adapted candidate-capture runner
+(`/root/board-pool/capture_b2_candidate.sh` shows the shape; board 1 would need the same
+adaptation, and it must start with a board-health check).
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~12:40Z (run #736: the serial path itself is down for all three boards)
+
+**Correction to #733's story:** board 2's console silence was NOT board 2's fault. Board 1 -
+the last healthy lane, which had just completed a full gate plus host checks - was flashed
+successfully with the 5.8283 tree and its console then returned **zero bytes** as well
+(600 s scripted wait, then a 30 s manual read with the documented DTR/RTS discipline). One
+check across all three device nodes shows every console silent while the node mtimes keep
+refreshing (board 1 console 17:56:49 / flash 18:00:00, board 3 flash 18:06:42), i.e. the
+USB path is re-enumerating without delivering data. **This is one host/container serial
+state, not three board faults.** No further probes were spent and nothing was reflashed.
+
+**All measured numbers stand untouched:** seed `d91fd5f048ca` **6.0617 + host 19/19**, and
+shippable `787a58302f52` **5.8283 + host 19/19** - both packets complete, both outstanding
+only on the owner's disposition of the two ring-related goldens.
+
+**Next window must start with host-side serial/USB triage on all three boards** (a
+container restart or a host USB reset is the natural first move; the container's view of
+`/dev/needle-pi` is a mount, so node presence there proves nothing). Only after a console
+answers should device work resume, and the first device item is the owed behavioural
+capture, whose runner shape is preserved at `/root/board-pool/capture_b1_candidate.sh`
+(start with a board-health check; a successful flash does not imply a live console).
+
+**Record correction (same window):** the capture script did NOT exit early as first
+reported - it was still inside its 600 s ready-wait and then concluded cleanly with
+`ready=0` / `BOARD_NOT_READY`. The diagnosis is unchanged and now carries the script's own
+verdict: the console delivered nothing for the whole window, so the capture is blocked on
+the serial path, not on the candidate image. All three device nodes remain silent with
+refreshing mtimes; host-side USB triage is the gate to any further device work.

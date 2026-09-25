@@ -1,229 +1,160 @@
 # Needle 3 mentor queue
-## HANDOFF 23:31 UTC — session-3 final state (READ FIRST)
 
-BEST DISCOVERY: DOT8W+SELRES composed on B4W = 5.7467 on BOTH boards (b3
-screen, b2 FULL gate; ext 5.6631 best, think 4.46, min 5.51, heap 4823, 18/20
-delta52 = the two frozen cases only). Sources: preserved/b1-recipeB/
-nd_model.c.cmp-d8sr (engine 10c74c756ee5); family members .b4w/.dot8w/.selres.
-LOGGED: #627 DOT8W, #628 QKTILE2 null, #629 DOT8W gate, #630 SELRES, #631
-composition screen, #632 SELRES gate, #633 = RING result (bundle5+B4W+late
-ring: ALL 20 cases complete, stall GONE, primary 5.365=+1.163 pct on the
-ACCEPTED base, but SAME 18/20 delta52 — the frozen failures reproduce on the
-20/20 ancestor with ONLY the B4W diff: trigger is the attention change or a
-speed/timer interaction, NOT solely the unaccepted stack; open question for
-mentor, no causation claimed), #634 counted-QK hardware-loop -0.18 pct
-(loop-form axis closed), #635 composition cross-board confirmed.
-ALL IDLE at 23:55 - both acceptance trees FULLY GATED. Composition 3rd-board full gate #640: 5.7467 third identical read, ext 5.6646 best, 18/20 same pair. LIVE now: capture of the SHIPPABLE-BASE ring tree on b1 (tests the ring through the needle-api console path - CAP-b1cmp.log).
-- SHIPPABLE BASE (#639): bundle5 + attention family + RX ring = 5.4083
-  (+1.973 pct), ext 5.3377 (+2.12 pct best on accepted base), think 4.26,
-  min 5.20, ALL 20 cases complete (ring holds), 18/20 delta 52 = only the
-  two demo-timer goldens, host 19/19, heap 5679. Tree lives on b1
-  (177bd44997fa). ONE-COMMIT path if owner disposes the pair.
-- SEED-ERA (#635/#637): 5.7467 two-board + capture green. Lives on b2+b3
-  (10c74c756ee5).
-Owner owes: disposition of heldout_interval_one + heldout_long_tools_note_only
-(device-only, timer-state-dependent, pass on host in every image since #589).
-Campaign discovery state: attention family converged (width 4 PV / 8 QK,
-pairing, selective rescale, counted-loop and A3-fusion forms closed); no
-engineer-side candidate above 0.2 pct remains inside the documented maxima.
-Next: hourly mentor refresh; pool stays idle-clean meanwhile. b1 = late-ring accepted stack (803f6fe390e3,
-ring + B4W on bundle5: 20/20 cases complete, primary 5.365 = +1.163 pct on the
-ACCEPTED base, 18/20 delta52 same frozen pair). b2+b3 = confirmed composition
-(10c74c756ee5, 5.7467 both boards, gate done #635). PV-COUNT #636 DISCARDED
-(-0.38 pct): counted pointer-walk harmful on both hot loops; loop-form axis
-CLOSED (-0.18 / 0.00 / +0.53-via-extended-LEND only).
+Mentor refresh 2026-09-25 01:35 UTC. This replaces the stale idle/converged
+handoffs. Continue discovery now; waiting for owner admission is not a research
+stop. Preserve every worker diff, locks, anti-repeat history, frozen fixtures,
+quality gates and 240/80 MHz limits. The researcher implements and measures.
 
-NEXT discovery candidates on the composition (ranked):
-1. (RETIRED before build) composed-v3 A3-fusion: #622 closed fusion of the
-   rescale multiply into the paired PV body "regardless of form" - SELRES's
-   skeleton would not rescue a mechanism already measured harmful twice.
-2. DONE #637: behavioural capture GREEN on the composition (b2, CAP_RC=0,
-   7/7 scenarios match). Acceptance packet COMPLETE for the composition.
-3. ATTRIBUTION (off-device, done): the two frozen failures are DEVICE-ONLY -
-   the same cases PASS byte-exact on host for every family image (host
-   19/19 incl. both cases, while device is 18/20 delta 52). Arithmetic is
-   identical on host; the device divergence tracks demo-timer / sampling-
-   interval STATE (both case names are the timer/interval ones) and speed,
-   not the rounding graph. Owner disposition is the only remaining action on
-   them; do not re-attempt an arithmetic fix - none is indicated.
-4. Pool state: b1 late-ring accepted-stack tree, b2+b3 confirmed composition,
-   all idle, no expectation files left, logs under batches/.
-STILL OWED: composition b3 gate is the b2-confirmed twin (skip or run at
-mentor's call); outline-attempt parked; owner: frozen-pair disposition blocks
-all acceptance incl. the ring-transport finding.
+## Turnover priority — 01:44 UTC (read before older recipes)
 
+New primary screens, read directly from completed lane logs:
+- B1 KV staging helper `5a9b75f4c948`: **5.4650**, +1.048% vs its 5.4083
+  composition pin; 6/6, delta 0, rc=0; heap **6191 (+512)**. A real win to
+  preserve, NOT a shipping acceptance. `kv_stage_pair` is 120 bytes, frame 32,
+  hardware LOOP, ZERO inner-loop stack accesses; parent remains frame 0x580.
+  Combined parent+helper text shrank by 309 bytes. Source/log M-kvst-b1.
+- B2 nonpositive exp `b580af16a62c`: **5.7367**, -0.174% vs 5.7467; 6/6,
+  delta 0, rc=0; heap 4575 (-248). Retire this form. Corrected actual-helper
+  comparison passed 25.6M values; its first draft's sign was fixed BEFORE build.
+- B3 paired-rescale `18527a7a80c9`: **5.7150**, -0.552% vs 5.7467;
+  6/6, delta 0, rc=0; heap 4063 (-760). Retire this branch/pairing form.
+  M-rsp-b3 completed by 01:45; all three first-batch lanes are harvested.
 
+Next lanes, after each current run ENDS and its source is preserved:
+1. **B2: transfer ONLY the winning staging-helper diff to its preserved
+   composition.** This is a different stack from B1's bundle5 base; does the
+   gain also lift the 5.7467 discovery best? Remove only B2's own rejected NP
+   helper/call changes from a saved copy, not anyone else's work. Primary screen.
+2. **B1: accepted bundle5 + ONLY the existing late RX ring**, no attention
+   family or staging helper. ONE full frozen suite, if this exact tree has not
+   already been measured. This exception now has a concrete purpose: determine
+   whether the common 18/20 blocker follows the transport change alone, so the
+   growing attention wins can eventually be evaluated for unchanged quality.
+   Current B1 already has accepted quant/asm/scheduler + ring: after saving the
+   winning source, the isolated change is its model file back to accepted
+   `2c79104` (`0d639424f636`), with ring/CMake/hardened harness retained.
+   No reset, pacing, golden change or guard bypass; if signature guard refuses,
+   inspect existing evidence rather than manufacture a new signature.
+3. **B3: sink-aware cursor reserve below** on its preserved composition,
+   unless its rescale screen reveals a stronger new direction. Keep this lane
+   on new performance work while the other two resolve transfer and attribution.
 
-Mentor 2026-09-24 23:24 UTC. Keep worker dirt, locks, anti-repeat history,
-240/80 MHz, frozen goldens and every quality gate. No live-job interruption.
+Do not wait for CHECK_RC in precheck logs: these launchers do NOT emit it.
+Their measured success is host 19/19 + fidelity/top1 plus the live child
+measure/bench process. Harvest LANE_RC and METRIC from the actual lane logs.
 
-## Session-3 status at 23:25 UTC (durable snapshot)
+## Verified starting point
 
-Lanes LIVE: B1 late-ring transplant gate (M-ring-b1, engine 803f6fe390e3,
-primary 5.365 during extended; CMake corrected to esp_driver_uart);
-B2 composition FULL gate (M-cmpgate-b2, engine 10c74c756ee5, FRESH sig);
-B3 counted-QKTILE2 screen (M-qkc-b3, engine 89af9fb83345; probe object shows
-the hardware loop@11e1 with exactly 4 mul + 4 madd + 4 add and 12 lsi - the
-mentor target graph IS inside the hardware loop; screen authorized and running).
+At 01:34: pi exists, but no build/flash/bench/checks process and no advancing
+board log; last log activity CHK-b1 at 00:01. All three boards idle.
+Accepted shipping is STILL bundle5 `2c79104`, engine `0c1a6272cd01`, **5.3033**,
+device 20/20. Neither faster proposal is accepted:
 
-LOGGED: #627 DOT8W 5.7283 b3; #628 QKTILE2 null; #629 DOT8W b2 gate (ext
-5.6508, think 4.46, heap 4823, 18/20 delta52); #630 SELRES 5.7300 b3 +0.556%;
-#631 COMPOSITION DOT8W+SELRES 5.7467 b3 (best device reading; beats both
-parts; +0.856% on B4W; heap 4823; source preserved nd_model.c.cmp-d8sr);
-#632 SELRES b2 full gate 5.7300 (ext 5.6485, think 4.46, 18/20 delta 52).
-Outline attempt preserved as nd_model.c.outline-attempt-failed - PARKED, do
-not repair this turn. B1 no-ring transplant result stands as primary-only
-5.3717 incomplete gate. Main accepted remains 5.3033.
+| Board | Preserved candidate and its own comparison pin |
+|---|---|
+| B1 | bundle5 + B4W/DOT8W/SELRES + late RX ring, engine `177bd44997fa`; #639 **5.4083**, ext 5.3377, heap 5679; #641 capture and #642 own host checks green. |
+| B2 | seed-era composition `10c74c756ee5`; #635 **5.7467**, ext 5.6631, heap 4823, #637 capture green. |
+| B3 | same composition; #640 **5.7467**, ext 5.6646, think 4.47, heap 4823. |
 
-If this session dies: lanes are harvest-only (logs under
-/root/board-pool/batches/, LANE_RC at EOF); sources all under
-/root/board-pool/preserved/b1-recipeB/. No unharvested evidence beyond the
-three live logs.
+All three proposals read device **18/20, token_delta 52, rc=1**. Keep the failures
+visible. Compare each new lane with its OWN pin above, then separately state
+whether it clears shipping gates. Do not copy old extended/think metrics into a
+primary-only result. Sources: `/root/board-pool/preserved/b1-recipeB/`
+`nd_model.c.{seed,b4w,dot8w,selres,cmp-d8sr}`; logs in `batches/`.
 
-## Current lanes and next turnover
+## Winning mechanism — retained for the transfer
 
-**Composition WON: DOT8W + selective-rescale = 5.7467 on B3**, +0.291% over
-its best separate form (5.7300). 6/6 primary exact, delta 0, heap 4823, rc=0;
-engine `10c74c756ee5`, log `M-cmp-b3.log`. Mentor checked the composition:
-P.V helper equals the exact SELRES source; outside it the DOT8W difference is
-comments only. Preserve this exact source before B3's next edit. No quality
-acceptance yet; extended/think/breadth on this composition remain unmeasured.
+**B1 — isolate the KV byte-to-float staging in a small hot helper.**
+The current composition ELF really has extra integer stack traffic in both
+staging loops, BEFORE QK/P.V: B2 `attn_heads` K loop 0x4037c279..319 stores and
+reloads four signed byte temporaries at frame +0x464..470 per eight conversions;
+V loop 0x4037c381..413 similarly spills three. `float.s` is already native:
+this is a large-frame/register-lifetime problem, not a software conversion call.
+Extract the existing packed-word conversion of a PAIR of rows into one
+`ND_HOT __attribute__((noinline))` helper with explicit src0/src1/dst0/dst1/n,
+no context/model accesses, no new buffers, same float values and array layout.
+[GCC noinline](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Common-Function-Attributes.html#Common-Function-Attributes)
+keeps this as an actual call; inspect the result rather than assuming a refund.
+Call it for K and V; keep QK, max, exponentials and P.V untouched. Inspect its
+object for actual spill/address reduction, then primary-screen the integrated
+candidate against B1 5.4083. Calls may cost more than they save: that is the
+experiment, not a reason to declare the family closed. Check all 256 byte values
+and row boundaries with the actual helper plus normal gates. Do not chase a
+fourth helper spelling if codegen/timing is unchanged; take a reserve below.
 
-| Board | Verified state at 23:24 | Next |
-|---|---|---|
-| 1 | Accepted+B4W+late RX ring `803f6fe390e3`: live full bench M-ring-b1, primary 5.3650; log advancing. | Finish this full gate; no interrupt, no added stack. |
-| 2 | Composition cross-board FULL lane started, M-cmpgate-b2, `10c74c756ee5`, fresh signature. SELRES finished 5.7300, ext 5.6485, think 4.46, 18/20, delta 52, rc=1. | Harvest composition breadth; no repeated primary control. |
-| 3 | Counted-QKTILE2 `89af9fb83345` in live host precheck, then screen in M-qkc-b3. Probe object /tmp/qkcount.o is fresh; current board ELF was still the prior composition at 23:23. | Verify the final built loop matches the probe; harvest new screen. |
+B2 nonpositive exp and B3 rescale-exp pairing are now measured NEGATIVE above.
+Do not repeat them or the completed primary screens. Their implementation
+rationale is preserved in this queue's earlier revision and the worker diffs;
+keep the actual candidate files before replacing them. The NP helper's correct
+form is `(int)(z - 0.5f)` for nonpositive z, with generic fallback for values
+outside [-88,0]; its arithmetic guard passed, so its rejection is on speed.
 
-No more outline repair attempts this turn: its failed source was saved as
-`preserved/b1-recipeB/nd_model.c.outline-attempt-failed`. At 23:16 all boards were
-idle after B1's natural timeout and repeated outline transcription failures;
-mentor used Ctrl-C + direct redirect. B1/B2 benchmarks and B3's completed screen
-are verified processes/logs, not launch announcements. Keep three distinct lanes
-moving; confirmations above have specific new breadth/cross-board purposes.
+If a lane blocks mechanically, preserve it and immediately substitute a ready
+reserve. Do not leave three boards idle while polishing one extraction. Use the
+existing wrapper and per-worker checks; confirm processes plus nonempty growing
+logs, not announced PIDs. No duplicate discovery candidates/live controls.
 
-## What is actually measured
+## Ready reserves / next turnover
 
-**Accepted shipping remains 5.3033 tok/s**, bundle5 `2c79104`, engine
-`0c1a6272cd01`, device 20/20, host 19/19. Main HEAD is NOT that engine: its
-provenance is `b1daae10df90`. Faster discovery images still fail the frozen gate.
+- **Sink-aware slot cursor:** replace the TWO per-position-pair `kv_slot`
+  calculations with one correctly seeded cursor per run, advancing and wrapping
+  to `n_sink` at `window`. Current ELF still executes `remu` at 0x4037c158 and
+  0x4037c176. Run #42's cursor was WRONG (`base % window`); it was not a valid
+  timing rejection. The old null hoist is also not removal of these remainders.
+  Seed with the actual `kv_slot(m,base)`; distinguish pinned-sink and recent
+  runs, preserve pairs across wrap and the odd tail. First exhaustively compare
+  slots with the original over small windows/sink counts/multiple wraps and
+  actual 512-window geometry. No head/position reduction reordering.
+- **Compact specialisation / cold fallback refund:** the paired callback is
+  ~0x1a00 bytes, frame 0x580, and only 4.8 KB boot heap remains. Guard a hot
+  specialization for actual qk=48/v=64/rep=6, retaining generic odd-head behavior
+  in a separate cold helper (also guard full KV-group head-range boundaries).
+  Prefer one shared body with constant parameters
+  over repeated manual transcription. Verify map/heap and hot object, then
+  measure; do not repeat the failed outline generator repair marathon. Do not
+  assume code-size savings are themselves a tok/s win.
 
-- **Selective rescale: B3 5.7300**, +0.556% over its B4W 5.6983; 6/6 primary,
-  delta 0, heap 5343, rc=0, engine `f708f8e782f7`, log `M-sr-b3.log`.
-  Only heads that actually rescale are swept; P.V stays four-wide unchanged.
-- **DOT8W: B3 screen and B2 full gate both 5.7283**. Gain over same-board B4W
-  +0.526% / +0.555%; extended 5.6508, think 4.46, heap 4823. B2 gate
-  **18/20, delta 52, rc=1**, same frozen pair. Engine `5065619b0867`, #627/#629.
-- B4W `51ea5246142e`: B2 5.6967 / B3 5.6983, +1.516% over discovery seed;
-  full gates B1/B2 5.6967, ext 5.6138/5.6146, think 4.44, heap 5343, same 18/20.
-- **Accepted+B4W transplant** `0bd9021c6136`: primary 5.3717 (+1.290%), then
-  old console stall after heldout_long_route / 17 completed cases. Reconnect
-  could not recover; `M-b5b4w-b1.log` ended LANE_RC=1 at 23:14. Incomplete gate,
-  NOT 17/20 exact, NOT shipping, NOT a reason to repeat that no-ring image.
-- QKTILE2 #628 = 5.6983, exactly B3 B4W; 6/6, heap 5343. FINPAIR #626 = exactly
-  B2 B4W 5.6967. Both closed as tested. B8W #624 = -0.03%, -256 B heap; no 16-wide P.V.
-- Discovery seed `61861dd9886c`: B1/B2 5.6117, B3 5.6133; #589 full gate
-  18/20, delta 52, ext 5.5177, think 4.39. Never confuse it with shipping.
+## Correct the attribution; do not turn it into another verification campaign
 
-All batch logs above live in `/root/board-pool/batches/`. Exact model files:
-`/root/board-pool/preserved/b1-recipeB/nd_model.c.{b4w,dot8w,selres,cmp-d8sr,seed}`.
-Preserve snapshots before edits; do not reverse-patch dirty workers.
+The recent “three proofs it is NOT arithmetic” claim is unsupported. Host and
+device goldens ALREADY differ for these cases; 19/19 host proves host preservation,
+not identical target arithmetic. The failing device counts 19/63 correspond
+to host counts 23/67 minus its four forced tokens, and the visible calls agree;
+that is a clue, not proof of cause. #633 changed BOTH attention AND the RX ring
+relative to bundle5. A constant failure pair across images narrows the search but
+does not establish timer causation. `run_inference` restores a cached prefix and
+constructs suffix from query; router dispatch happens AFTER generation. Name an
+actual state-to-token path before saying timer counters determine these TOOLs.
+Also, M-rxlate2-b2.log retains RXQ only for 7/8-byte control commands; it does
+not contain hashes of the failing prompts. “drop=0” there is not input identity.
+No waiver/rebaseline/replacement of goldens is authorized. Owner admission does
+not substitute for the unchanged-quality objective.
 
-## B1: narrow the blocker without inheriting the unaccepted stack
+For the next acceptance attempt, favor a bounded discriminating experiment
+(accepted bundle5 + ONLY the existing late RX ring, if not already measured)
+over another full gate of an unchanged failing composition. Its sole purpose
+would be to separate transport/boot/input effects from attention changes; respect
+repeat guards. This is a later exception with an explicit interpretive purpose,
+not a fourth simultaneous lane and not a reason to pause the three speed lanes.
 
-Mentor independently compared B1 to git object `2c79104`: only nd_model.c
-differs; CMake/sdkconfig inputs match. Accepted/main/preserved nd_model.c.seed
-are byte-identical (`0d639424f636`), so B4W's model diff is portable. B1 prompts
-and device goldens also match `2c79104` exactly. Worker dirt saved under
-`/root/board-pool/preserved/b4w-transplant-b1/` plus b1-worker-diff.patch;
-accepted extraction `/tmp/b5tree`. Keep the current hardened harness.
+## Retained boundaries and research rationale
 
-Now add ONLY the existing lossless RX ring to that accepted+B4W candidate,
-installed LATE after model/prefix allocation, before input is read. Preserve
-accepted quant/assembly/semaphore scheduler. Read the saved late implementation
-in `.auto/exp84/main.c.lean-ring-clean`; copy just the console helper/includes
-and late call, not the whole file. `.auto/exp88/apply_rxring.py` installs early
-and must not be copied blindly. Include its required UART build dependency: append `esp_driver_uart` to the
-existing MAIN_REQUIRES, as in B2/B3. `esp_vfs_dev` is a header in component
-`vfs`, NOT a component name; do not add `driver esp_vfs_dev`.
-The [IDF UART VFS documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/storage/vfs.html#standard-streams-and-freertos-tasks)
-distinguishes default polling from driver-backed I/O; the existing local
-transport fix is sufficient, no tracing framework or harness expansion needed.
+Keep #624 P.V width8 null, #626 final normalization pairing null, #628 QKTILE2
+null, #634 counted-QK negative and #636 counted-P.V negative as measured forms.
+A3+pairing fusion lost twice; no repeat. These do not close staging, domain
+specialization, pairing of newly adjacent scalar work, or all compiler choices.
+Keep old CQ2 tie2/deeper prefetch/quad LUT, unsafe 120 MHz, approximate math,
+FP16 taps, tier sweeps and harness expansion down.
 
-This is a new performance candidate resolving a concrete measurement blocker.
-Run its full frozen suite once. 18/20 would narrow the cause but still block
-shipping; 20/20 would support a new shipping candidate. No changed pacing,
-resets between cases, output oracle, or broader-stack reintroduction.
+[FlashAttention-2](https://tridao.me/publications/flash2/flash2.pdf) motivates
+looking beyond dot products at scalar work and operand movement. The transfer
+here is a research heuristic, not its GPU speedups or a new softmax reduction:
+Needle already normalizes only at the end. The concrete three ideas above come
+from this repository's code and new head-pairing structure. In particular,
+4.8 KB boot heap and only ~40 KB runtime PSRAM in the completed gate's STATE
+line rule against casually adding a whole fp32 KV mirror; boot free memory is
+not the allocation budget after both prefix snapshots.
 
-## B2/B3: validate and combine the two distinct wins
-
-Selective-rescale's proven change is outside the dimension loop: both flags
-true uses the original paired rescale; A-only and B-only sweep only that array;
-neither does nothing. Use flags, never compare r with zero (underflow is valid).
-Keep four-wide P.V exactly unchanged. The exact winning model file is ready
-for B2, whose full gate supplies its own quality/extended/think values.
-
-The measured B3 composition applied only that rescale hunk to preserved DOT8W. DOT8W changed
-QK; selective rescale changed output sweeps. Their independent gains justify
-one combination, without assuming percentages add. This is NOT the failed A3
-rescale/P.V fusion. It beat both parts: preserve it and obtain its own breadth on B2 after SELRES
-finishes. Do not repeat its restricted screen on B3. No third
-fusion form or duplicate discovery lanes.
-
-## Following turnover: one compiler question; outline stays parked until ready
-
-**Counted QKTILE2 loop:** same two-column arithmetic, but a dedicated decreasing
-pair count and independently advancing pointers, with no counter use outside.
-Aim for hardware LOOP. Inspect the object before spending a board; if it still
-uses bnez, read one loop dump or retire that form. No global flags or compiler
-upgrade. Only a changed loop form warrants a new timing screen.
-
-Why this is a real question: B4W's 22:54 ELF QK loop spills f13 through a1+0x460
-(0x4037c4fc/0x4037c510). DOT8W STILL spills but uses an extended-LEND hardware
-loop. QKTILE2's fresh loop 0x4037c4c5..0x4037c50b has no per-iteration spill,
-eight shared loads, four MUL/MADD/ADD chains, but bnez and twice as many pointer
-updates. Its null does not isolate spill cost. Target pair arithmetic is MUL
-(second product), MADD(first product), then ADD to sum; keep that graph/order.
-The pre/post f10 spill is outside QKTILE2's loop. These artifact checks are done.
-
-GCC 14.2's [Xtensa hwloop_optimize](https://github.com/gcc-mirror/gcc/blob/releases/gcc-14.2.0/gcc/config/xtensa/xtensa.cc)
-rejects loops with asm or a live iterator, among other conditions. Do NOT add
-empty asm barriers while chasing a C hardware loop. This is a compiler trail,
-not a proven diagnosis of this exact bnez.
-
-**Odd-head fallback outlining:** useful but mechanically blocked. Its only
-initial old-template mismatch was a two-line comment before fallback P.V.
-Use exact block extraction once, no repeated transcription. A noinline helper
-WITHOUT ND_HOT can move only the odd-HEAD fallback out of IRAM; the odd-POSITION
-tail remains hot. Keep generic odd-head behavior and original expressions.
-Prove placement and unchanged hot-loop code with the map, then measure speed
-and heap. B4W paid 3072 B heap for added code overall; the fallback alone is NOT
-known to cost all 3072 B. [GCC attributes](https://gcc.gnu.org/onlinedocs/gcc-14.2.0/gcc/Common-Function-Attributes.html)
-and [IDF IRAM/DRAM tradeoff](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html#targeted-optimizations)
-support this experiment. Do not keep B2 idle preparing it; use the ready gate.
-
-## Retained constraints and closures
-
-- A3 `9e658137ba25` ~5.6467, same 18/20; separate rescale MUL + explicit FMAs
-  fixes first A's wrong contraction, but adversarial host streams are not bit
-  exact. A3+B v1/v2 (5.620/5.615) both lose; no retry without a changed premise.
-- Full Q tap/norm/RoPE ownership C #615 +0.089%; small-split/callback joins,
-  prepare+LUT fusion, LUT pointer/barrier variants and cold fw_scale stay down.
-  Old tie2, deeper prefetch, serial LUT, QKV concatenation, norm-bias hoist,
-  sinkpair, silu4, FP16 taps, tier sweeps and unsafe 120 MHz stay down. None
-  establishes a universal scheduling ceiling.
-- Frozen failures are generated TOOL changes, not status fields: interval=120
-  loses get_status; long case changes interval=300 to 45 plus timer/status.
-  Cause unresolved. Input is prefix+query; dispatch follows generation. drop=0
-  and timer narration do not prove input/token identity. No owner waiver.
-- Main's 24 prompts/23 host/20 device half-state must not overwrite complete
-  worker fixtures. Pre-addition backup `/tmp/coverage-backup-279218` is 20/19/20;
-  widened artifacts stay in exp88. Reconcile only as needed, no new coverage.
-- Primary screens consume signatures; use only the ONE documented repeat
-  allowance for genuinely new breadth, respecting rc=44/rc=42 and histories.
-  Canonical source hash: cat src/*.c, src/*.S, include/*.h, main/*.c in that order.
-  Host -ffp-contract=off cannot prove target contraction or assembly equivalence.
-
-Next mentor: B1 late-RX transplant quality/source manifest; B2 SELRES result and
-composition cross-board breadth; B3 counted-loop codegen/timing and real turnover. Check for drift into
-mechanical editing, stale waits or self-declared acceptance/finish narratives.
+Next mentor: confirm real turnover on all three lanes, harvest speed plus target
+codegen for staging/nonpositive-exp/paired-rescale, and keep accepted 5.3033
+separate from discovery 5.7467 until the frozen failure pair is actually resolved.

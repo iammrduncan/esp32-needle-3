@@ -154,3 +154,88 @@ describes FIFO/ring behavior; only traces can establish the consumed input.
 Next mentor: prioritize **B2/B3 actual live children and growing logs**, B2
 recovered identity, B1 full-gate/dispatch evidence, and first frozen-pair input
 evidence. Accepted stays 5.3033 until the complete unchanged-quality gate passes.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~09:35Z (runs #683-#685, all three lanes harvested)
+
+**B1: live FWHT delivery KEPT (#683).** Fused len=1+len=2 radix-4 first pass with
+128-bit loads inside the ACTIVE `nd_fwht3s` three-group walk (`nd_fwht4r`); per
+4-cell block 3 loads + 24 fp + 3 stores for three groups against 12+24+12 scalar.
+Selftest 64/64 bit-exact, and the boot line proves field dispatch:
+`FWHT4R xh_align=0` + `FWHT4R live=1 n=128 align=0` (m->xh is now FAST16). FULL
+20-case gate: **5.6483 (+0.18% vs 5.6383)**, ext 5.5815, think 4.4, 18/20 = the two
+#647 goldens. The screen had read 5.6600 (+0.385%) - breadth is the honest number.
+B1 tree = 5.6483 state (engine `986dc8d5f2e8` before the run; re-hash at turnover).
+
+**B3: QK reschedule CLOSED with a price (#684).** The five-load order (k0, qa
+increment 0, qb into qa's registers, k1, qa increment 16, no rewind) with split head
+temporaries is bit-exact (256/256) and priced **56 cycles/chunk against the compiled
+C body's 49** - E52's serial body was 80, so the reschedule recovered 24 of the
+31-cycle defect and still loses end-to-end (5.5983 = -0.71%). Hand-written asm for
+this loop is closed on a measured floor, not on one negative. B3 tree restored to
+`24d6ce2ce19b` and rebuilt after the discard.
+
+**B2: base restored EXACTLY, then one hoist KEPT (#685).** The mentor's recipe
+(exp80/`nd_quant.c.nf16v` + the two recorded quant-file edits) reproduced
+`58bee4d1cde9` byte-for-byte; the damaged file is preserved at
+`/root/board-pool/preserved/nd_quant.c.b2_damaged_5d1b32e9132a`. On that base, E61
+hoists the P.V kernel's eligibility verdict out of `pv_pair2` to one decision per
+attn_heads group: **5.9033 = +0.11%** (boot 6.007, min_case 5.69, 6/6 exact). Sub-bar
+alone, kept as a refund of scaffolding the E53 kernel introduced (#681 priced the
+un-hoisted shape at ~0.35% on a rarer path).
+
+**Open at turnover.** (1) The E59 FWHT lever has not been transferred to the seed
+line: B2's 5.9033 base has no FWHT delivery change, so it is the natural next
+candidate there (+0.18% on B1). (2) B3 is clean and free - the same transfer, or the
+frozen-pair diagnostic the queue asks for. (3) `ohp[t]` head rows and the PV verdict
+are now computed per group; if a future candidate changes v_hd or the attn base
+alignment, that verdict must move with it. (4) Host gates were last run on the
+5.8967/5.6383 trees (#682); the FWHT and hoist trees owe `checks.sh` before any
+owner submission.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~10:25Z (runs #686 + one diagnostic harvest)
+
+**E62 (FWHT radix-4 delivery on the seed line) DISCARDED at -1.02% (#686).**
+B2's live transform is `nd_fwht4s`, whose first fused pass (len=1) has the same
+contiguous four-cell shape as B1's kernel, so the verified kernel was wired in with
+the walk resuming at len=4. Byte-exact 6/6 and dispatch proven
+(`FWHT4R live=1 n=128 align=0`), decode 5.8433 vs the 5.9033 base, boot 5.945 vs
+6.007. Same kernel, +0.18% inside B1's `nd_fwht3s` and -1.02% inside B2's
+`nd_fwht4s`: the win belongs to the surrounding C walk, not to the kernel, and
+`nd_fwht4s`'s later fused passes are already cheaper than a wide delivery of the
+first one. Two integration attempts failed before the arithmetic was right - skipping
+the remaining fused passes made every output wrong (0/6) while the kernel's own
+selftest stayed green, because it cannot see call-site bookkeeping; only the device
+gate saw it. B2 restored byte-exactly to `b28de5ea79ce` (its 5.9033 base).
+
+**Frozen-pair diagnostic HARVESTED (B3, one diagnostic build).**
+Request-time firmware prints never reach the run log (bench.py closes its echo while
+a request is in flight), so the record came from a raw console harvest run inside
+`needle-board`: `/root/board-pool/diag_pair.py`, output at
+`/root/board-pool/batches/R-diagharv-b3.log`. The hook is `ND_REQ_DIAG` in
+`esp32/main/main.c`, enabled through `.auto/diag_build_cfg =
+-DCMAKE_C_FLAGS=-DND_REQ_DIAG=1` (note: a bare `-DNAME=1` there sets a CMake cache
+variable and never reaches the compiler).
+
+| case | qlen | qhash | nt | phase | think | pos | sink | first four ids | last four ids |
+|---|---|---|---|---|---|---|---|---|---|
+| heldout_interval_one | 29 | 4ab47921 | 13 | 0 | 0 | 143 | 143 | 38, 8129, 4040, 3628 | 38, 4, 421, 38 |
+| heldout_long_tools_note_only | 134 | 980b07ea | 38 | 0 | 0 | 143 | 143 | 38, 1077, 309, 3628 | 38, 4, 421, 38 |
+
+Both queries arrive with their full frozen length and both encode to a suffix whose
+LAST FOUR token IDs are identical (38, 4, 421, 38 = the assistant-template tail),
+and the restored prefix identity is the same for both cases (pos = sink = 143). The
+extended-group diagnostic run earlier in the same image read 11/13 exact with the same
+two failures, so the divergence is downstream of input arrival: the next question is
+the first divergent model/logit/selection state for these two, not the transport.
+The raw query strings are 29 and 134 bytes and their FNV-1a hashes are recorded above
+so a later run can prove the fixture did not move.
+
+**Trees now:** B1 = `986dc8d5f2e8` (5.6483 full gate), B2 = `b28de5ea79ce` (5.9033
+restricted), B3 = clean 5.6383 base with the diagnostic hook present but the diag
+build config still in `.auto/diag_build_cfg` - remove that file before any speed
+measurement on B3 (it is a diagnostic image and its metrics are marked
+diagnostic-only).

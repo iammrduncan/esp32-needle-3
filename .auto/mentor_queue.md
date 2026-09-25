@@ -452,3 +452,31 @@ container restart or host udev/USB reset. The container cannot fix it from insid
 outstanding only on the owner's disposition of the two ring-related goldens. The owed
 behavioural capture is the one open evidence item and needs a live console; its runner shape
 is preserved at `/root/board-pool/capture_b3_candidate.sh`.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~15:20Z (run #740: per-token overhead class closed by numbers; pool still offline)
+
+**Audit result (host-side):** the per-token bookkeeping path is closed by inspection with
+numbers, the way the in-window-printing class closed in #739. Items and their sizes:
+(1) rotary tables - 24 positions x (cosf + sinf) ~ 17k cycles ~ 0.07 ms ~ **0.04 %** of a
+170 ms token, and the recurrence that would remove it is a rounding change (incremental
+rotation accumulates error) so it is forbidden by the byte-exact goldens and the fidelity
+veto; (2) embedding dequant + scale (already `nd_mul4w`) + the four-lane broadcast ~0.01 ms;
+(3) the engram step's 15.2 ms is the two 2-bit LUT GEMVs, already closed; (4) everything else
+in the step is the model's real work.
+
+**Hardware unchanged:** all three consoles silent on one bounded read each; no loops, nothing
+reflashed. Device work still needs **host USB recovery**.
+
+**Packets stand, complete:** seed `d91fd5f048ca` **6.0617 + host 19/19** (cross-board
+confirmed on board 3, #737), shippable `787a58302f52` **5.8283 + host 19/19**; both
+outstanding only on the owner's two-case disposition. The owed capture is the one open
+evidence item and needs a live console (`/root/board-pool/capture_b3_candidate.sh`).
+
+**Campaign position for the next window:** every lever family is kept-and-gated or closed by
+measurement/capability; two overhead classes are now closed by audit with numbers; the
+remaining work is (a) host USB recovery + the capture, (b) the owner's decision, (c) a new
+*mechanism* rather than another pass - and the cost model says the dominant 2-bit stream is
+neither memory- nor compiler-limited, so such a mechanism would have to change what is
+computed, which the frozen-quality constraints forbid.

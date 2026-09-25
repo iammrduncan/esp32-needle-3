@@ -3345,3 +3345,52 @@ The mechanics of who wins (all three measured today):
   (the kept P.V kernel), `.auto/exp52/qk8w_tie728_prior_attempt.S` (an earlier
   `nd_qk8w4` whose reduction differs from the shipped statements, so it is not
   bit-exact - do not ship it without the selftest).
+
+# 2026-09-25 ~09:30Z: the load-form program closes with a cost model, and the guard rule
+
+Final tally of the family (all bit-exact by device self-test):
+* **P.V update +0.63 %** (b1 5.5833->5.6183 full gate; b2 5.8400->5.8767) - KEPT
+* **kron1 factor row +0.36 %** (b1 5.6183->5.6383 full gate; b2 +0.34 %) - KEPT
+* QK DOT8W -2.1 % / -1.9 % (#670/#671) - closed; C body 49 cyc/chunk vs asm 80, call 29
+* kron2 four-across -0.30 % (#674), kron2 single-walk eight-across -0.18 % (#680) - closed
+* P.V rescale sweep -0.36 % (#681) - closed
+
+**Two rules came out of the losses, and both are mechanical:**
+
+1. *Guard cost is paid per call.* The rescale sweep fires on 13.2 % of pair iterations,
+   but the guarded `if` sits in pv_pair2 which runs 9216 times per token; the same image
+   with the guard dispatching to the C path (selftest deliberately failing) read 5.6167
+   against the 5.6383 base - the scaffolding alone is the whole loss. A kernel behind a
+   rare branch must have its branch hoisted to the caller, or it cannot pay.
+
+2. *A wide row costs four registers, and the loop must be able to spare them.*
+   kron1 (8 accumulators + one 4-float row + 2 scalars = 14 of 16) wins; kron2
+   (8 accumulators + an 8-float row) cannot - splitting the row costs 0.18 %, splitting
+   the j walk costs another 0.12 %. The shipped kron2 body re-reads 16 floats per j step
+   on purpose: that is how it affords eight accumulators.
+
+**Guard verdicts must be printed.** The first kron1 run read EXACTLY its baseline
+(5.6183) because the factor pool was still 4-aligned and the kernel never ran; adding
+`heap_caps_aligned_alloc(16)` for the fp16 pool turned the same kernel into +0.36 %.
+A sanctioned-but-unused kernel measures as a perfect null. Every lane in this family now
+prints `pool_align=` / `kron1=` style verdicts at boot.
+
+**Trees and pins at close (all three verified by re-reading the engine hash in-place):**
+* b1 = b3 = engine `24d6ce2ce19b` = shippable + notif + wide P.V + wide kron1:
+  **5.6383 FULL gate** (ext 5.5738, think 4.4, 18/20 = the two #647 demo-timer goldens).
+* b2 = engine `58bee4d1cde9` = seed-era composition + composed attention + wide phi +
+  wide P.V + wide kron1: **5.8967 FULL gate** (ext 5.8292, think 4.56, 18/20).
+  Campaign best; +11.19 % over the owner's 5.3033 acceptance pin.
+* Both lines carry only the same two frozen-case blockers; nothing new.
+
+**Assets:** `.auto/exp52/qk8w_b2.patch` (full HEAD diff with the seed-era composition +
+wide phi + the QK kernel), `.auto/exp53/pv8w_b1.patch` (the kept P.V kernel and its
+selftest), and the kron1 kernel + selftest are live in b1/b2/b3
+(`nd_kron1_w` in `engine/src/gemv4_tie728.S`).
+
+**Ops lessons that cost board time today:** `cp -a` preserves mtimes, so a copied source
+can be considered up-to-date by ninja and the build silently keeps the old object (touch
+after copying); a blanket `git checkout -- <file>` in a worker destroys the lane state
+(every worker carries its candidate uncommitted); an engine-hash comparison run from a
+different cwd hashes different path strings and can "show" a mismatch that is not there -
+always hash from inside the board directory exactly as `measure.sh` does.

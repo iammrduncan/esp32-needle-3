@@ -385,3 +385,112 @@ unmeasured rather than disproven.
 afterwards each candidate is a normal lane whose `EG2` line prints during `nd_model_open`, so a
 boot-only console read is the whole diagnosis. **B2 is the only currently usable board** (seed + group
 `loop`, 6.0883 gated) - schedule new work there first.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~10:50Z (run #766: composed tree CONFIRMED on a second board; B2 now carries the campaign best)
+
+| board | tree | decode | vs its own pin |
+|---|---|---|---|
+| B3 | composed (group `loop` + `qk_dot8`) | **6.1117** (full gate) | +0.66 % over 6.0617 |
+| B2 | **same composition, ported** | **6.1083** (screen) | **+0.33 % over its 6.0883** |
+
+Two boards agree to **0.06 %** (inside the campaign's 0.071 % three-identical-image spread), so the
+`qk_dot8` half is a real lever on an independent board, not a single-board artefact. prefill 6.445,
+min_case 5.88, 6/6 exact, delta 0, internal_free 12,051.
+
+**Resilience:** with B1 and B3 both in the silent strap-wedged state, **B2 now carries the campaign's
+best tree**, so the top packet has a live home during the outage. Asset refreshed:
+`.auto/exp91/nd_model.c.qkdot8.b2` (md5-verified against the live worker).
+
+**Owed:** device breadth + host gates on B2's version of the composed tree (B3's identical tree
+already has breadth, host gates and the kernel-level row differential, so this is confirmation);
+the purpose-built row-level differential for `qk_dot8`; and the two power cycles.
+**Blocked candidates awaiting boards:** `.auto/exp92` (EG2 on the shippable tree, B1) and
+`.auto/exp94` (EG2 on the seed line, B3) - both implemented, both unmeasured.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~11:40Z (run #767: EG2 crashes at open on all three boards; B2 restored; the "strap wedge" reading corrected)
+
+**Finding (decisive):** B2 - which had *just* completed the composed-tree run (6.1083) and has never
+shown a boot problem - was given ONLY the EG2 change (`.auto/exp94`'s `nd_model.c`/`nd_model.h`) and
+immediately produced the identical silent-wedge signature (5 log lines, no `EG2` proof line, no
+`EVT READY`, no metrics, 3 processes alive after ~10 min). Three boards, the same change, the same
+silence, with B2's minutes-earlier control as the discriminator. So **EG2 crashes at `nd_model_open`**
+and the earlier "board 1 is strap-wedged / needs a power cycle" conclusion is at least partly the
+campaign's own recorded trap (#737): a **crash loop re-enumerates USB and looks exactly like a dead
+host path**, and a looping chip can also sit printing the ROM banner I captured.
+
+**Two candidate causes examined and BOTH REFUTED by reading:**
+1. *Uninitialised engram tensors* - refuted: `nd_cact_tensor(&m->c, base + s*4 + 0/1/2, ...)` fills
+   `m->engram[s]` at line **711**, while the staging block runs at line **879**, i.e. the tensors are
+   loaded first.
+2. *`nd_tier_ptr` dereferencing uninitialised `eg2_*` fields* - refuted: no `nd_tier_ptr` call exists
+   before line ~1434; the first is inside the engram step, long after the init in the staging block.
+
+**So the crash cause is UNKNOWN and must be measured, not guessed.** The right next step is a
+**boot-only console backtrace** on B2 with the EG2 image: the ESP-IDF panic printout names the fault,
+the PC and the frame, which is the whole diagnosis, and B2 is the one board whose console path is
+currently usable. Do not spend another lane on EG2 before that read.
+
+**State:** B2 restored byte-exactly to its composed tree (EG2 traces 0, `qk_dot8` 2, clean build) and
+it carries the campaign's best, breadth-gated packet (6.1083 screen here / 6.1117 full gate on B3).
+Assets: `.auto/exp91` (composed, B2), `.auto/exp92` (shippable EG2), `.auto/exp94` (seed EG2).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~12:20Z (run #768: EG2 does NOT crash at open - it stages correctly and faults AFTER priming; #767 corrected)
+
+**Direct B2 boot-console read (board's own port, opened only after the flash) settles the mechanism:**
+
+```
+EG2 ok=1 bytes=313344 k=[15707584,15864256) v=[15864256,16020928)
+EVT ready model=needle3 layers=8 d_model=768 vocab=8192 window=384 tools=3 psram_free=1423508 internal_free=12003
+EVT priming tokens=143 / 213
+Guru Meditation Error: Core 0 panic'ed (StoreProhibited)
+Backtrace: 0x4283fffd:0x3fccda50      <-- unusable: 0x4283fffd > _text_end (0x42028374)
+rst:0xc (RTC_SW_CPU_RST) ... loop
+```
+
+So: **the by-offset selection is exactly right** (the second site's K/V at the mentor's stated ranges,
+313,344 B), the model opens, reports ready and primes both prefixes, and only **then** faults with a
+StoreProhibited - and the reboot loop is why every lane went silent. **#767's "crashes at open" and
+#763's "board 1 is strap-wedged" are both corrected**: a crash loop re-enumerates USB and looks like a
+dead host path, the campaign's #737 trap.
+
+**Status:** mechanism works, consumer fault not root-caused, backtrace garbled. **Next step is an
+instrumented read, not another lane:** print the pointers the two engram GEMVs actually receive plus
+the tensor metadata they are parsed with (the one thing never observed). Working hypothesis to check
+first: the staged copy is handed over as the packed base while the **norms** pointer still comes from
+the tensor struct, so a layout/bit-width mismatch would misparse exactly where it faults.
+
+**Boards:** B2 restored byte-exactly to its composed tree (EG2 0, `qk_dot8` 2, clean build) and holds
+the campaign best packet (6.1083 screen here; 6.1117 full gate on B3). B1/B3 may be **fine** after all
+- their "wedge" was this same crash loop - so no power cycle is necessarily needed; re-flash a known
+good image and read the console before treating either as hardware.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~12:55Z (run #769: pool state settled - B1 truly strap-wedged, B2 healthy and best, B3 untested; EG2 boots and faults after priming)
+
+**Board 1 is GENUINELY strap-wedged - proven, not inferred.** B2's known-good composed image
+(310,752 B) was written straight to B1 at `0x10000` (`write rc=0`, "Hard resetting via RTS pin...")
+and the console then read 45 s: 71 bytes of ROM chatter ending in `waiting for download`. A correct
+app plus a reset does not dislodge it, so **only a physical power cycle / host USB port reset** will.
+
+**Both earlier readings reconcile - they were both partly right:**
+* #763's strap conclusion was RIGHT for board 1.
+* #767's "EG2 crashes at open" was WRONG: #768 proved EG2 boots (proof line, `EVT ready`, both
+  prefixes primed) and faults only **after** priming.
+
+| board | state | notes |
+|---|---|---|
+| **B1** | strap-wedged | power cycle owed; no measurement possible |
+| **B2** | **healthy, campaign best** | composed tree, 6.1083 screen, engine `ab771aac89b2`, restored byte-exactly |
+| **B3** | untested since its EG2 flash | either the EG2 crash loop or fine - **re-flash a known-good image + read the console** is the cheapest way to get a third board back |
+
+**EG2 status:** works exactly as designed (by-offset selection, `k=[15707584,15864256)`,
+`v=[15864256,16020928)`, 313,344 B) and faults with StoreProhibited after priming. Backtrace garbled
+(above `_text_end`), so root cause is open and needs the **instrumented read** (print the pointers the
+two engram GEMVs receive plus the metadata they are parsed with), not another lane.

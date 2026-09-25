@@ -239,3 +239,42 @@ restricted), B3 = clean 5.6383 base with the diagnostic hook present but the dia
 build config still in `.auto/diag_build_cfg` - remove that file before any speed
 measurement on B3 (it is a diagnostic image and its metrics are marked
 diagnostic-only).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~10:55Z (runs #687-#688)
+
+**MEASUREMENT-HYGIENE FINDING (act on this at turnover).** The *same* B1 image read
+**5.6600 in a restricted 6-case screen and 5.6483 in the full 20-case gate** - a
+0.18 % gap, 4.5x the campaign's quoted 0.04 % quantum. Restricted screens and full
+gates are therefore NOT interchangeable baselines: the extra cases and the longer
+session move the primary mean. Every comparison must stay inside one mode, and any
+earlier keep/discard that crossed modes (mine included: E62's -1.02 %, E63's null,
+E61's +0.11 % screen against a full-gate pin) should be re-read with that caveat.
+Cheapest fix for future lanes: record the tree's own restricted screen value as the
+baseline whenever a screen is the deciding instrument, or promote to the full gate
+before any bar decision.
+
+**E63 (guard hoists on the shippable line) DISCARDED as null (#687).** P.V verdict
+hoisted to one decision per attn_heads group (the change that paid +0.11 % on the
+seed line) plus kron1's factor/pool verdict lifted out of the j loop: 5.6500 against
+the full-gate base 5.6483 (+0.03 %) and against the same-mode screen 5.6600
+(-0.18 %). So the hoist refund is real on B2 and absent on B1 - the per-call guard was
+already cheap there. B1 restored byte-exactly to `986dc8d5f2e8` (its 5.6483 tree).
+
+**B2 host gates GREEN (#688):** 19/19 byte-exact, delta 0, logit_max_delta
+5.341e-05 unchanged, top1 10/10 on the E61-hoist tree (`b28de5ea79ce`). The *device*
+half of that image is still only the 6/6 restricted screen; its full 20-case gate is
+owed before any owner submission (the 5.8967 full gate predates the hoist).
+
+**Trees now:** B1 `986dc8d5f2e8` (5.6483 full gate), B2 `b28de5ea79ce` (5.9033
+restricted, host green), B3 clean `24d6ce2ce19b` **with the diagnostic hook and
+`.auto/diag_build_cfg` still present** - remove that file before any speed run there.
+
+**Next candidates worth a board, in order:** (1) B2's full 20-case gate on the hoist
+image - it is the only line missing a breadth gate, and it is the campaign's best;
+(2) B3 could carry the same full gate as a cross-board check of the 5.9033 stack, or
+return to the seed line's next lever; (3) the frozen-pair diagnostic's next step is
+the first divergent model/logit/selection state, which needs a per-token logits hook,
+not another input recording - the input, token IDs and restored-prefix identity are
+already recorded (table above).

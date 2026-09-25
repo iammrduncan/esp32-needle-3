@@ -406,3 +406,39 @@ twice now. (2) The same question on the seed line for whichever of E70's four lo
 partner there. (3) B3 when its USB returns (`b255280ba9a9`, E67 alone). The seed line's
 remaining phase map is dominated by proj2bit (closed on measurement: ~16 cycles per
 32-bit word for 16 weights, dual-issue saturated) and engram (same 2-bit path).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~16:05Z (runs #706-#707: lane block swept on both lines)
+
+**The whole mHC lane block is now widened and measured on both stacks.** Every loop in
+it that reduces to one of the four kernel shapes is covered:
+* **E64** five-pass mix (kept, +0.99 % seed / +0.92 % shippable full gates)
+* **E65** tiled mix (+0.17 % alone), **E67** wide lanepre (+0.146 % alone) - together
+  **+0.36 % on the seed line's full gate (#703, 6.0133)** and **+0.20 % on the
+  shippable line (#706)**, both now kept
+* **E70** elementwise cluster (`u -= ublk` as `dst += (-1)*src`, embedding scale,
+  pool_cell rescale/accumulate) - **+0.14 % seed (#707, banked, new best 6.0217)** and
+  +0.12 % shippable (banked)
+
+**Readings now:** seed **6.0217** screen (6.0133 is the gated, packet-complete number at
+`a003340489c2`), shippable **5.7767** screen (5.7583 gated) = +8.93 %. Both trees owe
+nothing but a fresh full gate + host gates when the owner picks a submission point.
+
+**Three findings worth keeping:**
+1. The "two or three sub-bar halves of one block" pattern has now paid three times
+   (E65+E67 on seed and shippable). Never delete a measured sub-bar half of a phase
+   without pricing it against its siblings.
+2. A single-slice port between worker trees is dangerous: one attempt dragged an
+   `#endif` across and another re-copied a whole kernel body because the slice ran to
+   end-of-file. Port as separate anchored edits; the build caught both, not the board.
+3. `-1.0f` as the multiplier in `dst += w*src` is an exact negation, so a subtract loop
+   widens with the accumulate kernel and is bit-exact; a per-PAIR scale is not a
+   constant and does not.
+
+**Next:** (1) when the owner picks a line, run one fresh full gate + host gates on that
+exact tree (nothing else is owed); (2) B3 when its USB returns - it still carries E67
+alone (`b255280ba9a9`) and would need the E64/E65/E70 ports to match either line;
+(3) the remaining phases are at measured floors (proj2bit dual-issue saturated, engram
+the same 2-bit path, kron2 closed, QK closed against GCC's schedule), so a new direction
+needs a fresh phase map rather than another pass over the same levers.

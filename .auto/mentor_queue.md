@@ -222,3 +222,58 @@ that should be deleted at the next diagnostic build; `DIAGPICK` is the valid one
 ~49 KB/token, the same lifetime family that has paid four times); (3) B3 still EIO;
 (4) then look for more `dst += k*src` / `dst = k*src` passes - E71 shows the family still
 has members outside the lane block (this one was in the MLP conditioning path).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~21:05Z (runs #715-#716: 6.0450 gated; a lifetime change that LOSES)
+
+**Seed line gated at 6.0450 (#715):** decode 6.0450, ext 5.9754, think 4.64, min 5.82,
+boot 6.155, 18/20 (the two #647 goldens) = **+13.98 %** over the 5.3033 pin. Engine
+`a9b5505a760f`; host gates are the only item left in its packet.
+
+**E72 (attention-input in-place prepare) DISCARDED at -6.3 % (#716) - the first lifetime
+change in this family that loses, and the split is the finding:** device output was 6/6
+byte-exact (arithmetic right) and the BOOT BENCH was unchanged (5.894 vs 5.877) while the
+primed-prefix decode fell to 5.4100. A copy removal should not show that split at all.
+The likely mechanism: `xh` is the buffer the FWHT/LUT prepare and the mHC phi path already
+transform in place, so the attention's transform now runs on a buffer another producer
+just wrote, and the prefix path exercises that pattern far more than a 6-token cold bench.
+Anyone retrying in-place attention must measure the prefix path and instrument the buffer
+interaction, not just the boot bench. B1 restored byte-exactly to `78c435fec440`.
+
+**Open, in order:** (1) host gates on `a9b5505a760f` (the only packet item);
+(2) the E71 dispatch verdict at B2's next normal build; (3) more `dst += k*src` /
+`dst = k*src` members - E71 proved the family still has them outside the lane block, and
+the hadamard/MLP path is the place to look next; (4) B3 still EIO (three probes, no
+further loops).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~22:05Z (runs #715-#717: 6.0450 gated; two losses)
+
+**Seed line gated at 6.0450 (#715)** with host gates GREEN on that exact tree
+(`a9b5505a760f`): device 18/20 (the two #647 goldens), ext 5.9754, think 4.64,
+host 19/19, logit delta unchanged = **+13.98 %** over the 5.3033 pin. Its packet is
+complete; the E71 dispatch verdict is still owed at its next normal build.
+
+**E72 (attention-input in-place prepare) -6.3 % (#716)** and **E73 (elementwise-product
+family) 0/6 exact (#717)**. The two losses are instructive in opposite directions:
+* E72 was byte-exact but slow, and the split said why it is not a simple copy story: the
+  boot bench did not move while the primed-prefix decode fell 6.3 %, i.e. `xh` is a
+  buffer three different producers now transform in place and the prefix path is where
+  that hurts.
+* E73 was a hard correctness failure (0/6, decode 3.1) from widening FOUR shapes at once,
+  two of them with brand-new kernels (`nd_mul2w`, `nd_mac2w`) that were wired in with NO
+  oracle - the exact violation of this campaign's own rule that every new kernel carries
+  its own differential test, which is how all four mix-family kernels were accepted.
+  The family is not closed: each of the four shapes is one mul or one madd per cell over
+  contiguous rows, so the correct retry is ONE shape at a time with an oracle.
+
+**Both boards restored byte-exactly** (B1 `78c435fec440`, B2 `a9b5505a760f`), both
+rebuild. B3 still EIO.
+
+**Next lanes in order:** (1) the E73 shapes one at a time, oracle first - start with
+`dst += a*b` (the MLP residual fold), which is the largest of the four and has no
+existing kernel; (2) the E71 dispatch verdict at B2's next build; (3) B3 when its USB
+returns; (4) the device-vs-host per-step comparison for the frozen pair (the host
+generator exists: `nd_dump genp` via bench.py:296).

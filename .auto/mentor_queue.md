@@ -277,3 +277,33 @@ rebuild. B3 still EIO.
 existing kernel; (2) the E71 dispatch verdict at B2's next build; (3) B3 when its USB
 returns; (4) the device-vs-host per-step comparison for the frozen pair (the host
 generator exists: `nd_dump genp` via bench.py:296).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~22:50Z (run #718: the two-case blocker is a stability question)
+
+**The device-vs-host comparison finally used the host generator that does exist
+(`nd_dump genp <schema> <query> 128 nothink`, the same invocation bench.py uses) and it
+reframes the acceptance blocker.** Host answers with the SAME engine and archive:
+* `Sample telemetry every second` -> `set_sampling_interval seconds=120` alone, 23 tokens
+  (the device in its frozen think=0 mode says the same).
+* `Sample telemetry every 5 seconds` -> `set_sampling_interval seconds=5`, 22 tokens -
+  while the DEVICE answers `set_timer seconds=5` and PASSES that case against its golden.
+  So host and device legitimately pick different tools for the same phrasing.
+* The long multi-tool prompt -> `set_sampling_interval 45`, then `set_timer 300` **three
+  times**, then `get_status`, 67 tokens. The repetition the device showed is therefore the
+  MODEL's own tendency, not a device arithmetic defect - the host does it too.
+
+**Consequence for the owner decision:** the two failing cases sit on prompts where this
+model is unstable between two plausible answers, and the goldens are device-derived
+artefacts of one particular run state rather than host truth (the control case proves the
+two sides disagree on a case the device passes). The remaining question is a
+re-baseline/stability decision, not an arithmetic bug to hunt. **Ledger correction:**
+earlier "device degenerates on long_tools" readings came from think=1 harvests; the frozen
+cases run think=0 and any further comparison must set that mode explicitly.
+
+**State:** seed `a9b5505a760f` gated at **6.0450** (+13.98 %, host 19/19), shippable
+`78c435fec440` at 5.7767 (+8.58 %, host 19/19), B3 EIO. E73's four elementwise shapes
+remain unclosed but each is ~0.05 % (the engram taps are the same size and the FWHT's
+strided passes do not fit 16 registers), so a retry needs oracle-first discipline and is
+lower value than the packet work.

@@ -267,9 +267,18 @@ already cheap there. B1 restored byte-exactly to `986dc8d5f2e8` (its 5.6483 tree
 half of that image is still only the 6/6 restricted screen; its full 20-case gate is
 owed before any owner submission (the 5.8967 full gate predates the hoist).
 
-**Trees now:** B1 `986dc8d5f2e8` (5.6483 full gate), B2 `b28de5ea79ce` (5.9033
-restricted, host green), B3 clean `24d6ce2ce19b` **with the diagnostic hook and
-`.auto/diag_build_cfg` still present** - remove that file before any speed run there.
+**B2 breadth gate DONE (#689): 5.9033 FULL gate**, ext 5.8338, think 4.56, prefill
+6.2167, min_case 5.69, boot 6.007, 18/20 = the two #647 goldens only. The restricted
+screen value reproduced to the last digit here, so the B1 mode gap is not a constant
+offset - only same-mode comparisons are safe either way. The seed line is now
+**+11.31 % over the owner's 5.3033 pin with both gates and host gates green**; the
+only thing between it and acceptance is the owner's disposition of those two cases.
+
+**Trees now:** B1 `986dc8d5f2e8` (5.6483 full gate, host gates owed on THIS exact
+tree after the FWHT change - the last host run predates it), B2 `b28de5ea79ce`
+(5.9033 full gate + host green), B3 clean `24d6ce2ce19b` **with the diagnostic hook
+and `.auto/diag_build_cfg` still present** - remove that file before any speed run
+there.
 
 **Next candidates worth a board, in order:** (1) B2's full 20-case gate on the hoist
 image - it is the only line missing a breadth gate, and it is the campaign's best;

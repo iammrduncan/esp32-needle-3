@@ -376,3 +376,33 @@ still have one banked half - the mix-family kernels now cover `dst=k*src`,
 is a candidate to price, and pairing is allowed; (3) B3 when its USB returns (it carries
 E67 alone, `b255280ba9a9`). With ~15 KB internal free, the 16 KiB private-LUT2 idea is
 borderline feasible; phi row residency (~18 KB/core) is not.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~15:25Z (runs #704-#705: both packets complete)
+
+**Both lines now have complete acceptance packets; the only open item on either is the
+owner's two-case disposition.**
+* **seed 6.0133** (`a003340489c2`): device 18/20 (delta 52, the two #647 goldens), ext
+  5.9454, think 4.63, prefill 6.3433, host 19/19, logit delta 5.341e-05 unchanged,
+  internal_free 14,991 = **+13.38 %** over the 5.3033 pin.
+* **shippable 5.7583** (`0f0d3668d71f`): device 18/20, ext 5.6946, think 4.47, host
+  19/19 = **+8.58 %**.
+
+**E70 elementwise cluster: +0.12 %, sub-bar, banked (#705).** Four loops reduced to the
+two mix-kernel shapes - `u -= ublk` as `dst += (-1)*src` (an exact -1 multiply, so the
+rounding matches the C subtract), the embedding scale and pool_cell's rescale as
+`nd_mul4w`, pool_cell's accumulate as `nd_lanemix4w` - with `ublk`, `tmp` and `pool_acc`
+moved to FAST16 so the guards can fire. Corrected before spending a board: the attention
+gate loop is a per-PAIR scale, so `nd_mul4w` does not apply there. Banking puts B1 at
+5.7650 with three sub-bar halves now in hand (E67 +0.146 %, E70 +0.12 %, and E65 which
+B1 does not yet carry).
+
+**Next lanes, in order:** (1) compose on B1 - port E65 properly (kernel, oracle and its
+own verdict as three separate anchored edits, not one slice: the earlier single-slice
+attempt dragged an `#endif` across and was reverted) and judge E65+E67+E70 together;
+three measured sub-bar halves of one block is exactly the shape that has crossed the bar
+twice now. (2) The same question on the seed line for whichever of E70's four loops has a
+partner there. (3) B3 when its USB returns (`b255280ba9a9`, E67 alone). The seed line's
+remaining phase map is dominated by proj2bit (closed on measurement: ~16 cycles per
+32-bit word for 16 weights, dual-issue saturated) and engram (same 2-bit path).

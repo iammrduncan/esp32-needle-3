@@ -1,0 +1,609 @@
+/* Needle 3 on ESP32-S3. The model lives in a flash partition and is mapped
+ * in place; activations and attention history live in PSRAM.
+ * Line protocol on the console UART:
+ *   in : one request per line
+ *   out: EVT / TOK / CONF / JSON / RESULT / STATE / ERR / END lines
+ */
+#include <stdio.h>
+#include <string.h>
+
+#include "esp_heap_caps.h"
+#include "esp_partition.h"
+#include "esp_timer.h"
+#include "esp_private/esp_clk.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "nd_cact.h"
+#include "nd_grammar.h"
+#include "nd_model.h"
+#include "nd_sample.h"
+#include "nd_tokenizer.h"
+#include "nd_quant.h"
+#include "router.h"
+#include "freertos/semphr.h"
+
+#define MAX_NEW        256
+/* MAX_NEW was 128 and was the ONLY generation limit, which silently corrupted
+ * long answers: the extended case `heldout_long_tools` (a 252-byte request whose
+ * answer is 132 tokens) measured produced=128 with the JSON cut mid-key
+ * (`..."set_timer","arguments":{"seconds":300}},{"n`) and the host-side parser
+ * then saw `calls=[]` / BAD incomplete_call, while the same prompt on the host
+ * engine produced a valid 132-token call list. A truncated tool call is worse
+ * than a slow one because nothing says it happened. The frozen set never exceeded
+ * 99 generated tokens, which is why this survived the whole campaign. The cap is
+ * now a backstop only: run_inference() clamps it to the model's own remaining
+ * context and says so out loud when it stops early. */
+#define ND_LINE_MAX    272   /* not LINE_MAX: that is taken by limits.h */
+
+#include "tools_schema.h"
+#include "routes_schema.h"
+
+#include "driver/uart.h"
+#include "esp_vfs_dev.h"
+
+/* The default console VFS is POLLED: stdin reads a 128-byte software FIFO and
+ * getchar() sleeps 20 ms on EOF. At 115200 8N1 a 20 ms window admits ~230 wire
+ * bytes, so a request longer than the FIFO loses characters, the terminating
+ * newline never arrives, and the reader waits for the rest of a line that has
+ * already been dropped. The frozen suite's cases 1-16 are all <= 89 bytes; case
+ * 17 is the FIRST request over 128 bytes (232), and the note-only tools case is
+ * 135 - which is exactly the observed 16-17 requests-per-boot ceiling, and why
+ * no amount of reconnecting recovered it.
+ *
+ * Installing the UART driver replaces that FIFO with an ISR-fed ring, and
+ * esp_vfs_dev_uart_use_driver() routes stdin through it. Bytes are retained
+ * rather than dropped, so this is lossless rather than a bigger drop window. */
+static void console_rx_ring_enable(void)
+{
+    uart_config_t cfg = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &cfg));
+    esp_vfs_dev_uart_use_driver(UART_NUM_0);
+}
+
+/* The schema is generated from tools/demo-tools.json at build time; see
+ * main/CMakeLists.txt. Edit that JSON, not this file. */
+static const char TOOLS_RAW[] = ND_TOOLS_JSON;
+
+/* Compacted at boot: the model was trained on whitespace-free schemas, and an
+ * indented one degrades it silently (it starts naming tools that were never
+ * declared). Doing this here means the JSON file's formatting is free. */
+static char TOOLS_JSON[sizeof(TOOLS_RAW)];
+
+static nd_model             s_model;
+static const char ROUTES_RAW[] = ND_ROUTES_JSON;
+static char ROUTES_JSON[sizeof(ROUTES_RAW)];
+static nd_grammar s_grammars[2];
+static nd_prefix *s_prefixes[2];
+/* 0: local tools; 1: choose a model. Shared weights and inference scratch. */
+
+/* ------------------------------------------------- second-core GEMV worker
+ *
+ * Every matvec is independent across output rows, so the row range is split
+ * in half and core 1 runs one half while core 0 runs the other. Both halves
+ * read disjoint weight slices and write disjoint outputs, so no locking is
+ * needed beyond the start/done handshake. */
+
+static TaskHandle_t s_worker;
+static TaskHandle_t s_waiter;
+/* Run #452: the semaphore is kept for the SLEEPING case only. Measured on device
+ * (one nd_parallel_rows split, helper really is rows_dual_core, board 1, boot
+ * capture): a give/take round trip costs 3,973 cycles with the peer already
+ * running and 4,428 with it parked - a flat ~16.6 us toll, ~170x the void #344
+ * figure, and the engine pays it 150+ times per token. Two plain DRAM counters
+ * replace the wake-up on the common path: the worker spins briefly for a new
+ * sequence number before it blocks, and the caller spins briefly for the
+ * completion number before it waits. On this part internal DRAM is write-through
+ * and the cache does not route it the way PSRAM is, so a volatile load sees the
+ * peer's store - which is what FreeRTOS spinlocks rely on.
+ *
+ * Ordering is the whole hazard, so the payload is published BEFORE the sequence
+ * number and everything the peer reads is volatile; a compiler barrier keeps the
+ * stores on that side. Correctness does not depend on the spin at all: the worker
+ * still gives s_done after every job, and the caller drains any stale token
+ * before publishing so a binary semaphore can never be pre-accounted. */
+static volatile nd_row_fn s_fn;
+static volatile void     *s_ctx;
+static volatile uint32_t  s_r0, s_r1;
+static volatile uint32_t  s_seq, s_done_seq;
+
+/* Spin budgets in iterations of the empty poll loop. The worker's is the larger:
+ * core 1 runs nothing else, so an idle spin there is free, while the caller's
+ * has to stay well under the toll it is trying to avoid paying. */
+#define ND_WORKER_SPIN 20000u
+#define ND_CALLER_SPIN 600u
+
+static void worker_task(void *arg)
+{
+    uint32_t seen = 0;
+    for (;;) {
+        uint32_t spin = 0;
+        while (s_seq == seen && spin++ < ND_WORKER_SPIN)
+            ;
+        if (s_seq != seen) {
+            seen = s_seq;
+            s_fn((void *)s_ctx, s_r0, s_r1);
+            s_done_seq = seen;
+            xTaskNotifyGive(s_waiter);
+            /* The caller always posts s_go, so a job taken by the spin path
+             * leaves a token behind. Drain it: otherwise the next blocking Take
+             * returns at once, and the sequence-number guard below is the only
+             * thing stopping a re-run of a job whose stack ctx is long gone. */
+        } else {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            if (s_seq != seen) {          /* a spurious wake does no work: the
+                                           * descriptor is a single slot, and
+                                           * re-running one would read a ctx the
+                                           * caller has already returned from. */
+                seen = s_seq;
+                s_fn((void *)s_ctx, s_r0, s_r1);
+                s_done_seq = seen;
+            }
+            xTaskNotifyGive(s_waiter);
+        }
+    }
+}
+
+static void rows_dual_core(nd_row_fn fn, void *ctx, uint32_t nrows)
+{
+    uint32_t half = nrows / 2;
+
+    /* Below this the handshake costs more than the work it saves. Attention
+     * splits only 8 heads at a time, but each head is ~10K MACs, far above the
+     * ~15 us handshake. */
+    if (half < 2 || !s_worker) {
+        fn(ctx, 0, nrows);
+        return;
+    }
+    const uint32_t job = s_seq + 1u;
+    s_waiter = xTaskGetCurrentTaskHandle();
+    s_fn  = fn;                           /* payload first, ... */
+    s_ctx = ctx;
+    s_r0  = half;
+    s_r1  = nrows;
+    __asm__ volatile("" ::: "memory");
+    s_seq = job;                          /* ... then the publication */
+    if (s_worker) xTaskNotifyGive(s_worker);
+    fn(ctx, 0, half);
+    uint32_t spin = 0;
+    while (s_done_seq != job && spin++ < ND_CALLER_SPIN)
+        ;
+    while (s_done_seq != job)
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+}
+
+static void worker_start(void)
+{
+    /* 8 kB, not the 4 kB this ran on before attn_heads learned to stage a KV
+     * pair: the staged rows put 1.4 kB of frame on whichever core attends, and
+     * at 4 kB the profiled build overflowed it and never reached EVT ready. */
+    if (xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
+                                configMAX_PRIORITIES - 2, &s_worker, 1) != pdPASS) return;
+    nd_parallel_rows = rows_dual_core;
+}
+
+/* -------------------------------------------------------------- inference */
+
+static int s_show_think = 1;   /* toggled from the host with "!think" */
+
+#ifdef ND_KBENCH
+int kbench_run(void);           /* esp32/main/kbench.c */
+#endif
+#ifdef ND_THERMAL_DIAG
+void nd_thermal_diag_start(void);   /* esp32/main/thermal_diag.c */
+#endif
+
+/* Prefill the constant part of the prompt once and snapshot it. Every request
+ * then resumes from here, so only the query and the assistant header are
+ * prefilled per turn - ~13 tokens instead of ~171. */
+static int prime_prefix(int phase)
+{
+    static uint32_t ids[512];
+    static char     pre[4096];
+    int64_t         t0 = esp_timer_get_time();
+    int             n;
+    int             i;
+
+    snprintf(pre, sizeof(pre), "<|im_start|>user\n<tools>%s</tools>", phase ? ROUTES_JSON : TOOLS_JSON);
+
+    nd_model_reset(&s_model);
+    ids[0] = ND_BOS_ID;
+    n = nd_tok_encode(&s_model.tok, pre, strlen(pre), ids + 1,
+                      (uint32_t)(sizeof(ids) / sizeof(ids[0]) - 1));
+    if (n < 0) {
+        printf("ERR prefix_too_long\n");
+        return -1;
+    }
+    n += 1;
+    if ((uint32_t)n + 64 > s_model.window) {
+        printf("ERR schema_exceeds_context\n");
+        return -1;
+    }
+    printf("EVT priming tokens=%d (one-time; every later request reuses this)\n", n);
+    fflush(stdout);
+    for (i = 0; i < n; i++) {
+        nd_model_step_hidden(&s_model, (uint32_t)ids[i]);
+        if ((i + 1) % 8 == 0 || i + 1 == n) {
+            double el = (esp_timer_get_time() - t0) / 1000000.0;
+            double eta = el / (i + 1) * (n - i - 1);
+            printf("EVT priming %d/%d  %.0f%%  elapsed=%.0fs  eta=%.0fs\n",
+                   i + 1, n, 100.0 * (i + 1) / n, el, eta);
+            fflush(stdout);
+        }
+    }
+    if (nd_model_snapshot(&s_model) != 0) {
+        printf("ERR snapshot_allocation\n");
+        return -1;
+    }
+    printf("EVT prefix tokens=%d ms=%.0f sink=%u (cached for all requests)\n",
+           n, (esp_timer_get_time() - t0) / 1000.0, (unsigned)s_model.n_sink);
+    fflush(stdout);
+    s_prefixes[phase] = nd_model_prefix_save(&s_model);
+    if (!s_prefixes[phase]) { printf("ERR prefix_cache_allocation\n"); return -1; }
+    return 0;
+}
+
+#ifdef ND_PROFILE
+/* Phase table, printed per boot-bench token and (for diagnostics) per real
+ * request. The two views differ in one important way: the boot bench drives
+ * nd_model_step_hidden directly, so it never runs the grammar or the sampler,
+ * and a phase that looks free there is only free *there*. ND_P_SAMPLE reads
+ * 0.0 ms in the bench for exactly that reason, while real requests run ~4%
+ * slower than the bench. Keep this out of shipping builds - the timers add work
+ * to every layer. */
+static const char *s_pname[ND_P_COUNT] = { "proj2bit", "attention", "hadamard", "mhc_phi4",
+                    "engram", "logits4", "prep+lut", "confpool",
+                                         "  of-mlp:kron", "whole block", "sinkhorn",
+                                         "mhc-mix", "step-tail", "sample", "attn-stage",
+                                         "qkv taps", "head norms", "rope", "kv store" };
+
+static void prof_dump(double ms, int n)
+{
+    int p;
+
+    if (n <= 0 || ms <= 0.0) return;
+    for (p = 0; p < ND_P_COUNT; p++)
+        printf("EVT prof %-10s %8.1f ms  %5.1f%%\n", s_pname[p],
+               nd_prof[p] / 1000.0 / n, 100.0 * nd_prof[p] / 1000.0 / ms);
+    fflush(stdout);
+}
+#endif
+
+static void run_inference(const char *query, int phase)
+{
+    static uint32_t ids[512];
+    static char     out[1024];
+    static char     suf[512];
+    nd_sampler      smp;
+    const float    *lg = NULL;
+    int             n;
+    int             out_full = 0;   /* set when out[], not the model, stopped the answer */
+    uint32_t        i, produced = 0, w = 0;
+    int64_t         t0;
+    double          pre_ms;
+
+    snprintf(suf, sizeof(suf),
+             "\n%s<|im_end|>\n<|im_start|>assistant\n", query);
+
+    /* Resume from the cached prefix rather than re-running it. */
+    if (nd_model_prefix_restore(&s_model, s_prefixes[phase]) != 0) {
+        printf("ERR prefix_restore\nEND\n"); fflush(stdout); return;
+    }
+    nd_sampler_init(&smp, &s_model.tok, &s_grammars[phase]);
+
+    n = nd_tok_encode_ex(&s_model.tok, suf, strlen(suf), ids,
+                         (uint32_t)(sizeof(ids) / sizeof(ids[0])), 0);
+    if (n <= 0 || s_model.pos + (uint32_t)n + 8 >= s_model.window) {
+        printf("ERR prompt_too_long\nEND\n");
+        fflush(stdout);
+        return;
+    }
+
+    t0 = esp_timer_get_time();
+    for (i = 0; i < (uint32_t)n; i++) {
+        lg = nd_model_step_hidden(&s_model, ids[i]);
+        printf("EVT reading %u/%d\n", (unsigned)(i + 1), n);
+        fflush(stdout);
+    }
+    pre_ms = (esp_timer_get_time() - t0) / 1000.0;
+
+    printf("EVT prefill tokens=%d ms=%.0f tps=%.2f sink=%u\n",
+           n, pre_ms, n / (pre_ms / 1000.0), (unsigned)s_model.n_sink);
+    fflush(stdout);
+#ifdef ND_PROFILE
+    memset(nd_prof, 0, sizeof(nd_prof));   /* profile the decode window only */
+#endif
+
+    /* Optionally skip the reasoning block: force an empty <think></think> and
+     * open the call directly. This reduces work but can affect model quality. */
+    if (!s_show_think) {
+        uint32_t forced[8], nf = 0, fi, tmp[4];
+        int tn;
+        forced[nf++] = ND_THINK_START_ID;
+        forced[nf++] = ND_THINK_END_ID;
+        tn = nd_tok_encode_ex(&s_model.tok, "\n", 1, tmp, 4, 0);
+        for (fi = 0; fi < (uint32_t)tn; fi++)
+            forced[nf++] = tmp[fi];
+        forced[nf++] = ND_TOOL_CALL_START_ID;
+        for (fi = 0; fi < nf; fi++) {
+            char pc[128];
+            uint32_t k;
+            nd_sample_accept(&smp, forced[fi]);
+            nd_tok_decode_ex(&s_model.tok, &forced[fi], 1, pc, sizeof(pc), 0);
+            printf("TOK ");
+            for (k = 0; pc[k]; k++) {
+                if (pc[k] == '\n')      printf("\\n");
+                else if (pc[k] != '\r') putchar(pc[k]);
+            }
+            printf("\n");
+            fflush(stdout);
+            if (w + strlen(pc) < sizeof(out) - 1) { strcpy(out + w, pc); w += strlen(pc); }
+            lg = nd_model_step_hidden(&s_model, forced[fi]);
+        }
+    }
+
+    /* Generate to the model's own limit, not past it: pos is absolute and the
+     * archive's context is max_seq_len, so a fixed 128 could both truncate a long
+     * answer and (with a long primed prefix) walk pos past the trained context. */
+    int cap = MAX_NEW;
+    if ((int64_t)s_model.pos + cap > (int64_t)s_model.c.h.max_seq_len)
+        cap = (int)s_model.c.h.max_seq_len - (int)s_model.pos;
+    if (cap < 1) cap = 1;
+
+    t0 = esp_timer_get_time();
+    for (i = 0; i < (uint32_t)cap; i++) {
+#ifdef ND_PROFILE
+        uint64_t s_t0 = esp_timer_get_time();
+#endif
+        uint32_t id = nd_sample_hidden(&s_model, &smp, lg);
+#ifdef ND_PROFILE
+        /* The constrained sampler is per generated token, so it is part of every
+         * tok/s number, and no model phase accounted for it. */
+        nd_prof[ND_P_SAMPLE] += esp_timer_get_time() - s_t0;
+#endif
+        char     piece[256];
+        uint32_t k;
+
+        if (id == (uint32_t)-1) {
+            printf("ERR no_legal_token\n");
+            break;
+        }
+        if (id == ND_EOS_ID || id == ND_IM_END_ID)
+            break;
+        nd_sample_accept(&smp, id);
+
+        nd_tok_decode_ex(&s_model.tok, &id, 1, piece, sizeof(piece), 0);
+        printf("TOK ");
+        for (k = 0; piece[k]; k++) {
+            if (piece[k] == '\n')      printf("\\n");
+            else if (piece[k] != '\r') putchar(piece[k]);
+        }
+        printf("\n");
+        fflush(stdout);
+
+        if (w + strlen(piece) < sizeof(out) - 1) {
+            strcpy(out + w, piece);
+            w += strlen(piece);
+        } else {
+            out_full = 1;     /* the text buffer, not the model, stopped the answer */
+        }
+        produced++;
+        lg = nd_model_step_hidden(&s_model, id);
+    }
+    out[w] = '\0';
+
+    /* An answer that stopped because it ran out of room is not an answer: say so,
+     * so a host cannot mistake a half-written tool call for a complete one. */
+    if (i >= (uint32_t)cap || out_full)
+        printf("ERR generation_truncated produced=%u bytes=%u reason=%s\n",
+               (unsigned)produced, (unsigned)w,
+               out_full ? "text_buffer" : "token_limit");
+
+    {
+        double dec_ms = (esp_timer_get_time() - t0) / 1000.0;
+        float  conf   = nd_model_confidence(&s_model);
+        if (conf >= 0.0f)
+            printf("CONF %.4f\n", conf);
+        printf("EVT done tokens=%u ms=%.0f tps=%.2f\n", (unsigned)produced,
+               dec_ms, produced ? produced / (dec_ms / 1000.0) : 0.0);
+        fflush(stdout);
+#ifdef ND_PROFILE
+        prof_dump(dec_ms, (int)produced);
+#endif
+    }
+
+    if (phase) router_select(out, &s_grammars[1]);
+    else router_dispatch(out);
+}
+
+/* ------------------------------------------------------------------- main */
+
+static uint32_t le32(const uint8_t *p)
+{
+    return (uint32_t)p[0] | (uint32_t)p[1] << 8 |
+           (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+static size_t model_length(const esp_partition_t *part)
+{
+    uint8_t hdr[12], last[44];
+    uint32_t count, codebooks, record_at;
+    if (esp_partition_read(part, 0, hdr, sizeof(hdr)) != ESP_OK ||
+        le32(hdr) != ND_CACT_TAG)
+        return 0;
+    count = le32(hdr + 4);
+    codebooks = le32(hdr + 8);
+    if (count == 0 || count > 4096 || codebooks > 256)
+        return 0;
+    record_at = 196 + codebooks * 4 + (count - 1) * 44;
+    if (record_at + sizeof(last) > part->size ||
+        esp_partition_read(part, record_at, last, sizeof(last)) != ESP_OK)
+        return 0;
+    if (le32(last + 24) || le32(last + 32))
+        return 0; /* This ESP32 cannot map archives with 64-bit offsets. */
+    size_t end = (size_t)le32(last + 20) + le32(last + 28);
+    return end <= part->size ? end : 0;
+}
+
+void app_main(void)
+{
+    const esp_partition_t     *part;
+    esp_partition_mmap_handle_t handle;
+    const void                *blob = NULL;
+    const char                *gerr = NULL;
+    size_t                     model_bytes;
+
+#ifdef ND_KBENCH
+    /* Kernel microbenchmark build (MimiModel queue Experiment 2): time the CQ2
+     * row walkers against the handwritten ones, print it, and idle. The model
+     * caches are never warmed, so the run starts in seconds instead of minutes
+     * and the request loop never competes for the cores. */
+    vTaskDelay(pdMS_TO_TICKS(500));
+    kbench_run();
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+#endif
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+    worker_start();
+
+    if (nd_json_compact(TOOLS_RAW, strlen(TOOLS_RAW),
+                        TOOLS_JSON, sizeof(TOOLS_JSON)) < 0) {
+        printf("ERR schema_too_large\n");
+        return;
+    }
+
+    if (nd_json_compact(ROUTES_RAW, strlen(ROUTES_RAW), ROUTES_JSON, sizeof(ROUTES_JSON)) < 0) {
+        printf("ERR route_schema_too_large\n"); return;
+    }
+
+    part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, 0x40, "model");
+    if (!part) {
+        printf("ERR no_model_partition\n");
+        return;
+    }
+    model_bytes = model_length(part);
+    if (!model_bytes) {
+        printf("ERR model_header\n");
+        return;
+    }
+    if (esp_partition_mmap(part, 0, model_bytes, ESP_PARTITION_MMAP_DATA,
+                           &blob, &handle) != ESP_OK) {
+        printf("ERR mmap_failed size=%u\n", (unsigned)model_bytes);
+        return;
+    }
+    printf("EVT mapped model=%u bytes at %p\n", (unsigned)model_bytes, blob);
+
+    if (nd_model_open(&s_model, blob, model_bytes) != 0) {
+        printf("ERR model_open\n");
+        return;
+    }
+#ifdef ND_THERMAL_DIAG
+    nd_thermal_diag_start();   /* Experiment 21 soak witness, diagnostic only */
+#endif
+    if (nd_grammar_compile(&s_grammars[0], TOOLS_JSON, strlen(TOOLS_JSON), &gerr) != 0) {
+        printf("ERR grammar %s\n", gerr ? gerr : "?");
+        return;
+    }
+
+    if (nd_grammar_compile(&s_grammars[1], ROUTES_JSON, strlen(ROUTES_JSON), &gerr) != 0) {
+        printf("ERR route_grammar %s\n", gerr ? gerr : "?"); return;
+    }
+    s_grammars[1].single_call = 1;
+
+    printf("EVT ready model=needle3 layers=%u d_model=%u vocab=%u window=%u "
+           "tools=%u psram_free=%u internal_free=%u\n",
+           (unsigned)s_model.n_layers, (unsigned)s_model.d_model,
+           (unsigned)s_model.vocab, (unsigned)s_model.window,
+           (unsigned)s_grammars[0].n_tools,
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+           (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    fflush(stdout);
+    if (prime_prefix(0) != 0 || prime_prefix(1) != 0) return;
+    router_init(s_model.n_layers, model_bytes);
+    printf("EVT clk cpu_hz=%d xtal_hz=%d\n",
+           (int)esp_clk_cpu_freq(), (int)esp_clk_xtal_freq());
+
+    /* Startup benchmark: a fixed number of steps with the KV cache cold, so
+     * kernel changes can be measured in seconds instead of running a whole
+     * 9-minute request. */
+
+    console_rx_ring_enable();  /* LATE (#495): after model open + prefix allocations, before the timed boot loop - the placement that measured 5.596 boot bench vs 5.546 early */    {
+        const int N = 6;
+        int64_t   t;
+        int       i;
+        nd_model_rewind(&s_model);
+        memset(nd_prof, 0, sizeof(nd_prof));
+        t = esp_timer_get_time();
+        for (i = 0; i < N; i++)
+            nd_model_step_hidden(&s_model, (uint32_t)(100 + i));
+        {
+            double ms = (esp_timer_get_time() - t) / 1000.0;
+            printf("EVT bench tokens=%d ms=%.0f ms_per_tok=%.0f tps=%.3f\n",
+                   N, ms, ms / N, N / (ms / 1000.0));
+#ifdef ND_PROFILE
+            prof_dump(ms, N);
+#endif
+            fflush(stdout);
+        }
+        nd_model_rewind(&s_model);
+    }
+
+    printf("\n");
+    printf("EVT ==================================================\n");
+    printf("EVT  READY - type a request and press enter\n");
+    printf("EVT  e.g. \"Sample telemetry every 5 seconds\"\n");
+    printf("EVT  commands: !think (toggle reasoning), !status, !route <request>\n");
+    printf("EVT ==================================================\n\n");
+    fflush(stdout);
+
+    for (;;) {
+        char line[ND_LINE_MAX];
+        int  len = 0;
+
+        /* Read one request line from the console. */
+        for (;;) {
+            int c = getchar();
+            if (c == EOF) {
+                vTaskDelay(pdMS_TO_TICKS(20));
+                continue;
+            }
+            if (c == '\r')
+                continue;
+            if (c == '\n')
+                break;
+            if (len < ND_LINE_MAX - 1)
+                line[len++] = (char)c;
+        }
+        line[len] = '\0';
+        if (len == 0)
+            continue;
+
+        /* Reasoning control. "!think 0" / "!think 1" set it explicitly so a
+         * reconnecting client is never at the mercy of the current state;
+         * bare "!think" still toggles for interactive use. */
+        if (!strncmp(line, "!think", 6)) {
+            if (line[6] == ' ')
+                s_show_think = (line[7] != '0');
+            else
+                s_show_think = !s_show_think;
+            printf("EVT think=%d\n", s_show_think);
+            fflush(stdout);
+            continue;
+        }
+
+        if (!strcmp(line, "!status")) { router_print_state(); continue; }
+        if (!strncmp(line, "!route ", 7)) { run_inference(line + 7, 1); continue; }
+        if (line[0] == '!') { printf("ERR unknown_command\nEND\n"); fflush(stdout); continue; }
+        run_inference(line, 0);
+    }
+}

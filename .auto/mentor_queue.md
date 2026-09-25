@@ -370,3 +370,60 @@ reported - it was still inside its 600 s ready-wait and then concluded cleanly w
 verdict: the console delivered nothing for the whole window, so the capture is blocked on
 the serial path, not on the candidate image. All three device nodes remain silent with
 refreshing mtimes; host-side USB triage is the gate to any further device work.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~13:30Z (run #737: board 3 is HEALTHY again, and 6.0617 is cross-board confirmed)
+
+**Board 3 was never hardware-blocked - its image was.** Reading its console showed a reset
+loop: boot, `EVT ready`, then `RTCWDT_RTC_RST` / `TG1WDT_SYS_RST` during priming with
+`internal_free=1311` (an SRAM-starved build of the old E67-only tree), and each reset
+re-enumerated its USB - which is exactly what produced the "cycling flash node" that had
+been read as a failing port. Flashing a known-good image took one retry and the board has
+since run a full screen with **no resets**.
+
+**Cross-board confirmation:** board 3 carrying board 2's seed-line tree (`d91fd5f048ca`)
+reads **6.0617 / prefill 6.3967 / min 5.83 / 6-6 exact / internal_free 13967** - identical
+to board 2's numbers to the digit. The campaign's best packet is therefore confirmed on a
+second board, not merely a second run, and board 3 is a usable lane again.
+
+**Triage order extracted (cost: most of a window):** (1) read the console and look for
+reset lines; (2) if it is looping, reflash a known-good image; (3) only then suspect the
+port/host path. A watchdog loop and a dead USB path are indistinguishable from the host
+side, and I twice reported the first as the second.
+
+**Current pool:** board 3 healthy with the 6.0617 tree (screen; full gate + host gates
+owed if that board's number is quoted); boards **1 and 2 remain console-silent** (zero
+bytes on repeated single reads with the documented DTR/RTS discipline) and still need
+host-side USB triage - their trees are untouched (`787a58302f52` and `d91fd5f048ca`).
+Both packets stand: seed 6.0617 (+14.29 %), shippable 5.8283 (+9.90 %), each with host
+19/19 on its own tree.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~14:10Z (run #738: serial path down for all three boards - host action required)
+
+**Board 3's console went silent too, so the pool is now fully offline for device work.** Its
+capture attempt flashed successfully (`flash_rc=0`, hash line present, engine
+`d91fd5f048ca`) and then reported `ready=0` / `BOARD_NOT_READY` after the full 600 s window
+plus a further 25 s single read returning zero bytes. Board 3 had been healthy minutes
+earlier (its screen 6.0617 completed at 18:2x), so this is not the board and not the image:
+all three consoles are silent while every node mtime keeps refreshing (b3 console 18:23:24 /
+flash 18:30:08), i.e. host-side re-enumeration without delivery. The container's
+`/dev/needle-pi` is a mount, so node presence there proves nothing.
+
+**What is NOT in doubt:** seed `d91fd5f048ca` **6.0617 + host 19/19**, cross-board confirmed
+on board 3 (#737); shippable `787a58302f52` **5.8283 + host 19/19**. Both packets complete
+on their own trees, both outstanding only on the owner's disposition of the two
+ring-related goldens.
+
+**Required before any further device work: host-side USB recovery** (container restart or a
+host USB/udev reset). The container cannot fix this from inside. Once a console answers:
+(1) verify with a single read, (2) then run the owed behavioural capture
+(`/root/board-pool/capture_b3_candidate.sh` is the preserved runner shape), (3) then resume
+discovery.
+
+**Triage rules learned this window (both cost board time):** a watchdog reset loop is
+indistinguishable from a dead USB path unless the console is read for reset lines, and a
+successful flash says nothing about the console being live - so read the console before
+concluding anything about a port.

@@ -3174,3 +3174,41 @@ identical from the seed through B4W/B4W+DOT8W+SELRES to the bundle5 base - the t
 are the demo-timer/sampling-interval ones and their generations depend on device timer state.
 Owner decision, not an engineer fix: re-baseline, replace with state-independent cases, or keep
 as blockers. Do not attempt another arithmetic explanation.
+
+# 2026-09-26 overnight: staging win, transport discriminator, and the width-curve sweep
+
+## Accepted proposal state (owner's pin still 5.3033)
+* SEED-ERA: composition (B4W+DOT8W+SELRES) + **noinline KV staging helper** = pin
+  **5.8083/5.8050** on two boards' FULL gates (b2 +1.072 % over its 5.7467 pin, b3 +1.010 %),
+  ext **5.7331** best measured, think 4.51, boot 170 ms/token, heap 5087, capture GREEN (#650).
+* SHIPPABLE: bundle5 + same attention family + same helper + late RX ring = **5.4650** at full
+  gate = **+3.048 %** over the accepted pin, ext 5.3992 (+3.29 %), think 4.30, all 20 cases
+  complete, 18/20 with only the demo-timer pair (#651).
+
+## The two frozen goldens now have a MEASURED device-state path (#647)
+bundle5 + ONLY the late RX ring (engine byte-pure accepted) flips exactly those two cases
+(18/20, delta 52) while the same engine without the ring is 20/20. So the pair is
+interrupt/input-timing sensitive; the ring (UART ISR + driver-backed stdin) alone is enough.
+My earlier "not arithmetic" claims are moot - this is the discriminating measurement. The
+ring costs -0.188 % primary; it buys the wedge fix, not speed.
+
+## Measurement-disclosure rule, learned by contaminating my own tree
+#652 (cold-refund null) was built on a tree carrying pvni residue: after a discard-revert I
+patched b2 again without md5-verifying the revert landed clean. The verdict (null) is robust
+to the confound, but the provenance line now says: after ANY discard/revert, md5 the file
+BEFORE writing the next candidate onto it. Restored clean pin = 31395c672ab8 (snapshot md5
+verified) and the same snapshot re-deployed to b3.
+
+## Classes CLOSED this window (measured, do not re-screen)
+* SPILL class: whole-ELF loop scan on the pin image finds ZERO inner loops with FP stack
+  accesses (attn_heads' 79 frame accesses are all prologue/cold). The staging helper was the
+  last one; no loop-body spills remain anywhere in the engine.
+* COLD/CODE-SIZE class: #652 frame-shrink (+1,024 B free) read -0.086 % - shrinking the code
+  AROUND the hot loop does not move the metric (third null of the class after #579/#582).
+* noinline policy: body-specific (staging +1.07 %, pv_pair2 -0.173 % #649).
+
+## In flight at window end (three distinct width curve points, all bit-exact by construction)
+b1 kvstage4 (staging 4 words/iter, nwords 12 = 3x4 exact), b2 DOT12W (QK dot 12 cols, 48=4x12;
+DOT8W was +0.53, P.V width saturated at 4 - this prices whether the QK curve has a third point),
+b3 selsweep4 (rescale sweeps 4 cells/iter). Width axis read-out after these: P.V saturated, QK
+4->8 won, staging/ sweeps TBD.

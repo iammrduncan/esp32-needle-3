@@ -186,3 +186,32 @@ case removes 8x12,288 B copies per token and frees 12,288 B of internal SRAM wit
 identical arithmetic; it also makes the RMS emit guard live (E66's blocker). Judge the
 composition, not the pieces. **Do not** spend a board on an E67 repeat or on engram
 (#347/#411/#430 already price its ideas), and do not read B2's silence as a tile result.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~12:35Z (run #696: a structural win)
+
+**nx/xh lifetime KEPT (#696, B1): +0.85% and 9,976 B of internal SRAM back.** The lane
+RMS now emits straight into `xh` (the phi prepare's own output buffer) and
+`nd_cq_prepare` skips its copy when input and output are the same pointer, so the
+12,288 B memcpy per layer (8 per token) disappears with identical arithmetic; `nx` is
+retired from allocation, null check and free. B1: decode **5.7583** vs its same-mode
+5.7100 screen (+0.85%), boot 5.859, min_case 5.55, 6/6 exact, `internal_free` 4191 ->
+**14167**. The boot line also closes E66's story: `lane_align=0 xh_align=0`, so the RMS
+emit's wide path is live - E66 read as a null only because its destination (`nx`) was
+never 16-byte aligned and the guard silently kept the C loop. The measured change is a
+composition (copy removal + live emit), judged as one.
+
+**This is the shape to look for again:** a *lifetime* defect, not an instruction-count
+defect - a scratch buffer that only exists because one producer and one consumer did not
+share storage. The audit found it by following `nx`'s single producer/consumer and the
+absence of prefix ownership; the same question ("who owns this buffer, and does anything
+need the copy?") has not been asked of `n1`, `n2`, `ublk`, `tmp2`, `row` or the
+`fp16_slot` staging rows.
+
+**Board state:** B1 carries E68 (5.7583 screen, full gate + host gates owed). B2 is
+still locked by its stalled E65 job (untouched, as instructed). B3's flash still fails
+with EIO. **Next: port E68 to the seed line the moment B2 frees** (it is a pure
+lifetime change with no base dependency), then judge it as a composition there; and in
+parallel audit `n1`/`n2`/`ublk`/`tmp2` for the same single-producer/single-consumer
+pattern. Do not spend a board on E67 repeats or engram.

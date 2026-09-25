@@ -287,3 +287,37 @@ return to the seed line's next lever; (3) the frozen-pair diagnostic's next step
 the first divergent model/logit/selection state, which needs a per-token logits hook,
 not another input recording - the input, token IDs and restored-prefix identity are
 already recorded (table above).
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~11:40Z (runs #690-#691 + a fresh phase map)
+
+**The campaign now has a two-board, one-image, fully-gated best line.** B3 ran the
+seed stack transplanted byte-exactly from B2 (engine `b28de5ea79ce`, same main.c):
+**5.9033 / ext 5.8338 / think 4.56 / prefill 6.2167 / min_case 5.69 / boot 6.007 /
+18-20 / delta 52** - identical to B2's full gate to the last digit (#690). Both boards
+carry green host gates (19/19, delta 0, logit delta 5.341e-05, top1 10/10). The
+shippable line's FWHT tree also carries both halves now (#691): 5.6483 full gate +
+host 19/19. Only the owner's two-case disposition is open.
+
+**FRESH PHASE MAP (profiled restricted run on the current best stack, B2; absolute
+decode is not a speed claim - #413).** Nested, so read the innermost items:
+`attn-stage 82.5 (proj2bit 80.8, attention 24.1)`, `hadamard 21.2`, **`engram 15.8`**,
+`mhc_phi4 8.4`, `mhc-mix 4.5`, `sinkhorn 3.0`, `prep+lut 1.7`, `step-tail 0.6`.
+Total measured ~137.7 ms of the token.
+
+**The next real target is ENGRAM at 15.8 ms** - it is now the third-largest phase and
+no lever of this campaign has ever touched it (the old table had phi 13.8 / hadamard
+29.4 / a ~10 ms scaffold residual, and engram never appeared). #411 priced only the
+engram *dequant* at ~0.6 ms/token, so the 15.8 ms is gather + matmul + whatever the
+two sites (layers 4 and 7) do per token, not the dequant. Next step is pure inspection
+in `nd_model.c` (the engram gather/projection path) plus a check of whether it uses
+the lut2 2-bit walker or a C fallback - if it is a C fallback the same three-condition
+load-form rule applies, and if it is the LUT walker the cost is indexed lookups and
+the lever is elsewhere (batching, hoisting, or the split).
+
+**Trees:** B1 `986dc8d5f2e8` (5.6483, device+host gates current), B2 `b28de5ea79ce`
+(5.9033, device+host gates current), B3 `b28de5ea79ce` (the same image, transplanted
+for the cross-board confirmation - B3 is now a *copy* of the best line, so it needs a
+candidate of its own or must be reverted to the shippable line before it can serve as
+an independent lane). No board is running.

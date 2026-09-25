@@ -276,3 +276,37 @@ B2 `31e8d04c8120` (5.9917 full gate; host gates owed), B3 `b255280ba9a9` (E67 on
 flash EIO). All idle. With ~15.6 KB internal free on the seed line, the long-blocked
 RAM-gated ideas come back into range (16 KiB private LUT2 tables; phi row residency
 ~18 KB/core is still out of reach) - worth re-pricing before building anything new.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~13:50Z (runs #699-#700: both lines gated, 6.0 crossed)
+
+**Two lines, both with device breadth evidence:**
+* **seed line 5.9917** (ext 5.9215, think 4.61, min 5.77, internal_free 15,607) =
+  **+12.96 %** over the 5.3033 pin. Full gate; host gates owed.
+* **shippable line 5.7583** (ext 5.6946, think 4.47, min 5.55, internal_free 14,167) =
+  **+8.58 %**. Full gate; host gates owed.
+Both carry the lifetime family (E68 nx/xh + E69 dequant row) and the mix kernels.
+
+**E65 tiled mix, finally priced with its repaired oracle: +0.17 %, banked (#700).**
+LANEMIXROW 64/64 with four ordered FMAs over four DISTINCT strided rows; the first
+oracle pre-summed the weights into `(w+w+w+w)`, which is a different expression, and the
+test caught it - that is the second time this window an oracle, not the kernel, was the
+defect. 6.0017 is the campaign's first reading above 6.0 tok/s. Below the bar, so no
+repeat and no full gate, exactly like E67.
+
+**Audit results that close two avenues (no board spent):**
+* The q/k/v/gate projections ALREADY share one `nd_cq_prepare` + `nd_cq_lut_build` per
+  layer (`nd_model.c:1928-1935`), so there is no redundant LUT build to remove; the
+  other prepare/lut pairs are out_proj, engram and embedding, each on a distinct
+  activation.
+* proj2bit works out to ~16 cycles per 32-bit weight word for 16 weights - about one
+  cycle per weight with ~33 instructions per word, i.e. dual-issue-saturated. Treat the
+  2-bit GEMV as closed on measurement, not on intuition.
+
+**Next candidates, in order:** (1) host gates on both trees (owed, cheap);
+(2) port the banked E67 + E65 to the opposite line as one composition and judge it
+together - each was sub-bar alone, and this campaign has crossed the bar before by
+combining two measured sub-bar halves of the same phase; (3) with ~15.6 KB internal
+free, re-price the two RAM-gated ideas (16 KiB private LUT2 tables is now borderline
+feasible; phi row residency at ~18 KB/core is not); (4) B3 when its USB returns.

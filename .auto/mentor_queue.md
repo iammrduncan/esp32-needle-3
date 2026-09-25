@@ -5,7 +5,25 @@ handoffs. Continue discovery now; waiting for owner admission is not a research
 stop. Preserve every worker diff, locks, anti-repeat history, frozen fixtures,
 quality gates and 240/80 MHz limits. The researcher implements and measures.
 
-## Turnover priority — 01:44 UTC (read before older recipes)
+## Turnover priority — 01:52 UTC (read before older recipes)
+
+**B2 transfer is now complete:** `91e79eeeb304`, **5.8083 tok/s**, +1.072%
+over its own 5.7467 composition pin, 6/6, delta 0, rc=0, heap 5087 (+264).
+Host 19/19, fidelity 5.341e-05, top1 10/10. M-kvst-b2.log is complete;
+preserve this source as the new B2 discovery pin. No full gate yet. Its ELF
+also has 0x1852-byte attn_heads and the 120-byte staging helper. This makes
+staging isolation a useful mechanism on TWO different runtime stacks.
+
+At 01:50 B1 ring-only was flashing and B3 cursor was being implemented.
+Keep those jobs/directions intact. **B2's next independent screen: force the
+existing `pv_pair2` function noinline**, retaining ND_HOT, its exact signature,
+rescale branches, four-cell width and arithmetic. It is still fully absorbed
+into attn_heads in the winning ELF (no pv_pair2 symbol); the staging win makes
+another allocator boundary worth testing. Unlike staging, this callee has 13
+arguments, so stack argument traffic may lose: inspect parent/callee codegen,
+then measure ONCE against 5.8083. Do not combine cursor or rewrite arithmetic
+in this screen. If it loses, preserve the result and take compact specialization
+below; do not iterate a series of equivalent helper spellings.
 
 New primary screens, read directly from completed lane logs:
 - B1 KV staging helper `5a9b75f4c948`: **5.4650**, +1.048% vs its 5.4083
@@ -21,10 +39,9 @@ New primary screens, read directly from completed lane logs:
   M-rsp-b3 completed by 01:45; all three first-batch lanes are harvested.
 
 Next lanes, after each current run ENDS and its source is preserved:
-1. **B2: transfer ONLY the winning staging-helper diff to its preserved
-   composition.** This is a different stack from B1's bundle5 base; does the
-   gain also lift the 5.7467 discovery best? Remove only B2's own rejected NP
-   helper/call changes from a saved copy, not anyone else's work. Primary screen.
+1. **B2: staging transfer DONE, 5.8083.** Preserve the winning source; take the
+   distinct P.V call-boundary screen above. Launch checks with `&&` before
+   measure, so a failed check cannot flash a candidate.
 2. **B1: accepted bundle5 + ONLY the existing late RX ring**, no attention
    family or staging helper. ONE full frozen suite, if this exact tree has not
    already been measured. This exception now has a concrete purpose: determine
@@ -84,7 +101,7 @@ fourth helper spelling if codegen/timing is unchanged; take a reserve below.
 
 B2 nonpositive exp and B3 rescale-exp pairing are now measured NEGATIVE above.
 Do not repeat them or the completed primary screens. Their implementation
-rationale is preserved in this queue's earlier revision and the worker diffs;
+rationale and source are preserved in the worker candidate files;
 keep the actual candidate files before replacing them. The NP helper's correct
 form is `(int)(z - 0.5f)` for nonpositive z, with generic fallback for values
 outside [-88,0]; its arithmetic guard passed, so its rejection is on speed.
@@ -155,6 +172,7 @@ from this repository's code and new head-pairing structure. In particular,
 line rule against casually adding a whole fp32 KV mirror; boot free memory is
 not the allocation budget after both prefix snapshots.
 
-Next mentor: confirm real turnover on all three lanes, harvest speed plus target
-codegen for staging/nonpositive-exp/paired-rescale, and keep accepted 5.3033
-separate from discovery 5.7467 until the frozen failure pair is actually resolved.
+Next mentor: harvest B1 ring-only's frozen failure pair, B3 slot cursor and B2
+P.V call boundary. Keep accepted 5.3033 separate from discovery **5.8083** until
+the unchanged-quality gate is actually resolved. Do not repeat completed screens
+or let result logging/attribution leave the two performance lanes idle.

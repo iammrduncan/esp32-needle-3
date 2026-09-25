@@ -3239,3 +3239,16 @@ target surfaced. (Remember #413: a profiled image's ABSOLUTE decode is not a spe
 
 ## Boards at window end: b1 and b3 carry the shippable+helper tree (5a9b75f4c948), b2 the
 seed-era pin (91e79eeeb304). All captures current. Discovery pin 5.8083; shippable +3.048 %.
+
+## 03:05Z addendum: SELRES closed with data; spin ports and knob brackets complete the packet
+* SELRES both-sweep merged-vs-split A/B = exactly zero; host counters: pair-iterations 86.7 %
+  no-rescale / 5.8 % A / 5.2 % B / **2.36 % both** - both-flag specializations are bounded by
+  ~2 % of the sweep, so the family is closed with measurements on both branches (mentor's
+  #645 co-occurrence question answered the same way).
+* Spin handshake PORTED to the shippable line: +1.46/+1.50 pct on two boards, full gate
+  5.5500 = **+4.65 % over the owner's 5.3033 pin**, ext 5.4808 (+4.86 %), capture GREEN on
+  that exact tree (CAP-spinshp-b1, 9/9 flags). Shippable line final: engine 5a9b75f4c948 +
+  main d51719ecfbce. Worker/caller spin dose points all flat (+-0.1 pct): knobs closed.
+* Pool: b1+b3 = shippable+spin e6d55f29e286 (capture current), b2 = seed pin 91e79eeeb304
+  (capture current). Both lines fully gated; the sole outstanding item is the two
+  ring-proven demo-timer goldens (#647) - owner disposition.

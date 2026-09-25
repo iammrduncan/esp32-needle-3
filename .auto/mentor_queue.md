@@ -212,3 +212,81 @@ exact mapping/row/group checks, and resident-cu is the ready fallback if the pro
 be prepared promptly; (2) B2: full gate on the 6.0617 tree when a number is wanted;
 (3) B3: hardware blocker confirmed (host kernel shows the flash USB cycling ~every 12 s,
 so node presence is not recovery) - prepare the resident-cu reserve for a healthy turnover.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~08:20Z (runs #731 + B1 re-anchor)
+
+**Seed line gated at 6.0617 (#731):** decode 6.0617, ext 5.9877, think 4.65, min 5.83,
+18/20 (the two #647 goldens) = **+14.29 %** over the 5.3033 pin - the campaign's best
+fully-gated reading, carrying the lane-block sweep, the E68/E69 lifetime work, E71/E72b
+conditioning work and the deferred console echo. Host gates owed on this exact image if
+the number is to be submitted.
+
+**B1 re-anchored after the repair: 5.7983** (its pre-repair same-mode value was 5.7967),
+so the declaration-only reconstruction of `f02762ca5dbb` is performance-neutral within the
+quantum and the tree is usable again - **its own same-mode baseline is 5.7983**, which is
+what any B1 candidate must be priced against.
+
+**Next lanes:** (1) B1: the CQ2 uint16-offset/LSX kbench probe (predecode one projection
+into uint16 group-LUT byte offsets, `l16ui` + LSX + the same add chain; ~24 body
+instructions per eight pairs against 32 plus a packed-word load; 442,368 B PSRAM for a
+576x768 matrix) with exact mapping/row/group checks against its 5.7983 anchor, resident-cu
+as the ready fallback; (2) B2 host gates if the 6.0617 number is to be submitted;
+(3) B3 remains hardware-blocked (flash USB cycling ~12 s), resident-cu reserve prepared for
+a healthy turnover.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~09:20Z (run #732: LSX is not there; best line packet complete)
+
+**CV3W (uint16-offset / LSX predecode) CLOSED ON CAPABILITY, not on cost (#732).** The
+probe ran `lsx f0, a2, a3` three times on the device against a known float table:
+`LSXPROBE ok0=1 idx1_matches=0 idx2_matches=0 v1=0.0000 v2=0.0000`. Index 0 returns the
+right value (so the opcode is decoded and does not trap), but indices 1 and 2 return ZERO -
+neither the plain C index nor any shifted variant. The address arithmetic the mechanism
+needs is therefore not available on the ESP32-S3 as documented, and no amount of body
+scheduling can rescue it. The assembler accepts the opcode, so this could only be settled
+on the board - which is exactly what the mentor's addendum asked for. Probe code removed;
+B1 restored byte-exactly to `f02762ca5dbb` (anchor 5.7983).
+
+**The campaign's best line is now a complete submission candidate:** seed `d91fd5f048ca`
+= **6.0617 gated** (ext 5.9877, think 4.65, min 5.83, 18/20 with only the two #647 goldens)
+**plus host gates 19/19 with logit_max_delta 5.341e-05 unchanged and top1 10/10** on the
+same image - device breadth and host quality on one tree, +14.29 % over the 5.3033 pin.
+The shippable line stands at 5.7967/5.7983 (+9.31 %) with the same gate structure.
+
+**What remains:** (1) the owner's decision on the two ring-related goldens - the only item
+with real upside, with evidence in #647/#711/#712/#718/#719; (2) B3's hardware blocker
+(flash USB cycling ~12 s; node presence is not recovery) with the resident-cu reserve
+prepared for a healthy turnover; (3) optionally B2's capture (`make capture`) if the owner
+wants the submission packet tightened. Every lever family this campaign built is now
+either kept-and-gated or closed by measurement or capability.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~09:55Z (run #733: capture blocked by board state; two of three boards need a physical check)
+
+**The owed behavioural capture of the seed-line candidate did not complete, and the cause
+is board state, not code.** The capture runner flashed the 6.0617 tree successfully
+(flash_rc=0, hash line present, engine `d91fd5f048ca`) and then waited for `EVT READY`;
+board 2's console produced **zero bytes** - no boot banner at all - through the scripted
+600 s wait and a further 280 s manual read with the documented DTR/RTS discipline. Nothing
+was reflashed, no loop was attempted, no process holds the lock, and the tree is unchanged.
+
+**Hardware picture at this point: board 3 has the visibly cycling USB node (refreshed again
+at 17:40) and board 2's console is silent after a successful flash, so TWO of three boards
+need a physical/host-side check before more device work.** Board 1 last read 5.7983 and is
+otherwise the healthiest.
+
+**Nothing measured is in doubt:** seed `d91fd5f048ca` 6.0617 gated + host 19/19, shippable
+`f02762ca5dbb`/`bae5184f9ca7` 5.7983/5.7967 with host 19/19. The only outstanding capture
+debt is the behavioural suite on a candidate image.
+
+**Harness note:** the existing capture lane only handles the ACCEPTED image on board 1 (it
+resets the worker from the branch and copies sources from the main checkout). Capturing a
+candidate in place is a new path and must start with a board-health check - a successful
+flash does not imply a live console.
+
+**Next window should begin with hardware triage, not another device experiment**, unless the
+owner's decision on the two ring-related goldens arrives first.

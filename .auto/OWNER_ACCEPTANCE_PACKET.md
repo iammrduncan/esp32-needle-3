@@ -1,3 +1,70 @@
+# Acceptance packet - CURRENT CANDIDATES (2026-09-26) - read this section first
+
+Accepted runtime is still **5.3033 decode tok/s** (bundle5 `2c79104`, 20/20 device). Two
+candidate lines now stand above it, both **packet-complete on their own trees**, and both
+outstanding on the same single item - the owner's disposition of the two demo-timer goldens.
+
+| | SEED LINE | SHIPPABLE LINE |
+|---|---|---|
+| decode (full 20-case gate) | **6.0617 (+14.29 %)** | **5.8283 (+9.90 %)** |
+| engine | `d91fd5f048ca` | `787a58302f52` |
+| extended / think / min_case | 5.9877 / 4.65 / 5.83 | 5.7638 / 4.52 / 5.62 |
+| device gate | 18/20 byte-exact, `token_delta` 52 | 18/20, `token_delta` 52 |
+| host gate | **19/19**, fidelity `5.341e-05` unchanged, top1 10/10 | **19/19**, same |
+| cross-board | **confirmed on board 3, identical to the digit** (#737) | single board |
+| capture | owed | owed |
+
+The 18/20 failures are **exactly the two demo-timer goldens** (`heldout_interval_one`,
+`heldout_long_tools_note_only`) on every image that carries the lossless RX ring, and the
+same engine without the ring is 20/20 (#647: a pure transport change flips them). No other
+case has ever failed on either line.
+
+## The one decision the owner has to make
+
+1. **Keep the ring** (lossless input, the >128-byte request fix, the 20-case suite) and
+   **re-baseline or replace** those two cases; or
+2. **Drop the ring** (20/20 returns) and give up the lossless-input fix and the 20-case suite.
+
+Evidence assembled for that decision: the two cases are **deterministic and order-independent
+within an image** (#712, #719); their inputs are **identical** (qlen/qhash/suffix token ids,
+restored-prefix identity - #711); the sampler's choices are **confident**, median margin ~12.8
+logits, so they are not tie-breaks (#711); the host - same engine, fresh prefill - produces the
+**same** `interval_one` answer the device does, and picks a *different but equally valid* tool
+than the device on a case the device passes (#718). The goldens are therefore device-derived
+artefacts of one engine state rather than host truth, and the remaining difference sits where
+#647 put it.
+
+## What the two lines are made of (every lever measured and bit-exact)
+
+Lane block: E64 five-pass mix (+0.99 % seed / +0.92 % shippable), E65 tiled mix (+0.17 %),
+E67 wide lanepre (+0.146 %), E70 elementwise cluster (+0.12-0.14 %). Buffer lifetime: E68
+nx->xh (+0.85 %/+0.50 %, 10 KB SRAM back), E69 dequant row copy (null, 3 KB SRAM back).
+Conditioning: E71 seven accumulate passes (+0.39 %), E72b scale-in-slice (+0.19 %). Transport:
+deferred console echo (+0.35 % shippable / +0.05 % seed), prefill progress print removed.
+Attention and transform: wide P.V (+0.63 % twice), wide kron1 (+0.36 %/+0.34 %), FWHT radix-4
+(+0.18 %), wide phi (earlier, +0.33/+0.54 %).
+
+## Closed, with the reason attached (do not re-open without a changed assumption)
+
+2-bit LUT GEMV: ~2 instructions per weight, dual-issue saturated, and the quad-table variant
+measured 38 % slower. Kron2: register file cannot hold the rows (two negatives). QK dot:
+hand-written asm loses to GCC's schedule (56 vs 49 cycles/chunk even after rescheduling).
+Conditioning two-channel reduction: serial chain, -0.17 % on contiguous rows. In-window
+printing: exhausted (#739). Per-token bookkeeping: largest item 0.04 %, and removing it would
+change rounding (#740). LSX: not implemented on this silicon (#732). Elementwise shapes: all
+~6k cells/token, below the quantum.
+
+## Blockers at the time of writing
+
+* **The owed behavioural capture** needs a live console; the pool's three consoles are
+  currently silent (host-side USB re-enumeration without delivery - see the queue), so device
+  work is paused until host USB triage is done.
+* Board 3 was recovered once by reflashing a known-good image (its old image was SRAM-starved
+  and watchdog-looping, which looked exactly like a dead USB port) and confirmed the seed line
+  cross-board before going silent with the rest.
+
+---
+
 # Acceptance packet - shipped state and what is still owner-facing (2026-09-24)
 
 Accepted runtime: **5.3033 decode tok/s** (+117.2 % over the 2.44 baseline), commit `2c79104`,

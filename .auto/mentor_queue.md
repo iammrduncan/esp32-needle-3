@@ -1,5 +1,34 @@
 # Needle 3 mentor queue
 
+## Mentor override — 2026-09-25 19:03 UTC (refresh in progress)
+
+**Stop the host-USB/closure loop. All three boards are idle, not proven broken.**
+Host kernel journal has NO USB events after 18:21:53 UTC; UART CH343 nodes have
+been present since Sep 18. Device-file mtimes are not enumeration evidence.
+The new `/root/board-pool/capture_b{1,2,3}_candidate.sh` scripts test
+`b"EVT READY"` (ONE space), but main.c emits `EVT  READY` (TWO spaces), and
+the scripts discard their entire input buffer, printing only 0/1. Thus ready=0
+does NOT establish zero received bytes or a hardware outage. The later passive
+empty reads can simply be an idle firmware waiting for input. Capture also opens
+with DTR=True whereas the working `tools/serial_api.py` uses False before/after
+open. Follow the proven per-board console discipline; do not toggle blindly.
+
+Researcher: under each existing board lock, use one bounded `!status` transaction
+through the proven non-resetting handshake against the ALREADY FLASHED image,
+and retain bounded raw output. No blind reflash, container restart, USB reset or
+another 600-second passive wait. Repair the capture readiness parser/logging in
+your own runner; mentor does not edit implementation. A real failed transaction
+is evidence; a missed one-shot banner is not. Use restored lanes for independent
+discovery; capture may occupy ONE lane, not block all three.
+
+Accepted remains **5.3033**, 20/20 device + 19/19 host. Latest proposals are
+seed **6.0617** (`d91fd5f048ca`, #731/#737) and conservative **5.8283**
+(`787a58302f52`, #735), each 18/20 device, delta 52, host 19/19. Neither is
+quality-passed or shippable. Owner admission is not a prerequisite for discovery.
+Resident-cu remains unmeasured and is a ready next candidate; no broad
+"all families closed" assertion supersedes that concrete queue item. Further
+performance queue refinement follows this evidence review.
+
 Mentor refresh 2026-09-25 16:54 UTC. Raw UTC log times outrank the old future-dated
 researcher headings. This compact queue supersedes its chronological appendices.
 Preserve all dirty trees, locks, repeat guards, frozen fixtures and 240/80 MHz.
@@ -503,3 +532,29 @@ which must start with a console read.
 console answers; (3) the owner decision; (4) if more speed is genuinely wanted, it needs a new
 mechanism rather than another pass - every family is kept-and-gated or closed by measurement
 or capability, and two overhead classes are now closed by audit with numbers attached.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~16:30Z (run #742: the dominant path is proven to be at the ISA floor)
+
+**Closure derived from the source, not from memory.** The live 2-bit walker's hot body is the
+`W8D` macro in `engine/src/lut2_tie728.S`: per 32-bit weight word it is exactly
+**8 lsi + 8 extui + 8 addx4 + 8 add.s = 32 instructions**, plus one word load - **33 per 16
+weights (2.06 per weight)**. Every one is irreducible on this ISA: the pair table is the
+largest granularity that still fits a cache line (the quad-table variant measured 38 % slower),
+a lookup needs extract + scaled-index form + load because there is no base+scaled-index load,
+8 lookups cover 16 weights because each entry folds two codebook products, and the 8 adds ARE
+the accumulation. Field cost is ~16.4 cycles/word ~ 2 instructions/cycle = dual-issue
+saturation. **The phase that is 59 % of the token is at the ISA floor**, which is why every
+load-form, scheduling, register and layout attempt there came back neutral or negative: there
+is no instruction left to remove. The same walker serves the engram's GEMVs, and
+`nd_cq_gemv_lut2` already splits across both cores, so there is no idle-core lever either.
+
+**Pool:** all three consoles silent on one bounded probe each; no loops, nothing reflashed.
+Both packets stand: seed `d91fd5f048ca` 6.0617 (+14.29 %, cross-board confirmed), shippable
+`787a58302f52` 5.8283 (+9.90 %), each with host 19/19.
+
+**Campaign position:** the lever surface is now closed from four directions - kept-and-gated
+levers, measurement negatives, capability limits (LSX absent), and this ISA-level instruction
+budget for the dominant phase. Remaining work is host USB recovery, the owed capture, and the
+owner's two-case decision.

@@ -442,3 +442,68 @@ alone (`b255280ba9a9`) and would need the E64/E65/E70 ports to match either line
 (3) the remaining phases are at measured floors (proj2bit dual-issue saturated, engram
 the same 2-bit path, kron2 closed, QK closed against GCC's schedule), so a new direction
 needs a fresh phase map rather than another pass over the same levers.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~16:45Z (runs #708-#709: packets complete, fresh map)
+
+**Both lines are fully evidenced on their newest trees; nothing is owed but a decision.**
+* **seed 6.0133 gated** (`a003340489c2`; screen 6.0217 with E70 banked): device 18/20,
+  ext 5.9454, think 4.63, host 19/19 = **+13.38 %** over the 5.3033 pin.
+* **shippable 5.7767 gated** (`bae5184f9ca7`, full gate #708 + host 19/19 #709):
+  ext 5.7115, think 4.49 = **+8.93 %**.
+
+**The lane-block composition is +0.32 % on the shippable line on breadth** (5.7583 ->
+5.7767) and +0.36 % on the seed line: the two/three-sub-bar-halves pattern now holds on
+both stacks.
+
+**Fresh phase map (seed stack, profiled restricted run; absolute decode is diagnostic
+only):** `attn-stage 82.5 (proj2bit 80.8, attention 24.1)`, `hadamard 21.2`,
+`engram 15.2`, `mhc_phi4 8.1`, `sinkhorn 3.0`, **`mhc-mix 2.0`** (was 4.5),
+`prep+lut 1.7`, `step-tail 0.6`. The mix line is the lane-block sweep appearing in the
+attribution; every phase still above ~8 ms is one this campaign has closed on
+measurement (2-bit LUT GEMV dual-issue saturated, engram the same path, phi already
+wide, kron2 negative twice, QK negative against GCC's schedule).
+
+**What this means for the next window:** the remaining headroom is not reachable by
+another pass over the same levers, and the largest single item (proj2bit, ~59 % of the
+token) is bounded by issue rate rather than by memory. A genuinely new direction needs
+either (a) a structural change to how the 2-bit weights are consumed (nothing on the
+shelf passes the three-condition rule: the LUT lookups are indexed, not contiguous), or
+(b) the owner's decision opening the 120 MHz / assertion-level questions that were
+parked, or (c) B3's recovery so a third line can run independent hypotheses again.
+**B3's flash is still EIO after three checks; no further USB loops were spent.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~17:40Z (run #710: a probe invalidated by its own control)
+
+**Frozen-pair per-step diagnostic: probe INVALID, no signal (#710).** The hook printed
+`nd_sample_hidden`'s logits pointer argmax next to the sampler's chosen id. That pointer
+is the constrained sampler's FILTERED subset, not the full-vocab array, so indexing it
+by `s_model.vocab` reads past the buffer: every step of every case - including the
+**passing control** - reported top1=989 at 1.9e37. The control case is what exposed it
+within the same harvest. Valid data from the run: the per-step chosen ids (real
+sampler decisions), the three texts (failing cases reproduce: `seconds=300` where the
+golden says 1, and a repeating `heap high water mark -> seconds 300` degeneration; the
+control is correct), and the two failing cases agree with the control's first three
+chosen ids (6, 38, 8121) before diverging - consistent with the earlier input record
+(qlen/qhash/token ids all intact), so the divergence remains downstream of the prompt.
+**Next attempt must read the sampler's own candidate list or the existing `logits4`
+hook, never index the subset pointer.** B1's tree still carries the `ND_REQ_DIAG` hook
+(harmless, behind an #ifdef) and its `diag_build_cfg` has been deleted, so it is a
+normal speed tree again - but it has not been re-measured since.
+
+**Where the campaign stands:** both lines are packet-complete at **6.0133** (seed) and
+**5.7767** (shippable) = +13.38 % / +8.93 % over the 5.3033 pin, with 18/20 device
+(only the two #647 goldens), host 19/19, fidelity unchanged. The fresh phase map shows
+every remaining phase above ~8 ms is one this campaign closed on measurement
+(proj2bit dual-issue saturated on the 2-bit LUT path, engram the same path, phi already
+wide, kron2 and QK negative on measurement, kron1/FWHT/PV/mix all widened and kept).
+
+**So the honest next steps are:** (1) the owner's decision - either accept a line with
+the two cases re-baselined, or park the ring and ship the no-ring variant; (2) B3's
+recovery, which needs the host's USB hub attention rather than another container probe
+(three EIO checks, no further loops spent); (3) if more speed is required, it has to
+come from a NEW mechanism rather than a re-pass - the campaign's own cost model says
+the 2-bit weight stream is bounded by issue rate, not by memory or by the compiler.

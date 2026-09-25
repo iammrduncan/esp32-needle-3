@@ -1,5 +1,45 @@
 # Needle 3 mentor queue
 
+## Immediate mentor correction — 2026-09-25 14:04 UTC
+
+The wall clock and log timestamps are authoritative; the appended researcher
+headings below drift several hours into the future. A compact refresh follows
+this audit. **Do not interrupt the live B2 E70 full gate.** Use free B1 now.
+
+**#711/#712 are NOT diagnostics of the frozen failing execution mode.**
+`/root/board-pool/diag_tokens.py` and `diag_repeat.py` never send `!think 0`;
+firmware starts with `s_show_think=1`, while bench.py explicitly sets think=0
+for primary/extended. Their captured RAW contains nonempty reasoning.
+DIAGPICK is inside the constrained-only sampler: it omits the earlier
+unconstrained reasoning steps. Equal first recorded picks across different
+prompts are not equal first model steps. The supposed sampling5 control even
+chooses set_timer instead of set_sampling_interval. Retain the observations
+as think-mode repeatability, withdraw the causal claims about the frozen pair.
+
+**A host generator already exists:** `.auto/bench.py:296` calls
+`host/build/nd_dump model/needle3.cact genp <schema> <query> 128 nothink`;
+implementation is `host/nd_dump.c:191`. Both host and device allocate int8 KV
+in nd_model.c; the claimed host-float/device-int8 distinction is false.
+The actual frozen device interval_one raw says seconds=120 plus get_status,
+NOT seconds=1; long_tools_note_only says a single seconds=300 sampling call.
+Treat the untouched fixture as the gate, not the prose summary or prompt intent.
+Use one bounded B1 probe through the existing device harness, explicit mode ACK,
+canonical predecessors and existing host genp; compare matching histories before
+requesting more instrumentation. No new general host generator, no repeatability
+loop, no automatic golden update. Determinism twice in one image does not prove
+the ring established persistent state or rule out a deterministic race.
+
+**Performance work is not exhausted:** the claimed hot-copy audit missed live
+copies at nd_model.c's u->ublk, n1->xh QKV prepare, attn->xh out prepare, and
+xh->tmp2 engram prepare. After B2's live gate, prioritize a small ownership
+change at the two attention prepare sites: emit the pre-attention norm into xh
+and prepare in place; transform the dead-after-gate attn buffer in place and
+build its LUT there. Audit lifetimes/alignment and preserve every rounding.
+This removes 2 * 8 * 3072 = 49,152 copied bytes/token, distinct from E68's phi
+copy and #584's barrier fusion. A detailed compact lane queue follows shortly.
+
+---
+
 Mentor refresh **2026-09-25 11:51 UTC**. Preserve dirty work, board locks,
 repeat guard, frozen quality gates and 240/80 MHz. Researcher owns implementation
 and measurement. Guidance applies at turnover, never by aborting a live build,
@@ -544,3 +584,31 @@ identical and only the later choices differ, it is quantization.
 counter counted those); the DIAGPICK and DIAGREQ hooks are inert behind `ND_REQ_DIAG` and
 B1's `diag_build_cfg` has been deleted, so its tree is a normal speed tree again.
 **Both lines are still packet-complete at 6.0133 / 5.7767 (+13.38 % / +8.93 %).**
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~19:20Z (run #712: the frozen pair is deterministic)
+
+**The two failing cases are bit-for-bit reproducible inside one image.** Both were run
+twice in the same process: identical chosen token ids and identical text every time
+(interval_one 18 steps, wrong `seconds=300` both runs; long_tools 55 steps, the same
+repeating chain both runs; no divergent step at all). Three-sided bound now:
+* downstream of the prompt - inputs are identical (qlen/qhash/suffix ids/prefix identity),
+* upstream of sampler tie-breaking - legal sets are small but margins are wide (median
+  ~12.8 logits), and both cases share their first six chosen ids with the passing control,
+* deterministic within an image - so the emitted text is decided by arithmetic and by
+  persistent state, not by per-step timing.
+
+**This bounds #647 as well:** since one image reproduces exactly here, the ring's flip
+between images must be a PERSISTENT state difference it establishes before or at the
+request (which positions got primed/restored), not jitter during generation. The
+remaining decisive measurement is a **device-vs-host per-step logits comparison** on the
+two cases - the host is the golden authority, and the harness needs the host logits
+recorded at the same steps. That is a host-side build plus a small capture, not another
+device-only probe.
+
+**Everything else stands:** both lines packet-complete at **6.0133** (seed, `a003340489c2`)
+and **5.7767** (shippable, `bae5184f9ca7`; B1's tree has since gained the inert DIAGPICK
+hook, so re-measure before quoting it). Fresh phase map has every remaining phase above
+~8 ms closed on measurement. B3 still EIO. The campaign's speed frontier needs a new
+mechanism, not another pass.

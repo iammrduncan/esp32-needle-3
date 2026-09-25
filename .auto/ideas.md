@@ -3271,3 +3271,77 @@ seed-era pin (91e79eeeb304). All captures current. Discovery pin 5.8083; shippab
   scheduler transfer (b3 keeps its bundle5 engine, s_go/s_done gone, 0 xSemaphore);
   B2 alternating a15/a9+f12/f15 codebook-load schedule in gemv4_tie728.S (a9 dead
   after loop latches the count, f15 unused; per-partial chains untouched).
+
+# 2026-09-25 ~08:20Z: THE LOAD-FORM RULE, measured on three loops in one day
+
+The "wide-load family" is now settled empirically, and the rule that decides it is
+mechanical, not stylistic. Three integrations, all bit-exact by device self-test,
+three different outcomes:
+
+| loop | memory ops per 4-float chunk | arithmetic | result |
+|---|---|---|---|
+| DOT8W attention QK (4 serial accumulators) | 16 lsi -> 6 ldf | 24 fp ops in 4 serial chains | **-2.1 % (b2) / -1.9 % (b3)** |
+| B4W P.V update (independent FMAs) | 32 -> 6 | 16 madd, no chains | **+0.63 % (b1 AND b2)** |
+| kron2 factor rows (8 accumulators) | 34 -> 25 | 16 madd, 8 chains | **-0.30 %** |
+
+The price measurement that explains the first row, taken inside a shipping image
+(#671, boot microbenchmark, diagnostic): the GCC-compiled C DOT8W body costs
+**49 cycles per 4-float chunk**, the hand-written wide kernel **80 cycles/chunk**,
+and the call boundary only **29 cycles**. So the asm body itself was 63 % more
+expensive than the C it replaced, while removing 10 of 22 instructions. A hand
+-written body issues its madd immediately after the load it depends on inside a
+serial accumulator chain; GCC hoists loads and interleaves the chains. Instruction
+count is not the currency of this loop.
+
+Corollary: **E51's +38 % was never a comparison against the code that ships.** E51
+timed hand-written lsi against hand-written wide, both carrying the same fixed
+statement order, so it priced load width in isolation and could not see the
+scheduling it was comparing against. Any future microbenchmark in this family must
+include the GCC-compiled body as the reference arm, not a hand-written scalar twin.
+
+The mechanics of who wins (all three measured today):
+* **Wins** where the compiler re-reads data it cannot keep: the P.V body re-reads
+  both staged rows for each head pair and writes+re-reads the output rows
+  (32 memory ops per chunk); the wide form keeps the rows resident (6). The FMAs
+  are independent, so a fixed order costs nothing.
+* **Loses** where the loop is a serial accumulation chain: replacing 16 loads by 6
+  saves 10 issue slots and adds ~31 cycles of exposed latency per chunk.
+* **Loses** where the shipped loop needs more live accumulators than the register
+  file leaves room for: kron2 keeps EIGHT accumulators and spends the register
+  budget on them deliberately (16 lsi per j step is the price). Four wide loads
+  want four registers per row, so the kernel must either keep four accumulators and
+  walk j twice (double loop overhead, double the crow reads, half the ILP: -0.30 %)
+  or reload. Eight accumulators + two 8-float factor rows do not fit in f0-f15.
+  kron1 (4x2 pass, 8 accumulators + one 4-float row + two src values = 14 regs)
+  fits and is the live candidate (E55).
+
+**Operational rules extracted** (each one paid for):
+1. Price the loop in a shipping image before integrating: a boot-time selftest can
+   diff AND time the kernel in the same run as the primary measurement (#671).
+2. A hand-written wide kernel must be vetted for exactness on device - the selftest
+   caught nothing wrong in the final QK/PV kernels, but its canaries caught the
+   double-advance bug in the first P.V version, which had crashed the board before
+   any number was believed.
+3. Both 128-bit forms are post-increment and BOTH put the LOWEST address in the
+   LAST-named register (TRM 1.8.25 for ldf, 1.8.65 for stf). A load+store of the
+   same row therefore advances the pointer twice; rewind with `addi aS, aS, -16`.
+   E50's store-back probe cannot settle the store order - it stores to the address
+   it has just read and then rewinds, so a register permutation is invisible.
+4. Only call a kernel where the call is amortized over enough work AND the body is
+   scheduled at least as well as the compiler's (see rule 2 of the table above).
+
+# Pins and trees at this writing (2026-09-25 ~08:20Z)
+* b2 seed-era + composed attention + wide phi + **wide P.V**: 5.8767 restricted
+  (was 5.8400) = campaign best; full-gate promotion running.
+* b1 shippable + notif + **wide P.V**: 5.6183 FULL gate (ext 5.5554, think 4.38,
+  18/20 = the two demo-timer goldens only).
+* b1 + wide kron1 (E55): screening.
+* b3's original tree (engine 55eba5aa1889, shippable+notif+widephi) was lost to a
+  blanket `git checkout --` and reconstructed as (b1 pre-PV nd_model.c + the
+  m->xh FAST16 line); its engine id is now a reconstruction, NOT the measured
+  baseline. Re-measure b3 before trusting any b3 delta, or re-transplant from b1.
+* Recovery assets: `.auto/exp52/qk8w_b2.patch` (full HEAD diff carrying the
+  seed-era composition, wide phi and the QK kernel), `.auto/exp53/pv8w_b1.patch`
+  (the kept P.V kernel), `.auto/exp52/qk8w_tie728_prior_attempt.S` (an earlier
+  `nd_qk8w4` whose reduction differs from the shipped statements, so it is not
+  bit-exact - do not ship it without the selftest).

@@ -480,3 +480,26 @@ remaining work is (a) host USB recovery + the capture, (b) the owner's decision,
 *mechanism* rather than another pass - and the cost model says the dominant 2-bit stream is
 neither memory- nor compiler-limited, so such a mechanism would have to change what is
 computed, which the frozen-quality constraints forbid.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~15:55Z (run #741: owner packet refreshed; pool still offline)
+
+**`.auto/OWNER_ACCEPTANCE_PACKET.md` now leads with the current candidates** (host-side work,
+no device time): seed `d91fd5f048ca` **6.0617 (+14.29 %)** and shippable `787a58302f52`
+**5.8283 (+9.90 %)**, each with device 18/20 (only the two demo-timer goldens, delta 52),
+extended/think/min_case, host 19/19 with fidelity unchanged, the seed line cross-board
+confirmed on board 3, plus the full lever list with measured values, the closed families with
+their reasons, and the blockers. The single owner decision is stated with its evidence: keep
+the lossless RX ring and re-baseline/replace the two cases, or drop the ring and lose the
+lossless-input fix and the 20-case suite.
+
+**Pool:** still offline - all three consoles silent on the last bounded probe (host-side USB
+re-enumeration without delivery). Device work resumes only after host USB recovery; the first
+device item is the owed behavioural capture (`/root/board-pool/capture_b3_candidate.sh`),
+which must start with a console read.
+
+**For the next window, in order:** (1) host USB recovery; (2) capture on the first board whose
+console answers; (3) the owner decision; (4) if more speed is genuinely wanted, it needs a new
+mechanism rather than another pass - every family is kept-and-gated or closed by measurement
+or capability, and two overhead classes are now closed by audit with numbers attached.

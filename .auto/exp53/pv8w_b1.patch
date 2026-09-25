@@ -1,0 +1,480 @@
+diff --git a/engine/include/nd_model.h b/engine/include/nd_model.h
+index d7818dd..9b9a712 100644
+--- a/engine/include/nd_model.h
++++ b/engine/include/nd_model.h
+@@ -48,6 +48,9 @@ extern "C" {
+  * SRAM instead of PSRAM matters far more than its size does. */
+ #ifndef ND_ALLOC_FAST
+ #define ND_ALLOC_FAST(n) heap_caps_malloc((n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
++/* 16-byte-aligned internal allocation: the wide-load kernels (E50-E53) read
++ * four floats per instruction, so the operand row must be 16-byte aligned. */
++#define ND_ALLOC_FAST16(n) heap_caps_aligned_alloc(16, (n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+ #endif
+ #else
+ #include <stdlib.h>
+@@ -59,6 +62,7 @@ extern "C" {
+ #endif
+ #ifndef ND_ALLOC_FAST
+ #define ND_ALLOC_FAST(n) malloc(n)
++#define ND_ALLOC_FAST16(n) malloc(n)
+ #endif
+ #endif
+ 
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 47bc67b..b53f3d4 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -61,6 +61,31 @@ static float sigmoidf_(float x)
+  * two divisions keep their scalar form, and `nd_expf_pair` itself falls back to two
+  * scalar calls outside the range where its interleaved chain is exact.
+  */
++/* #B1: the inline KV-byte staging in attn_heads keeps eight signed-byte
++ * temporaries live across two loops inside the 0x580-frame callback, and the
++ * register allocator spills them to +0x464..470 every iteration (object
++ * audit: stores AND reloads at 0x4037c279..319 / 0x4037c381..413). Giving the
++ * conversion its own tiny frame lets the callee keep the unpack in registers
++ * - the values are untouched: same packed-word loads, same (float)(int8_t)
++ * per byte, same destination arrays and layout. noinline is the mechanism:
++ * inlining puts the temporaries back into the big frame. */
++static ND_HOT __attribute__((noinline))
++void kv_stage_pair(const uint32_t *s0, const uint32_t *s1,
++                   float *d0, float *d1, uint32_t nwords)
++{
++    for (uint32_t w = 0; w < nwords; w++) {
++        uint32_t a = s0[w], b = s1[w];
++        d0[4u*w + 0u] = (float)(int8_t)(a & 0xff);
++        d0[4u*w + 1u] = (float)(int8_t)((a >> 8) & 0xff);
++        d0[4u*w + 2u] = (float)(int8_t)((a >> 16) & 0xff);
++        d0[4u*w + 3u] = (float)(int8_t)(a >> 24);
++        d1[4u*w + 0u] = (float)(int8_t)(b & 0xff);
++        d1[4u*w + 1u] = (float)(int8_t)((b >> 8) & 0xff);
++        d1[4u*w + 2u] = (float)(int8_t)((b >> 16) & 0xff);
++        d1[4u*w + 3u] = (float)(int8_t)(b >> 24);
++    }
++}
++
+ static ND_HOT inline void sigmoidf_pair(float x0, float x1, float *y0, float *y1)
+ {
+     /* The pair needs matching EXPONENTS, not matching signs: both chains are fed the
+@@ -309,6 +334,12 @@ static void bind_layer(nd_model *m, uint32_t i)
+         nd_cact_tensor(&m->c, b + k, slots[k]);
+ }
+ 
++#if defined(ND_GEMV4_ASM)
++/* E53: acceptance test for the wide-load P.V kernel; defined above pv_pair2(). */
++static int s_pv_ok;
++static int pv8_selftest(void);
++#endif
++
+ int nd_model_open(nd_model *m, const void *blob, size_t size)
+ {
+     uint32_t base, s, i;
+@@ -663,7 +694,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
+         m->kbuf      = (float *)ND_ALLOC_FAST(sizeof(float) * m->k_dim);
+         m->vbuf      = (float *)ND_ALLOC_FAST(sizeof(float) * m->v_dim);
+         m->gate      = (float *)ND_ALLOC_FAST(sizeof(float) * m->attn_dim);
+-        m->attn      = (float *)ND_ALLOC_FAST(sizeof(float) * m->attn_dim);
++        m->attn      = (float *)ND_ALLOC_FAST16(sizeof(float) * m->attn_dim);
+         m->aout      = (float *)ND_ALLOC_FAST(sizeof(float) * dm);
+         m->rope_inv  = (float *)ND_ALLOC_FAST(sizeof(float) * (m->qk_head_dim / 2));
+         m->rope_cos  = (float *)ND_ALLOC_FAST(sizeof(float) * (m->qk_head_dim / 2));
+@@ -724,6 +755,11 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
+         m->rope_inv[i] = 1.0f / powf(m->c.h.rope_theta,
+                                      (float)(2 * i) / (float)m->qk_head_dim);
+ 
++    /* E53: decide the wide-load P.V kernel ONCE, on this silicon, against the
++     * shipped statements; the attention loop never has to guess. */
++#if defined(ND_GEMV4_ASM)
++    s_pv_ok = pv8_selftest();
++#endif
+     nd_model_reset(m);
+     return 0;
+ }
+@@ -1266,6 +1302,157 @@ static ND_HOT void kv_store_int8(int8_t *dst, const float *src, uint32_t n,
+     }
+ }
+ 
++/* Recipe B: P.V update for TWO heads at once, so each staged V value is read
++ * from its array once instead of once per head. Pure operand sharing: each head
++ * still gets its own rescale sweep (original in-place multiply, kept separate
++ * from the update exactly as shipped), then its own term0-then-term1 order per
++ * cell, so every oh[] rounding sequence is byte-identical to the per-head loop.
++ * The four wv scalars and two accumulators per cell stay register-resident;
++ * this is deliberately two cells wide rather than a duplicated four-wide body
++ * to keep the live set small. */
++#if defined(ND_GEMV4_ASM)
++extern void nd_pv_pair2w(float *ohA, float *ohB, const float *vf0, const float *vf1,
++                         uint32_t nchunk, float w0, float w1, float w2, float w3);
++
++static uint32_t pv8_rnd(uint32_t *st)
++{
++    uint32_t s = *st;
++    s ^= s << 13; s ^= s >> 17; s ^= s << 5;
++    *st = s;
++    return s;
++}
++
++/* The P.V kernel's contract is bit-exactness: every output cell takes two
++ * separately rounded FMAs (term0 then term1), so a fused pair would move every
++ * hidden state by an ULP. It is accepted only after reproducing the shipped
++ * statements on this silicon, over the two operand ranges the field produces
++ * (staged int8-as-float in +-127 and post-softmax weights O(1)) plus zeros and
++ * denormals, once per model open (~1 kB of stack, nothing on the timed path). */
++static int pv8_selftest(void)
++{
++    /* One aligned scratch: each operand row is followed by a four-float canary,
++     * so an out-of-bounds store (the first version of the kernel advanced its
++     * output pointers twice per chunk) is caught here instead of corrupting the
++     * caller's frame. Rows are 52 floats apart = 208 B, still 16-byte aligned. */
++    static float sb[4 * 52] __attribute__((aligned(16)));
++    float *ohA = sb,       *ohB = sb + 52;
++    float *vf0 = sb + 104, *vf1 = sb + 156;
++    float rhA[48], rhB[48];
++    uint32_t trial, bad = 0, i, u;
++    uint32_t st = 0x243f6a88u;
++
++    for (trial = 0; trial < 128u; trial++) {
++        float wA0 = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0013f;
++        float wA1 = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0017f;
++        float wB0 = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0021f;
++        float wB1 = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0027f;
++
++        for (u = 0; u < 48u; u++) {
++            if ((trial & 5u) == 0u && (u & 6u) == 0u) {
++                vf0[u] = 0.0f; vf1[u] = -0.0f; ohA[u] = 1.0e-30f; ohB[u] = 0.0f;
++            } else {
++                vf0[u] = (float)((int)(pv8_rnd(&st) >> 20) % 255  - 127) * 0.71f;
++                vf1[u] = (float)((int)(pv8_rnd(&st) >> 20) % 255  - 127) * 0.83f;
++                ohA[u] = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0011f;
++                ohB[u] = (float)((int)(pv8_rnd(&st) >> 20) % 2001 - 1000) * 0.0019f;
++            }
++            rhA[u] = ohA[u];
++            rhB[u] = ohB[u];
++        }
++        for (u = 48u; u < 52u; u++) {
++            ohA[u] = 1234.5f; ohB[u] = -1234.5f;
++            vf0[u] = 777.25f; vf1[u] = -777.25f;
++        }
++        /* the shipping statements, verbatim */
++        for (i = 0; i + 3u < 48u; i += 4u) {
++            const float v0 = vf0[i],   v1 = vf0[i + 1u], v2 = vf0[i + 2u], v3 = vf0[i + 3u];
++            const float u0 = vf1[i],   u1 = vf1[i + 1u], u2 = vf1[i + 2u], u3 = vf1[i + 3u];
++            rhA[i]      += wA0 * v0; rhA[i]      += wA1 * u0;
++            rhA[i + 1u] += wA0 * v1; rhA[i + 1u] += wA1 * u1;
++            rhA[i + 2u] += wA0 * v2; rhA[i + 2u] += wA1 * u2;
++            rhA[i + 3u] += wA0 * v3; rhA[i + 3u] += wA1 * u3;
++            rhB[i]      += wB0 * v0; rhB[i]      += wB1 * u0;
++            rhB[i + 1u] += wB0 * v1; rhB[i + 1u] += wB1 * u1;
++            rhB[i + 2u] += wB0 * v2; rhB[i + 2u] += wB1 * u2;
++            rhB[i + 3u] += wB0 * v3; rhB[i + 3u] += wB1 * u3;
++        }
++        nd_pv_pair2w(ohA, ohB, vf0, vf1, 12u, wA0, wA1, wB0, wB1);
++        for (u = 48u; u < 52u; u++) {
++            if (ohA[u] != 1234.5f || ohB[u] != -1234.5f ||
++                vf0[u] != 777.25f || vf1[u] != -777.25f)
++                bad++;                       /* canary tripped: OOB store */
++        }
++        for (i = 0; i < 48u; i++) {
++            if (memcmp(&rhA[i], &ohA[i], 4) != 0 || memcmp(&rhB[i], &ohB[i], 4) != 0)
++                bad++;
++        }
++    }
++    printf("PV8W selftest trials=128 bad=%u canaries=ok\n", (unsigned)bad);
++    return bad == 0;
++}
++#endif
++
++static ND_HOT void pv_pair2(float *ohA, float *ohB,
++                            float rA, int do_rsA, float rB, int do_rsB,
++                            float wvA0, float wvA1, float wvB0, float wvB1,
++                            const float *vf0, const float *vf1, uint32_t v_hd)
++{
++    uint32_t i;
++
++    /* Selective rescale: the flag dispatch sits OUTSIDE the dimension loop, so
++     * a mixed mask touches only the oh[] array that actually rescales. Same
++     * per-cell rounding as the paired sweep it replaces (each rescaling entry
++     * multiplied once by its own r); the 1.0f no-op multiplies were identity
++     * but cost a load and a store per cell per mixed pair. r may underflow to
++     * zero - the flag, never r, decides. */
++    if (do_rsA) {
++        if (do_rsB) {
++            for (i = 0; i < v_hd; i++) {
++                ohA[i] *= rA;
++                ohB[i] *= rB;
++            }
++        } else {
++            for (i = 0; i < v_hd; i++)
++                ohA[i] *= rA;
++        }
++    } else if (do_rsB) {
++        for (i = 0; i < v_hd; i++)
++            ohB[i] *= rB;
++    }
++    /* B4W: the paired body at the SHIPPED four-cell width (the two-cell width
++     * was a register-pressure guess, never a measurement). If this spills, the
++     * objdump shows stack traffic in the loop body and the guess was right. */
++    i = 0;
++#if defined(ND_GEMV4_ASM)
++    /* E53: same two FMAs per cell in the same order, wide operand transport. The
++     * guard is the 128-bit alignment the kernel's loads need; a 4-aligned row
++     * keeps the C body, which is always correct. */
++    if (s_pv_ok && (((uintptr_t)ohA | (uintptr_t)ohB |
++                     (uintptr_t)vf0 | (uintptr_t)vf1) & 15u) == 0u && v_hd >= 4u) {
++        nd_pv_pair2w(ohA, ohB, vf0, vf1, v_hd / 4u, wvA0, wvA1, wvB0, wvB1);
++        i = (v_hd / 4u) * 4u;
++    } else
++#endif
++    {
++    for (i = 0; i + 3u < v_hd; i += 4u) {
++        const float v0 = vf0[i],   v1 = vf0[i + 1u], v2 = vf0[i + 2u], v3 = vf0[i + 3u];
++        const float u0 = vf1[i],   u1 = vf1[i + 1u], u2 = vf1[i + 2u], u3 = vf1[i + 3u];
++        ohA[i]      += wvA0 * v0; ohA[i]      += wvA1 * u0;
++        ohA[i + 1u] += wvA0 * v1; ohA[i + 1u] += wvA1 * u1;
++        ohA[i + 2u] += wvA0 * v2; ohA[i + 2u] += wvA1 * u2;
++        ohA[i + 3u] += wvA0 * v3; ohA[i + 3u] += wvA1 * u3;
++        ohB[i]      += wvB0 * v0; ohB[i]      += wvB1 * u0;
++        ohB[i + 1u] += wvB0 * v1; ohB[i + 1u] += wvB1 * u1;
++        ohB[i + 2u] += wvB0 * v2; ohB[i + 2u] += wvB1 * u2;
++        ohB[i + 3u] += wvB0 * v3; ohB[i + 3u] += wvB1 * u3;
++    }
++    }
++    for (; i < v_hd; i++) {
++        ohA[i] += wvA0 * vf0[i]; ohA[i] += wvA1 * vf1[i];
++        ohB[i] += wvB0 * vf0[i]; ohB[i] += wvB1 * vf1[i];
++    }
++}
++
+ static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
+ {
+     const attn_ctx *c     = (const attn_ctx *)vc;
+@@ -1280,7 +1467,8 @@ static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
+      * costs ~1 kB of the caller's stack, which is why it is not in the model
+      * struct: each core runs this function on its own group. */
+     float kf0[ND_KV_HD_CAP], kf1[ND_KV_HD_CAP];
+-    float vf0[ND_KV_HD_CAP], vf1[ND_KV_HD_CAP];
++    float vf0[ND_KV_HD_CAP] __attribute__((aligned(16)));
++    float vf1[ND_KV_HD_CAP] __attribute__((aligned(16)));
+     float mx[ND_KV_REP_CAP], denom[ND_KV_REP_CAP];
+     float *ohp[ND_KV_REP_CAP];
+ 
+@@ -1333,32 +1521,95 @@ static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
+                  * and one conversion per cache value, for the whole group,
+                  * instead of once per query head. (float)(int8_t) of the byte is
+                  * the same value the inline unpack produced. */
+-                for (i = 0; i < qk_hd; i += 4) {
+-                    uint32_t a = ((const uint32_t *)(const void *)kp0)[i >> 2];
+-                    uint32_t b = ((const uint32_t *)(const void *)kp1)[i >> 2];
+-                    kf0[i + 0] = (float)(int8_t)(a & 0xff);
+-                    kf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+-                    kf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+-                    kf0[i + 3] = (float)(int8_t)(a >> 24);
+-                    kf1[i + 0] = (float)(int8_t)(b & 0xff);
+-                    kf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+-                    kf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+-                    kf1[i + 3] = (float)(int8_t)(b >> 24);
+-                }
+-                for (i = 0; i < v_hd; i += 4) {
+-                    uint32_t a = ((const uint32_t *)(const void *)vp0)[i >> 2];
+-                    uint32_t b = ((const uint32_t *)(const void *)vp1)[i >> 2];
+-                    vf0[i + 0] = (float)(int8_t)(a & 0xff);
+-                    vf0[i + 1] = (float)(int8_t)((a >> 8) & 0xff);
+-                    vf0[i + 2] = (float)(int8_t)((a >> 16) & 0xff);
+-                    vf0[i + 3] = (float)(int8_t)(a >> 24);
+-                    vf1[i + 0] = (float)(int8_t)(b & 0xff);
+-                    vf1[i + 1] = (float)(int8_t)((b >> 8) & 0xff);
+-                    vf1[i + 2] = (float)(int8_t)((b >> 16) & 0xff);
+-                    vf1[i + 3] = (float)(int8_t)(b >> 24);
+-                }
++                kv_stage_pair((const uint32_t *)(const void *)kp0,
++                              (const uint32_t *)(const void *)kp1,
++                              kf0, kf1, (uint32_t)qk_hd / 4u);
++                kv_stage_pair((const uint32_t *)(const void *)vp0,
++                              (const uint32_t *)(const void *)vp1,
++                              vf0, vf1, (uint32_t)v_hd / 4u);
++
++                /* Head PAIRS: the QK/max/exp substep runs per head in the
++                 * shipped order, then ONE dimension loop applies both heads'
++                 * updates so each staged vf0/vf1 value is loaded once for two
++                 * heads. On this model rep=6 and head ranges land on group
++                 * boundaries, so a core's local heads are always even (0/6 or
++                 * 6/6); t+1 < nhg keeps an odd range correct via the original
++                 * single-head body below. */
++                for (t = 0; t + 1u < nhg; t += 2u) {
++                    const float *qhA = m->q + (size_t)(hstart + t) * qk_hd;
++                    const float *qhB = m->q + (size_t)(hstart + t + 1u) * qk_hd;
++                    float       *ohA = ohp[t], *ohB = ohp[t + 1u];
++                    float s0 = 0.0f, s1 = 0.0f, s0b = 0.0f, s1b = 0.0f;
++                    float rA = 0.0f, rB = 0.0f, w0, w1, w0b, w1b;
++                    int do_rs = 0, do_rsB = 0;
++
++                    for (i = 0; i + 7u < qk_hd; i += 8u) {
++                        s0  += qhA[i]     * kf0[i]     + qhA[i + 1u] * kf0[i + 1u];
++                        s0  += qhA[i + 2u] * kf0[i + 2u] + qhA[i + 3u] * kf0[i + 3u];
++                        s0  += qhA[i + 4u] * kf0[i + 4u] + qhA[i + 5u] * kf0[i + 5u];
++                        s0  += qhA[i + 6u] * kf0[i + 6u] + qhA[i + 7u] * kf0[i + 7u];
++                        s1  += qhA[i]     * kf1[i]     + qhA[i + 1u] * kf1[i + 1u];
++                        s1  += qhA[i + 2u] * kf1[i + 2u] + qhA[i + 3u] * kf1[i + 3u];
++                        s1  += qhA[i + 4u] * kf1[i + 4u] + qhA[i + 5u] * kf1[i + 5u];
++                        s1  += qhA[i + 6u] * kf1[i + 6u] + qhA[i + 7u] * kf1[i + 7u];
++                        s0b += qhB[i]     * kf0[i]     + qhB[i + 1u] * kf0[i + 1u];
++                        s0b += qhB[i + 2u] * kf0[i + 2u] + qhB[i + 3u] * kf0[i + 3u];
++                        s0b += qhB[i + 4u] * kf0[i + 4u] + qhB[i + 5u] * kf0[i + 5u];
++                        s0b += qhB[i + 6u] * kf0[i + 6u] + qhB[i + 7u] * kf0[i + 7u];
++                        s1b += qhB[i]     * kf1[i]     + qhB[i + 1u] * kf1[i + 1u];
++                        s1b += qhB[i + 2u] * kf1[i + 2u] + qhB[i + 3u] * kf1[i + 3u];
++                        s1b += qhB[i + 4u] * kf1[i + 4u] + qhB[i + 5u] * kf1[i + 5u];
++                        s1b += qhB[i + 6u] * kf1[i + 6u] + qhB[i + 7u] * kf1[i + 7u];
++                    }
++                    if (i < qk_hd) {
++                        for (; i < qk_hd; i++) {
++                            s0  += qhA[i] * kf0[i];
++                            s1  += qhA[i] * kf1[i];
++                            s0b += qhB[i] * kf0[i];
++                            s1b += qhB[i] * kf1[i];
++                        }
++                    }
++                    s0 *= sc0;  s1 *= sc1;
++                    s0b *= sc0; s1b *= sc1;
+ 
+-                for (t = 0; t < nhg; t++) {
++                    /* Each head's max/denom/rescale sequence exactly as shipped
++                     * for that head; the two heads are independent, so the
++                     * interleaving cannot reorder any single head's rounds. */
++                    {
++                        float mnew = (s0 > s1) ? s0 : s1;
++                        if (mnew > mx[t]) {
++                            if (denom[t] > 0.0f) {
++                                rA = nd_expf(mx[t] - mnew);
++                                do_rs = 1;
++                                denom[t] *= rA;
++                            }
++                            mx[t] = mnew;
++                        }
++                    }
++                    {
++                        float mnew = (s0b > s1b) ? s0b : s1b;
++                        if (mnew > mx[t + 1u]) {
++                            if (denom[t + 1u] > 0.0f) {
++                                rB = nd_expf(mx[t + 1u] - mnew);
++                                do_rsB = 1;
++                                denom[t + 1u] *= rB;
++                            }
++                            mx[t + 1u] = mnew;
++                        }
++                    }
++#ifdef ND_EXP_CAPTURE
++                    nd_exp_capture(s0 - mx[t], s1 - mx[t]);
++                    nd_exp_capture(s0b - mx[t + 1u], s1b - mx[t + 1u]);
++#endif
++                    nd_expf_pair(s0 - mx[t], s1 - mx[t], &w0, &w1);
++                    nd_expf_pair(s0b - mx[t + 1u], s1b - mx[t + 1u], &w0b, &w1b);
++                    denom[t] += w0 + w1;
++                    denom[t + 1u] += w0b + w1b;
++                    pv_pair2(ohA, ohB, rA, do_rs, rB, do_rsB,
++                             w0 * vs0, w1 * vs1, w0b * vs0, w1b * vs1,
++                             vf0, vf1, v_hd);
++                }
++                for (; t < nhg; t++) {
+                     const float *qh = m->q + (size_t)(hstart + t) * qk_hd;
+                     float       *oh = ohp[t];
+                     float s0 = 0.0f, s1 = 0.0f, mnew, rescale, w0, w1;
+@@ -1385,12 +1636,6 @@ static ND_HOT void attn_heads(void *vc, uint32_t hlo, uint32_t hhi)
+ #ifdef ND_EXP_CAPTURE
+                     nd_exp_capture(s0 - mx[t], s1 - mx[t]);
+ #endif
+-                    /* One call for both positions of the pair: run #229 measured
+-                     * 198.04 vs 247.42 cycles/pair on real captured arguments,
+-                     * because each scalar expansion is a serial Horner chain and
+-                     * GCC scheduled the two one after the other, spilling live
+-                     * floats to do it. Bit-identical by construction - see
+-                     * nd_expf_pair(). */
+                     nd_expf_pair(s0 - mx[t], s1 - mx[t], &w0, &w1);
+                     denom[t] += w0 + w1;
+                     {
+
+
+/* ===== appended to engine/src/gemv4_tie728.S ===== */
+/* nd_pv_pair2w - E53: the wide-load form of the B4W paired-head P.V update.
+ *
+ * void nd_pv_pair2w(float *ohA, float *ohB, const float *vf0, const float *vf1,
+ *                   uint32_t nchunk, float w0, float w1, float w2, float w3);
+ *   a2 ohA, a3 ohB, a4 vf0, a5 vf1, a6 nchunk (= v_hd/4, must be >= 1),
+ *   a7 = w0, a1+32 = w1, a1+36 = w2, a1+40 = w3   (mixed int/float args: the
+ *   windowed ABI puts the first six in a2-a7 whatever their type - measured with
+ *   a probe, not assumed - and the rest on the caller's frame)
+ *   per 4-float chunk j:
+ *     ohA[j] = madd(w0, vf0[j], madd(w1, vf1[j], ohA[j]))
+ *     ohB[j] = madd(w2, vf0[j], madd(w3, vf1[j], ohB[j]))
+ *
+ * Two statements per cell, term0 then term1, is what the shipped body has and
+ * what GCC -O2 emits for it: lsi oh; madd.s oh,w0,v0; madd.s oh,w1,u0; ssi oh.
+ * The accumulator is updated by TWO separately rounded FMAs, so no pairing of
+ * them into one expression is allowed - only the operand delivery changes.
+ *
+ * Against the shipped body this is 6 memory operations per chunk instead of 32:
+ * both staged rows and each output row arrive as one 128-bit load, and the
+ * outputs leave as one 128-bit store. The rows stay resident across all eight
+ * madds (the compiler already keeps each output row in registers, so the whole
+ * saving is the row transport).
+ *
+ * BOTH 128-bit forms are POST-INCREMENT and for BOTH the LAST-named register
+ * receives the LOWEST address (TRM 1.8.25 for ee.ldf.128.ip, 1.8.65 for
+ * ee.stf.128.ip). Two consequences the first version of this kernel got wrong:
+ *   - a load followed by a store of the same row advances the pointer TWICE, so
+ *     the store must be preceded by `addi aS, aS, -16` and the pair then nets
+ *     +16 per chunk (a double advance walks 384 bytes past a 192-byte row and
+ *     corrupts the caller's frame - the first version crashed the board in its
+ *     own self-test, which is what the canaries in nd_model.c now assert);
+ *   - the store list must be written in the SAME order as the load list
+ *     (`stf f15,f14,f13,f12`), not reversed, or the four cells are permuted.
+ * E50's store-back probe cannot settle the store order: it stores to the address
+ * it has just read and then rewinds the pointer, so a permutation is invisible.
+ *
+ * f0-f3 hold the four weight scalars for the whole loop; f4-f7 are the vf0 row,
+ * f8-f11 the vf1 row and f12-f15 the output row being updated. Preconditions are
+ * the caller's: 16-byte-aligned ohA/ohB/vf0/vf1 (nd_model.c checks once per pair
+ * and keeps the C body otherwise), nchunk = v_hd/4 with the v_hd % 4 remainder
+ * left to the C tail.
+ */
+	.align	4
+	.global	nd_pv_pair2w
+	.type	nd_pv_pair2w,@function
+nd_pv_pair2w:
+	entry	a1, 32
+	wfr	f0, a7
+	l32i	a8, a1, 32
+	l32i	a9, a1, 36
+	l32i	a10, a1, 40
+	wfr	f1, a8
+	wfr	f2, a9
+	wfr	f3, a10
+	loop	a6, .Lpvend
+.Lpvchunk:
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a4, 16	/* vf0[j..j+3] */
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a5, 16	/* vf1[j..j+3] */
+	ee.ldf.128.ip	f15, f14, f13, f12, a2, 16	/* ohA[j..j+3] */
+	madd.s	f12, f0, f4
+	madd.s	f13, f0, f5
+	madd.s	f14, f0, f6
+	madd.s	f15, f0, f7
+	madd.s	f12, f1, f8
+	madd.s	f13, f1, f9
+	madd.s	f14, f1, f10
+	madd.s	f15, f1, f11
+	addi	a2, a2, -16			/* stf also post-increments: same address */
+	ee.stf.128.ip	f15, f14, f13, f12, a2, 16
+	ee.ldf.128.ip	f15, f14, f13, f12, a3, 16	/* ohB[j..j+3] */
+	madd.s	f12, f2, f4
+	madd.s	f13, f2, f5
+	madd.s	f14, f2, f6
+	madd.s	f15, f2, f7
+	madd.s	f12, f3, f8
+	madd.s	f13, f3, f9
+	madd.s	f14, f3, f10
+	madd.s	f15, f3, f11
+	addi	a3, a3, -16
+	ee.stf.128.ip	f15, f14, f13, f12, a3, 16
+.Lpvend:
+	retw
+	.size	nd_pv_pair2w, .-nd_pv_pair2w

@@ -1,0 +1,264 @@
+diff --git a/.auto/expect_engine_md5 b/.auto/expect_engine_md5
+deleted file mode 100644
+index f2c0beb..0000000
+--- a/.auto/expect_engine_md5
++++ /dev/null
+@@ -1 +0,0 @@
+-b1daae10df90663dd2e2c4a8e4047dfc
+diff --git a/.auto/mentor_queue.md b/.auto/mentor_queue.md
+index 1499578..cc223f4 100644
+--- a/.auto/mentor_queue.md
++++ b/.auto/mentor_queue.md
+@@ -1,5 +1,38 @@
+ # Needle 3 mentor queue
+ 
++## URGENT refresh 2026-09-25 09:03 UTC — supersedes the stale lanes below
++
++Mentor inspected actual processes: the 400-second raw serial probe finished;
++there are NO live builds/flashes/benchmarks and B2/B3 are idle. Stop serial-wait
++speculation and resume three independent worker lanes. Preserve main's E58 diff.
++
++**E58 targets a cold path.** `nd_quant.c:fwht_rows` takes `nd_fwht4s` for the
++model's g=128 and per-core group counts 3/12. Runs #396/#404 already proved
++pair/single fallback calls are zero; #582 repeated this mistake on fw_scale.
++Editing `nd_fwht` cannot price the decode transform. Its selftest proves only
++the kernel, not live dispatch. Aligning hada_a/b/c also misses the operand:
++the transform works on m->xh. The main checkout is not B1's parked 5.6383 stack.
++Do not run another 1500-second main handshake to pursue this cold-path candidate.
++
++Use the preserved worker bases and pool wrapper/locks for ALL serial work.
++Pinned results: B1/B3 5.6383, B2 5.8967; accepted still 5.3033 (20/20).
++Both discovery lines are 18/20, delta 52; host 19/19 does not admit them.
++B1/B3 short C/header hashes are currently 24d6ce2ce19b. B2 now reads
++5d1b32e9132a, not logged 58bee4d1cde9: inspect/preserve that difference before
++using it as a baseline. Hash assembly and main.c separately too.
++
++Immediate independent work: B1 reframe FWHT delivery inside LIVE nd_fwht4s,
++starting with the contiguous len=1 radix-4 pass (retain the exact p/q/r/s graph
++and fused final scale). B2 inspect the saved wide-QK schedule for a genuinely
++interleaved form against compiled C's measured 49 cycles/chunk; the old serial
++80-cycle body is closed, not every possible schedule. B3 spend one bounded
++diagnostic on the frozen pair's post-parser bytes/token IDs and restored-prefix
++identity, or use a ready performance substitute. Do not wait for B1 to prepare
++B2/B3. A compact final queue with source-level details follows this inspection.
++
++Do not repeat the handoff's unverified `dot_group` idea: the dominant CQ2 path
++uses nd_lut2_rows_tie1n, not the fallback dot_group. Prove active dispatch first.
++
+ Mentor refresh 2026-09-25 06:42 UTC. Three distinct lanes; do not wait for B1
+ before preparing B2/B3. Preserve dirty work, locks, repeat guard, frozen quality
+ oracles and 240/80 MHz. Researcher alone implements/flashes/measures.
+diff --git a/engine/include/nd_model.h b/engine/include/nd_model.h
+index d7818dd..c2e0d3f 100644
+--- a/engine/include/nd_model.h
++++ b/engine/include/nd_model.h
+@@ -48,6 +48,9 @@ extern "C" {
+  * SRAM instead of PSRAM matters far more than its size does. */
+ #ifndef ND_ALLOC_FAST
+ #define ND_ALLOC_FAST(n) heap_caps_malloc((n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
++/* 16-byte-aligned internal allocation: the wide-load kernels (E58 here) read
++ * four floats per instruction, so the operand row must be 16-byte aligned. */
++#define ND_ALLOC_FAST16(n) heap_caps_aligned_alloc(16, (n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+ #endif
+ #else
+ #include <stdlib.h>
+@@ -59,6 +62,7 @@ extern "C" {
+ #endif
+ #ifndef ND_ALLOC_FAST
+ #define ND_ALLOC_FAST(n) malloc(n)
++#define ND_ALLOC_FAST16(n) malloc(n)
+ #endif
+ #endif
+ 
+diff --git a/engine/src/gemv4_tie728.S b/engine/src/gemv4_tie728.S
+index 94ec24f..d98275f 100644
+--- a/engine/src/gemv4_tie728.S
++++ b/engine/src/gemv4_tie728.S
+@@ -183,3 +183,53 @@ nd_gemv4_rows_tie1:
+ 	bnez	a12, .Lrow
+ 	retw
+ 	.size	nd_gemv4_rows_tie1, .-nd_gemv4_rows_tie1
++
++/* nd_fwht4w - E58: FOUR butterflies per 128-bit load pair (FWHT stages len >= 4).
++ *
++ * void nd_fwht4w(float *x, float *x2, uint32_t n4);
++ *   a2 x (= &x[i]), a3 x2 (= &x[i+len]), a4 n4 (= len/4, >= 1)
++ *   for each 4-cell chunk: x[j+k] = a+b, x2[j+k] = a-b, k = 0..3.
++ *
++ * Run #332's screen measured 13.50 -> 11.36 cycles per butterfly (+18.78 %) for
++ * feeding these same adds/subs from wide loads, and the family was then closed on
++ * a probe that never reset its fixture. The premise is unchanged and now tested:
++ * butterflies inside one stage are disjoint, so every cell still gets exactly
++ * a+b / a-b from its own two operands - the only thing that can be wrong is which
++ * cells the four loaded floats are, and the last-named register receives the
++ * LOWEST address (TRM 1.8.25; the same order the accepted P.V and kron1 kernels
++ * use).
++ *
++ * For len >= 4 the two operand rows are each four contiguous floats, so one load
++ * pair covers four butterflies and one store pair writes them back: 8 fp ops and
++ * 4 memory ops per four butterflies instead of 8 fp ops and 16. Both stores need
++ * the rewind because stf also post-increments (TRM 1.8.65). f0-f3 hold a-b while
++ * f12-f15 hold a+b, so the 8 inputs, the 8 outputs and the two rows fit exactly
++ * in f0-f15 with no spill and no move.
++ *
++ * Caller-gated: len >= 4 (so len % 4 == 0 and every row base stays 16-byte
++ * aligned), the chunk base 16-byte aligned, and the C loop keeps len < 4.
++ */
++	.align	4
++	.global	nd_fwht4w
++	.type	nd_fwht4w,@function
++nd_fwht4w:
++	entry	a1, 32
++	loop	a4, .Lf4end
++.Lf4:
++	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a2, 16	/* a0..a3 */
++	ee.ldf.128.ip	f11, f10, f9,  f8,  a3, 16	/* b0..b3 */
++	add.s	f12, f4, f8
++	add.s	f13, f5, f9
++	add.s	f14, f6, f10
++	add.s	f15, f7, f11
++	sub.s	f0,  f4, f8
++	sub.s	f1,  f5, f9
++	sub.s	f2,  f6, f10
++	sub.s	f3,  f7, f11
++	addi	a2, a2, -16
++	ee.stf.128.ip	f15, f14, f13, f12, a2, 16
++	addi	a3, a3, -16
++	ee.stf.128.ip	f3,  f2,  f1,  f0,  a3, 16
++.Lf4end:
++	retw
++	.size	nd_fwht4w, .-nd_fwht4w
+diff --git a/engine/src/nd_model.c b/engine/src/nd_model.c
+index 47bc67b..47c5585 100644
+--- a/engine/src/nd_model.c
++++ b/engine/src/nd_model.c
+@@ -309,6 +309,60 @@ static void bind_layer(nd_model *m, uint32_t i)
+         nd_cact_tensor(&m->c, b + k, slots[k]);
+ }
+ 
++#if defined(ND_GEMV4_ASM)
++extern void nd_fwht4w(float *x, float *x2, uint32_t n4);
++
++int nd_fwht4_ok;
++
++static uint32_t fwht4_rnd(uint32_t *st)
++{
++    uint32_t v = *st;
++    v ^= v << 13; v ^= v >> 17; v ^= v << 5;
++    *st = v;
++    return v;
++}
++
++/* The FWHT kernel's contract: every cell still gets a+b or a-b from its own two
++ * operands, computed once. The only failure mode the wide form can have is which
++ * cells the four loaded floats are, so the test runs the (len, i) shapes the field
++ * actually uses, checks every cell, and keeps a canary row past the buffer to
++ * catch a stride error. */
++static int fwht4_selftest(void)
++{
++    enum { N = 64 };
++    static float xb[N + 8] __attribute__((aligned(16)));
++    float ref[N];
++    uint32_t trial, bad = 0, i, j, len, u;
++    uint32_t st = 0x2545f491u;
++
++    for (trial = 0; trial < 64u; trial++) {
++        for (u = 0; u < N; u++) {
++            xb[u] = (float)((int)(fwht4_rnd(&st) >> 20) % 2001 - 1000) * 0.0019f;
++            ref[u] = xb[u];
++        }
++        for (u = N; u < N + 8u; u++) xb[u] = 864.25f;          /* canary */
++        for (len = 4u; len <= 16u; len <<= 1) {
++            for (i = 0; i < N; i += len << 1) {
++                for (j = 0; j < len; j++) {
++                    float a = ref[i + j], b = ref[i + j + len];
++                    ref[i + j]       = a + b;
++                    ref[i + j + len] = a - b;
++                }
++                nd_fwht4w(xb + i, xb + i + len, len >> 2);
++            }
++            for (u = 0; u < N; u++)
++                if (memcmp(&ref[u], &xb[u], 4) != 0)
++                    bad++;
++            for (u = N; u < N + 8u; u++)
++                if (xb[u] != 864.25f)
++                    bad++;                                    /* OOB store */
++        }
++    }
++    printf("FWHT4W selftest trials=64 bad=%u\n", (unsigned)bad);
++    return bad == 0;
++}
++#endif
++
+ int nd_model_open(nd_model *m, const void *blob, size_t size)
+ {
+     uint32_t base, s, i;
+@@ -671,9 +725,11 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
+         m->q_hist    = (float *)ND_ALLOC(sizeof(float) * m->n_layers * taps * m->n_heads * m->qk_head_dim);
+         m->k_hist    = (float *)ND_ALLOC(sizeof(float) * m->n_layers * taps * m->k_dim);
+         m->v_hist    = (float *)ND_ALLOC(sizeof(float) * m->n_layers * taps * m->v_dim);
+-        m->hada_a    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
+-        m->hada_b    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
+-        m->hada_c    = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
++        /* E58: the FWHT reads four butterfly operands per instruction, so these
++         * scratch rows must be 16-byte aligned. */
++        m->hada_a    = (float *)ND_ALLOC_FAST16(sizeof(float) * hn);
++        m->hada_b    = (float *)ND_ALLOC_FAST16(sizeof(float) * hn);
++        m->hada_c    = (float *)ND_ALLOC_FAST16(sizeof(float) * hn);
+         m->scale_row = (float *)ND_ALLOC_FAST(sizeof(float) * hn);
+         m->eg_k      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
+         m->eg_v      = (float *)ND_ALLOC(sizeof(float) * m->n_sites * dm);
+@@ -724,6 +780,10 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
+         m->rope_inv[i] = 1.0f / powf(m->c.h.rope_theta,
+                                      (float)(2 * i) / (float)m->qk_head_dim);
+ 
++#if defined(ND_GEMV4_ASM)
++    nd_fwht4_ok = fwht4_selftest();
++    printf("FWHT4W fwht4=%d\n", nd_fwht4_ok);
++#endif
+     nd_model_reset(m);
+     return 0;
+ }
+diff --git a/engine/src/nd_quant.c b/engine/src/nd_quant.c
+index 58f423c..14e3419 100644
+--- a/engine/src/nd_quant.c
++++ b/engine/src/nd_quant.c
+@@ -1,6 +1,7 @@
+ #include "nd_quant.h"
+ 
+ #include <math.h>
++#include <stdint.h>
+ #include <string.h>
+ 
+ float nd_f16_slow(uint16_t h)
+@@ -37,6 +38,12 @@ float nd_f16_slow(uint16_t h)
+ }
+ 
+ 
++#if defined(ND_GEMV4_ASM)
++extern void nd_fwht4w(float *x, float *x2, uint32_t n4);
++/* Set once by nd_model_open's acceptance test (nd_model.c); 0 keeps the C loop. */
++extern int nd_fwht4_ok;
++#endif
++
+ ND_HOT void nd_fwht(float *x, uint32_t n)
+ {
+     uint32_t len;
+@@ -50,6 +57,17 @@ ND_HOT void nd_fwht(float *x, uint32_t n)
+         uint32_t i;
+         for (i = 0; i < n; i += len << 1) {
+             uint32_t j = i, jend = i + len;
++#if defined(ND_GEMV4_ASM)
++            /* E58: for len >= 4 both operand rows are four contiguous floats, so a
++             * load pair covers four disjoint butterflies and a store pair writes
++             * them back. len % 4 == 0 there, so the whole half is covered and no
++             * tail is left for the C loop; the guard is evaluated once per group,
++             * not per butterfly. */
++            if (nd_fwht4_ok && len >= 4u && (((uintptr_t)(x + i) & 15u) == 0u)) {
++                nd_fwht4w(x + i, x + i + len, len >> 2);
++                continue;
++            }
++#endif
+             for (; j + 1u < jend; j += 2u) {
+             float a0 = x[j + 0u], b0 = x[j + 0u + len];
+             float a1 = x[j + 1u], b1 = x[j + 1u + len];

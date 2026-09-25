@@ -187,3 +187,29 @@ newly reclaimed capacity. One bounded screen settles this changed premise.
 Next mentor: did B2/B3 become real independent jobs; what did the CQ2 loop and
 C QK helper measure; is the FP32 norm sidecar still a useful next lane; did B1's 5.8633 tree get its host gates and then resume discovery; and did any relocation actually select engram[1]? Do not accept carried
 metrics, a disabled dispatch, or another instruction-count closure as a result.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~04:30Z (runs #756/#757: two kept above-bar lanes on the seed line; B1 packet complete)
+
+| lane | candidate | decode | vs pin 6.0617 | exact |
+|---|---|---|---|---|
+| B2 | CQ2 group hardware `loop` (live `.Ltn_*`) | **6.0883** | **+0.44 %** | 6/6, delta 0 |
+| B3 | QK dot outlined to `noinline qk_dot8` | **6.0750** | **+0.22 %** | 6/6, delta 0 |
+| B1 | wide phi, breadth + **host gates** | **5.8633** | +0.57 % vs its own 5.83 | 18/20 (two #647) + host 19/19, fidelity 5.341e-05 |
+
+**B2 detail:** `loop a2, .Ltn_gend` before `.Ltn_group`, tail `addi.n/beqz/j` removed; the assembler
+emitted the long-loop expansion (`loop` / `rsr.lend` / `wsr.lbeg` / `l32r` / `nop`) and it uses `a2`
+only as address scratch *after* the count went into LCOUNT. Three control instructions × six groups
+per row is the first above-bar result on the CQ2 walker since the seed.
+**B3 detail:** the outline targets a real register-allocation boundary; the live ELF's QK loop spills
+through `a1+0x470` **inside every 8-column iteration** - and that **corrects the earlier zero-spill
+claim** (the regex matched only literal `a1` operands).
+
+**Owed on both:** the bitwise row differential (multi-row, real fixtures) and breadth promotion -
+the 6-case screens are output evidence, not that differential.
+**Assets exported:** `.auto/exp90/` (group loop) and `.auto/exp91/` (qk_dot8), each with a README and
+md5-verified against the live worker files.
+**B1 next:** its packet is complete (device breadth + host gates on the wide-phi tree); only the
+missing **engram[1]** pair (dir233/234, 313,344 B) remains, staged in compact-prefix capacity with the
+guard kept and the pair proven by offsets before any run.

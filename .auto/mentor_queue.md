@@ -285,3 +285,63 @@ the two files differ only by the live `.Ltn_*` change). Assets refreshed: `.auto
 
 **Owed:** (1) breadth promotion of the composed tree; (2) host gates on it; (3) the row-level
 differential for `qk_dot8` (loop half already green at chunk 1/12/24); (4) B1's `EG2` boot capture.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~07:50Z (run #762: composed tree FULLY GATED at 6.1117; EG2 silence explained as the strap trap)
+
+**Campaign best, complete packet (device breadth + host gates on one tree, B3):**
+
+| metric | value | note |
+|---|---|---|
+| decode | **6.1117** | +0.82 % over the seed 6.0617 pin, +15.2 % over the owner's 5.3033 |
+| prefill / min_case | **6.4533** / **5.89** | both campaign bests |
+| ext / think / boot bench | 6.0415 / 4.68 / 6.22 | all at or above the pin's |
+| device | 18/20, token_delta 52 | only the two #647 ring-related goldens |
+| host | 19/19, delta 0, fidelity 5.341e-05, top1 10/10 | identical to the accepted pin |
+| internal_free | 12,035 | |
+
+Composition of `.auto/exp90` (CQ2 group hardware `loop`) + `.auto/exp91` (`noinline qk_dot8`).
+
+**CORRECTION (#760):** the EG2 silence was almost certainly **not** the candidate. Re-flashing that
+tree and reading the console showed the chip in **ROM download mode**
+(`rst:0x15 USB_UART_CHIP_RESET, boot:0x0 DOWNLOAD(USB/UART0), waiting for download`) - the recorded
+strap trap: a console held open during an esptool reset samples the strap wrong, so the app never runs
+and the harness sees exactly the silent boot window #760 read as "may crash at open". A second
+attempt resetting with the console closed returned zero bytes, so EG2 is still **unmeasured**, but its
+status is now "environmental, unresolved" - retry it as a normal lane when the console behaves, and
+do not carry forward the crash inference.
+
+**Owed:** `qk_dot8` row-level differential (loop half already green); EG2 retry; and the two-line
+port discipline for every future bench (`$FLASH_PORT`/`$SERIAL_PORT` from the lock, console closed
+during reset).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~08:40Z (run #763: B1 strap-wedged - OPERATOR ACTION NEEDED; B2/B3 free)
+
+**Board 1 needs a physical power cycle (or host-side USB port reset).** The chip sits in ROM
+download mode and never runs the app:
+
+```
+rst:0x15 (USB_UART_CHIP_RESET), boot:0x0 (DOWNLOAD(USB/UART0))
+Saved PC:0x40378d55
+waiting for download
+```
+
+Evidence chain: the EG2 lane died silently at 5 log lines -> console capture showed download mode ->
+a retry lane reproduced it -> a clean reset with the console **closed** returned the same state ->
+a bounded `!status` on board 1's own console node returned **zero bytes**. Device nodes are present
+and freshly re-enumerated (console 22:49, flash 22:55), so **the nodes are fine and the chip holds
+the wrong strap** - a software reset cannot clear that. After the power cycle, re-run EG2 as a normal
+lane (implementation in `.auto/exp92/`; it selects the engram[1] pair **by offset** and prints an
+`EG2 ok=1 ...` proof line, and the engram GEMVs already fetch pointers through `nd_tier_ptr`, so the
+dispatch is genuinely reached).
+
+**Unaffected:** the campaign best is untouched - B3 holds the composed tree at **6.1117** with device
+breadth (18/20, the two #647 cases) + host gates (19/19). B2 holds the seed + group loop (6.0883
+gated). Both boards are free and usable.
+
+**Harness lessons from this window:** a `pkill -f` pattern containing `needle-board run 1` matches the
+**invoking** shell and kills the command before it writes its files - use bracketed patterns; and
+expand `$FLASH_PORT` **inside** the lock's environment, never in single quotes.

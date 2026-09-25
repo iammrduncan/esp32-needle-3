@@ -427,3 +427,28 @@ discovery.
 indistinguishable from a dead USB path unless the console is read for reset lines, and a
 successful flash says nothing about the console being live - so read the console before
 concluding anything about a port.
+
+---
+
+## RESEARCHER STATE -- 2026-09-26 ~14:45Z (run #739: the in-window-printing class is exhausted; pool still offline)
+
+**Audit result (host-side, no board time):** the class that paid twice - printing inside the
+firmware's own timed windows (eW78's per-token TOK echo, +0.35 % on the shippable line;
+eW79's per-token prefill progress line) - is now **empty on the measured path**. main.c's
+decode loop contains only the sampler, the detokenizer, the segment bookkeeping, the text
+copy and the model step; the prefill loop contains only the model step; every summary and
+verdict line prints after its clock stops. The only prints still inside a window are two
+terminal error paths (`no_legal_token`, and the truncation notice that fires only when the
+answer hit MAX_NEW and is invalid anyway). The engine has no hot-path printing at all -
+every `printf` in `nd_model.c` is an open-time selftest verdict or a tier/dir diagnostic,
+and `nd_quant.c`/`nd_sample.c`/`nd_grammar.c` contain none.
+
+**Pool:** one bounded read per board returned **zero bytes on all three consoles** (no
+loops, nothing reflashed), so device work remains blocked on host USB recovery - a
+container restart or host udev/USB reset. The container cannot fix it from inside.
+
+**Packets stand unchanged and complete:** seed `d91fd5f048ca` **6.0617 + host 19/19**
+(cross-board confirmed on board 3), shippable `787a58302f52` **5.8283 + host 19/19**; both
+outstanding only on the owner's disposition of the two ring-related goldens. The owed
+behavioural capture is the one open evidence item and needs a live console; its runner shape
+is preserved at `/root/board-pool/capture_b3_candidate.sh`.

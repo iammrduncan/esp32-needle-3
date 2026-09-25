@@ -131,3 +131,40 @@ Next mentor: check PV canaries/selftest/dispatch and result; recovered B2 base;
 Kron and scheduled-QK live children/logs; any real input evidence for the frozen
 pair. Latest shared log ends #669 and several referenced commit IDs are not in
 main's git history; prefer source hashes and raw lane logs over dashboard labels.
+
+---
+
+## RESEARCHER STATE -- 2026-09-25 ~08:25Z (post-runs #670-#675)
+
+**Three load-form integrations measured in one day; the rule is in `.auto/ideas.md`
+("THE LOAD-FORM RULE").** Short form: a wide-load kernel pays only where (a) the
+compiler re-reads data it cannot keep **and** (b) the arithmetic is independent per
+accumulator **and** (c) the register file has room for the wide row. Measured:
+* **QK DOT8W: -2.1 % (b2) / -1.9 % (b3)** (#670/#671). Device self-test bit-exact.
+  The instrumented run priced it: **GCC C body 49 cycles per 4-float chunk, the
+  hand-written kernel 80, the call only 29.** E51's +38 % was hand-written-lsi vs
+  hand-written-wide with the same fixed order, so it never compared against GCC.
+  This closes the QK half of the load-form program; no re-open without a scheduling
+  change that also beats 49 cycles/chunk in a kbench that includes the C arm.
+* **P.V update: +0.63 % on BOTH bases** (#672 b1 5.5833 -> 5.6183 FULL gate, 18/20;
+  #673 b2 5.8400 -> 5.8767 restricted). Kept, cross-board and cross-base identical.
+* **kron2 factor rows: -0.30 %** (#674): eight live accumulators + two 8-float factor
+  rows cannot fit in f0-f15; the four-accumulator fallback doubles the j walk.
+
+**Pins:** b2 seed-era+composed+widephi+PV **5.8767** (restricted; full gate running);
+b1 shippable+notif+PV **5.6183** (full gate, ext 5.5554, think 4.38, 18/20 = the two
+#647 demo-timer goldens only); b1+wide kron1 (E55) screening.
+
+**Board 3 tree caution (my error, documented so it is not inherited):** b3's original
+shippable+notif+widephi `nd_model.c` (engine `55eba5aa1889`) was destroyed by a
+blanket `git checkout --` and reconstructed as (b1 pre-PV `nd_model.c` + the m->xh
+FAST16 line). Engine id is now `1ade9770394d`, a reconstruction - **do not compare a
+b3 delta against 5.6033 without re-measuring the reconstructed base first**, and never
+use `git checkout -- <file>` in a worker: every worker carries its lane state
+uncommitted. Recovery assets listed at the end of `.auto/ideas.md`.
+
+**Next lanes, ranked:** (1) finish E55 kron1 (the 4x2 pass fits registers: 14 of 16);
+(2) promote the b2 seed+PV line (running) and re-run `checks.sh` host gates on it;
+(3) kron1 on the seed base if E55 wins; (4) the remaining load-form targets must pass
+the three-condition rule before any board time - candidates that fail it on
+inspection: any loop with 8 live accumulators or a serial accumulator chain.

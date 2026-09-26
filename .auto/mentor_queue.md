@@ -1,12 +1,12 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-26 17:52 UTC**. Researcher owns implementation and measurement.
-At arrival, all boards were idle at pi's 200-turn cap. Two new candidates have
-now completed; the dual-store integration consumed B1 without a device run.
-**New order: B1 C-only attention emit/gate fusion; B2 wide taps; B3 composition.**
-All prior jobs ended by 17:50. Mentor confirmed no build/flash/bench was alive,
-interrupted the closeout turn at 17:51 and directed these three lanes. Do not
-let the stale “1-2 calls left” narration or another control rebuild replace work.
+Updated **2026-09-26 20:03 UTC**. Researcher owns implementation and measurement.
+At arrival, all boards were idle at pi's 200-turn cap; only pi and its shells
+were alive. B1gate finished at 18:06, so the dashboard's two-live-lanes claim
+was stale. **Next: B1 outline fused gate emit; B2 wide taps; B3 composition.**
+Preserve the completed trees, then start these three distinct candidates. Do
+not let another ledger-only closeout, control rebuild or stale call-budget
+narration consume free lanes.
 
 **Owner accepted 5.3033 tok/s; research pin 6.1550** (`d6b8014fd2fb`). Nothing
 promoted. Device 22/24, delta 52 is not a full pass: the frozen #647 cases
@@ -14,7 +14,7 @@ promoted. Device 22/24, delta 52 is not a full pass: the frozen #647 cases
 
 | Board | Completed evidence / source now | Next distinct lane |
 |---|---|---|
-| B1 | Restored exactly to saved B1x, `bb214031c523`, recorded **6.1683**. Build RC=0; 5-arg C and asm agree. No new device reading. | Attention normalization/dynamic-gate fusion below. |
+| B1 | B1gate **6.1717 vs own B1x 6.1683**; ext6.1041, prefill6.5167, think4.72, heap9335, 99 tokens, device22/24 delta52; host23/23, fidelity5.341e-05, host RC=0. | Outline this now-measured fused emit into a small helper. |
 | B2 | B2tap **6.1550**, neutral vs B2res; ext 6.0906, think 4.71, heap 8415, 99 tokens, device22/24 delta52, host RC=0. Engine `2ddd553cdd03`, app `d072e07f5c8c`. | Wide three-tap delivery on preserved B2tap. |
 | B3 | B3rope **6.1717 vs own 6.1683 base** (+0.055%); ext 6.1035, heap11491, 99 tokens, device22/24 delta52; host23/23, fidelity5.341e-05/top1 10/10. Engine `566329736742`, app `9797c4f001a7`. | Compose B1x's two constant hoists onto preserved B3rope. |
 
@@ -25,27 +25,31 @@ A 0.0034 tok/s increment is small; keep the candidate without asserting a proven
 mechanism or owner acceptance. Full-vector local equivalence tests were requested
 but not evidenced; linked arithmetic and suite results are the evidence in hand.
 
-## B1 NOW: final attention normalization + dynamic gate (C-only substitute)
+## B1 NOW: small-frame helper for the fused attention gate emit
 
-New source-derived candidate, distinct from #608's inner softmax rescale/P.V
-fusion and from the constant per-layer attn_gate hoist. In attn_heads' FINAL
-`t < nhg` loop, each output is currently multiplied by `inv=1/denom[t]`; later
-agate_rows traverses the whole attn vector and multiplies by paired sigmoids.
-Both operands are ready at the final head emit. For EVEN v_hd only (64 here),
-use gate row `m->gate + (size_t)(hstart+t)*v_hd`, call the SAME sigmoidf_pair on
-adjacent elements, compute normalized locals `z0=oh[i]*inv`, `z1=oh[i+1]*inv`,
-then store `z0*g0`, `z1*g1`. Keep that multiply ordering. Remove the later agate
-dispatch ONLY under the same even-v_hd predicate; odd dimensions retain both old
-passes so pairing never changes across a head boundary. Avoid growing the KV
-inner loop: this is after its complete reduction, not inside it. A small noinline
-emit helper is available if inlining bloats/spills attn_heads. No nested splitter.
+B1gate is measured, not still launching: `/root/board-pool/batches/B1gate.log`
+and `HOSTGATE-B1gate.log` are complete. Preserve the ENTIRE current engine as
+its 6.1717 base. This small positive does not establish statistical significance
+or full device equivalence; it retains the same frozen-pair failure.
 
-Compare full emitted attn vectors and linked operand flow, then usual gates.
-This removes one intermediate read/write pass (49,152 B/token) and one split per
-layer, but moves no sigmoid out of the computation. It may lose through code size
-or live-register pressure. Search through #928 found no measured version of this
-specific final-normalization/dynamic-gate fusion. Use restored B1x as the base (6.1683); preserve it first. This replaces the
-stalled dual-store lane. No assembly, new buffers or build-system changes.
+New evidence from its linked ELF: attn_heads grew to 0x1bd7 bytes (B2's
+unfused callback is 0x1752). Its new pair loop spills/reloads through frame
+offsets 0x488/48c/490/494, repeatedly synthesizing large-offset addresses around
+the two __divsf3 calls. At 0x4037e07c..09d it reloads inv, performs four mul.s,
+then stores both values: arithmetic order is as intended, but delivery is costly.
+The call boundary, not another arithmetic change, is the next hypothesis.
+
+Move ONLY the even-head fused pair loop to
+`static ND_HOT __attribute__((noinline)) void attn_gate_emit(float *oh,
+const float *gp, float inv, uint32_t n)`. Copy the current loop verbatim:
+same sigmoidf_pair, z0=oh[i]*inv, z1=oh[i+1]*inv, then z0*g0 and z1*g1.
+One helper call per head; inv stays calculated once by the caller. Leave the
+KV reduction and odd-head fallback untouched, and keep the later agate dispatch
+skipped for even heads. No nested splitter or new buffer. Check the linked
+helper's actual frame/accesses and operand order; call overhead may outweigh
+shorter addressing. Measure against B1gate 6.1717, not B1x or another board.
+This changed frame premise did not exist before the gate fusion; old QK outline
+experiments and FINPAIR #626 do not test it. Keep both trees if neutral.
 
 ## Performance reserve: wide delivery for three-tap convolution
 
@@ -97,6 +101,53 @@ asks whether the two independently positive constant mechanisms add to the new
 fusion despite placement/cache effects. Record its own full gates and heap;
 keep the constituents even if the composition regresses. No promotion until the
 frozen pair is resolved by the owner.
+
+**20:06 source review:** the first B3 graft built but omitted BOTH invalidation
+calls (definitions only). Add them immediately after nd_model_open's memset;
+do not infer cache lifetime correctness from build success. Guidance was queued
+to pi before any B3comp board process was observed.
+
+## Next turnover: remove MLP permutation overhead
+
+These are two distinct reserves, not permission to delay the three ready lanes.
+If B2 wide taps gets stuck on integration, use the first ready C-only reserve
+instead of repeated blind splices. Assign each to only one board.
+
+**First reserve: P1 gather inside SiLU (no allocation, suitable for B1 next).**
+hadamard_mlp_unscaled currently finishes kron_apply into hada_b, serially copies
+`hada_a[i] = hada_b[(uint32_t)p1[i]]`, then silu_rows reads hada_a and overwrites
+it. Extend silu_ctx with distinct read-only `src=hada_b` and `perm=p1`, and in
+its existing pair loop read BOTH `src[(uint32_t)perm[i]]` values into locals
+before writes. Substitute only those values for c->a[i] in the original z0/z1
+expressions; retain the exact d2*sc*x+b2 contraction, sigmoid pair and z*sigmoid
+order. Remove only that first permutation copy. The scale-row construction,
+second permutation/d3 pass and every Kron reduction stay unchanged. Keep
+source/destination distinct through the joined callback. This avoids one full
+intermediate write/read (65,536 B/token for 1024*8), puts the gather in the
+existing two-core split, and costs extra live pointers/indirect loads in SiLU.
+Check full-vector output against the saved unfused producer+consumer, not just
+goldens. #369's four-way gather unroll lost 0.133%; it did NOT eliminate the
+intermediate or fuse its consumer. No measured version found through #930.
+
+**Second reserve: decode immutable permutation indices once (independent B2
+substitute/next).** Archive records 226/227 are FP32 arrays of 1024 integral,
+unique values each, range 0..1023. Linked B1 loops at 0x42012fd9 and 0x4201302c
+load a float then execute utrunc.s for each index, every layer/token. Cache
+p1/p2 as model-owned uint16 arrays (4096 B total) at open, with explicit
+hada_n<=65536, finite/integral/in-range guards and allocation-failure fallback
+to the existing FP32 arrays. Prefer optional PSRAM metadata, not another 4 KB
+claim on scarce internal scratch. Free with model close; never edit the archive.
+Keep both original gather loops and arithmetic for this experiment, so it prices
+conversion/metadata delivery alone against its own base. This removes 16,384
+float-to-index conversions/token; do not promise a large gain from that count.
+Do not combine with the P1 fusion on its first measurement. No matching prior
+metadata-cache experiment found; CQ2 uint16-offset-stream failures are unrelated.
+
+Useful external boundary: [T-MAC](https://arxiv.org/html/2407.00088v1) motivates
+preprocessing immutable index layouts, but its fast lookup depends on SIMD byte
+tables and includes table quantization. Do not transplant that arithmetic here.
+The actual CQ2 centroids (-.13317214,-.03990209,.04003528,.13346045) are NOT
+exact sign mirrors, so its mirror-table trick has no exact premise on this blob.
 
 ## Completed mechanisms and parked work
 
@@ -153,6 +204,8 @@ supported 240/80 MHz. No repeated controls or quality-gate overrides. Inspect
 actual child processes and growing logs, not pgrep counts that include the shell
 or a printed PID. Never interrupt a real build/flash/bench. Use finished/free lanes
 for their next candidate while another builds/measures; no long sleeps or repeated
-ledger-only closeouts. Next mentor: verify B1 finally gets a real novel run, whether
-B2 wide/B3 composition launch, and their own base comparisons/quality/heap. Watch
-pi's 200-turn cap and preserve the 6.1717 constituent even if composition regresses.
+ledger-only closeouts. Next mentor: inspect whether B1 outlined emit, B2 wide taps
+and B3 composition actually launched, B3's cache invalidations, and their own
+base comparisons/quality/heap. B1gate and B3rope each read 6.1717 on DIFFERENT
+trees, not a confirmation pair. Watch pi's 200-turn cap and preserve both even
+if their next compositions regress.

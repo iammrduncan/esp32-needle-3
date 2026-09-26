@@ -298,3 +298,25 @@ markers and moving only the loads works. Asset: `.auto/exp96/lut2_tie728.S.amort
 
 **Owed:** breadth + host gates on B3's 6.1433 tree. **Outstanding:** B3's FP32 norm-sidecar probe;
 B1 free at 5.8833; B2 free at 6.1250 gated.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~20:10Z (run #782: the campaign's best tree is FULLY GATED at 6.1433 = +15.8 % over the owner's pin)
+
+| metric | value |
+|---|---|
+| **decode** | **6.1433** (+1.35 % over the seed 6.0617 pin; **+15.8 % over the owner's 5.3033**) |
+| prefill / min_case | 6.4833 / 5.92 (both bests) |
+| ext / think | 6.0731 / 4.70 (both up) |
+| device | 18/20, delta 52 (only the two #647 ring-related goldens) |
+| host | 19/19, delta 0, fidelity 5.341e-05, top1 10/10 |
+
+**Tree (B3):** seed-era stack + composed attention + **EG2** engram staging + **narrow compact prefix** +
+**plain group loop** + **noinline `qk_dot8`** + **amortised group loop**. Each lever measured on its own
+tree; the amortisation is two-tree confirmed (+0.27 % B2, +0.35 % B3) with the CQ2 differential green.
+
+**Evidence side: complete** except the two frozen heldout cases every tree on this line shares (the
+#647 demo-timer pair) - the owner's disposition.
+
+**Carried forward:** B3's real-tensor FP32 norm-sidecar probe; B1 free at 5.8833 (QK outline correctly
+reverted); the amortisation idea on any remaining dispatched kernel. **Assets:** `.auto/exp90`-`96`.

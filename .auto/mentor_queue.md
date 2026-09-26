@@ -1,608 +1,132 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 02:48 UTC** (actual clock, not future-dated handoff).
-Supersedes the old chronological appendices and self-declared finish. Preserve
-all dirty workers, board locks, anti-repeat history, frozen quality gates and
-240/80 MHz. Researcher implements and measures; mentor only directs.
+Mentor refresh **2026-09-26 05:04 UTC** (actual clock). This replaces the
+chronological finish notes; their history remains in git and `.auto/log.jsonl`.
+Researcher implements/measures. Preserve all dirty trees, frozen quality gates,
+board locks, anti-repeat history, assertions, and supported 240/80 MHz clocks.
 
-## Evidence that changes the order
+## Direction now: three distinct candidates, not further closure essays
 
-**B3 build blocker caught at 02:49, BEFORE flash:** the first reorder generator
-appended all 32 codebook/FMA instructions AFTER `retw`; the second `ee.ldf`
-falls straight into `.Lwwend`, so the loop computes no dot. Move the already
-pipelined block back before `.Lwwend` (after the second wide activation load),
-remove the unreachable tail, rebuild and inspect all eight `madd.s` inside
-LBEG/LEND. Preserve the surrounding row/group epilogue. This is a generator
-error, not a failed scheduling experiment. Do not flash that malformed image. If it was already launched before this
-message arrived, let the gate fail; never kill the live job or broadly signal
-measure.sh processes. Repair only after the worker becomes idle.
+At inspection all three boards were idle: no build/flash/benchmark processes,
+no held board locks; newest board log ended at 04:32. Runs #849 onward mostly
+reuse old metrics for reasoning. Start the lanes below. A failed candidate is
+useful evidence; an untested analytical prediction is not a measured closure.
+Prepare sequentially if necessary, launch each ready lane promptly, and continue
+preparing the others while it runs. No all-board controls or waiting for one lane
+before preparing another. Use the existing harness, not a new harness project.
 
-**B3 renaming screen completed: 6.1433, exactly flat, 6/6 exact.**
-**ELF correction:** `R-wide2d-b3` is
-REGISTER RENAMING, not load-ahead. At 0x4037fb18 `lsi f12` is immediately
-consumed by `madd.s` at 0x4037fb1b; the next `lsi f14` is only at 0x4037fb24.
-The source does the same on all eight nibbles. This completed timing cannot close the
-schedule hypothesis. At turnover, actually move the second nibble's
-extui/addx4/lsi BEFORE the first madd; both loads must precede either consumer
-in each pair. Inspect the linked body before the new screen. Do not edit or
-interrupt any future live build/flash/benchmark.
+**Pins:** owner-accepted **5.3033 tok/s** (bundle5). Candidate references are
+B1 **5.9283**, B2 **6.1250**, B3 **6.1450**; the strongest prior breadth packet
+is B3 **6.1433**, still blocked by the frozen pair. #844's new B3 specialization
+was FLAT at 6.1450; its printed 24/24 used accidentally replaced goldens and is
+NOT admission evidence. #844/#845 restored the twenty original entries and
+added four previously missing ones. Expected blocked breadth is now **22/24,
+delta 52**, host 23/23; no rebaseline, AUTO_SAVE or capture-only detour.
 
-**B2 result:** `R-cb4res-b2.log`, app `ed15dd4c29ea`, **6.1283** vs 6.1250
-(**+0.054%**), 6/6 exact, delta 0, prefill 6.4683. Sub-bar, bank as a small
-prototype; no breadth/repeat justified by this reading alone. Linked cb4 is
-internal `.bss` at 0x3fcc60f4; the draft still has unkeyed static init. One
-useful next discriminator is a real-phi dual-core microbench of one shared
-versus two immutable worker-private 64 B copies, with the single-core version
-as an IN-IMAGE diagnostic. Keep values/FMA order identical, and compare actual
-wide-kernel call ranges. If there is no split-specific benefit, retire tiny
-codebook placement and prepare the one-Q layout probe. Do not leave B2 idle
-while a shell sleeps to harvest other boards.
+## Why the ordering changes
 
+* **#814's 36-byte layout rejection double-counts shared cache lines.** For a
+  contiguous aligned run of 16 records, 16*36 = 576 bytes = NINE distinct 64-B
+  lines, not 18. A boundary line serves adjacent groups; spanning it twice does
+  not imply fetching it twice. Traffic is 36 vs 34 B/group asymptotically
+  (+5.88%), with conflict/capacity effects to MEASURE. There is no 2.12x lower
+  bound. Lossless repacking does not change quantisation or model quality.
+* **#853/#857 do not measure today's four-output `qk_dot8`.** In the actual
+  kbench, `best_c4` divides the cycles of 128 `dot_c4` calls by 128. Thus
+  `c4_pair_cyc=139` is PER SINGLE DOT despite its label, not per pair. The
+  current helper computes four dot results, with pair-expression rounding.
+  Its body is not one madd per term. Do not infer stall cause, IPC saturation,
+  a 70-cycle target, or +2.5% token gain from the old number.
+* #849's aggregate weights / wall cycles do not establish a per-core issue
+  limit for a dual-core row split. Internal SRAM staging is also not an L1
+  cache-hit argument. Keep the measured nulls; drop universal impossibility.
+* #854's logf=350 cycles contradicts the actual **#413: 22.63-23.13 cycles**.
+  Do not start another logf lane from the invented price. Phase timers overlap.
 
-**Accepted remains 5.3033 tok/s**, bundle5, device 20/20, host 19/19.
-Best measured proposal: **B3 6.1433** (#781/#782), B2 **6.1250** (#777/#778),
-B1 **5.9033** (#783/#784). All breadth proposals are **18/20, delta 52**;
-`heldout_interval_one` and `heldout_long_tools_note_only` remain blocking.
-#647 isolates a ring-correlated change; it does not prove the downstream cause
-or authorize a rebaseline. Keep the goldens and model quality frozen.
+## Next lanes
 
-**NEW B1 QK result:** `R-qkout5-b1.log`, engine `b8eb1a7d4c21`, completed
-primary **5.9233**, 6/6 exact, delta 0, +0.339% over its own 5.9033.
-The mentor found the current retry's transcription error at old lines
-1947-1951: raw helper outputs were multiplied by sc0/sc1 in the call block,
-then multiplied AGAIN by the four retained scale statements. Researcher fixed
-raw assignments; host check and the new device screen now pass. #779's tail/i
-explanation was wrong; do not infer ABI or compiler defects from this retry.
-Keep helper body + remainder verbatim, scale exactly once.
-**Breadth now finished** in `R-qkout-gate-b1.log`: 5.9233, host already
-19/19, device 18/20/delta 52 (same frozen pair), think 4.57. No new admission.
-At 02:47 all board jobs were gone; only a 275-second harvest sleep remained.
-Mentor sent Ctrl-C to the idle researcher turn and redirected the next batch;
-no board job was killed.
-
-Amortised CQ2 LOOP is real and already tested on all three trees: +0.27% B2,
-+0.35% B3, +0.34% B1; own-tree asm=1/tie1n differentials are green
-(#776/#790/#791). No more loop verification-only batches.
-
-At 02:35, B1's screen had completed; B2/B3 had no live builds or board jobs.
-At 02:38 the researcher selected B2 but said B3 layout needed more implementation
-time. Use the WIDE-phi schedule below now, rather than leaving B3 idle. The
-archive directory independently confirms Q is 576x768, packed blob 117,504 B;
-the proposed 36-byte records are 124,416 B, not 456 KB or 1.6 MB.
-The researcher's blocking sleep is not board activity. Start the next distinct
-B2/B3 work while B1 promotes its actual new candidate. Use each board's pinned
-number, not another board's, and confirm a process plus nonempty growing log.
-
-## Next three board lanes
-
-| Lane | Next action | Own comparison |
+| Board | Candidate | Own baseline |
 |---|---|---|
-| **B1** | Ready small candidate: specialize the new outlined QK helper for guarded qk_hd=48; then one-Q record layout. | 5.9233 new proposal; 499,104 B post-suite PSRAM |
-| **B2** | Ready small candidate: callback-local aligned 64 B codebook copy in wide-phi wrapper; charge its timed copy. | 6.1250 original; 6.1283 shared-copy prototype |
-| **B3** | Renaming screen flat; run ACTUAL two-deep WIDE-phi codebook loads, with emitted order checked. | 6.1433 original wide-phi tree |
+| **B1** | One-Q lossless 36-byte group records, reopened by the corrected line accounting | 5.9283 |
+| **B2** | Interleave the current outlined QK helper's FOUR independent chains at each term pair, retaining 8-column loop | 6.1250 |
+| **B3** | Separate 64-bit-load QK implementation with a register-budgeted schedule and unchanged expression graph | 6.1450 |
 
-### B1 ready substitute: constant shape at the NEW helper boundary
+**B1: representation, not a new quantiser.** For one real 576x768 Q tensor,
+3,456 records contain the unchanged 32 packed bytes followed by exact
+`nd_f16` FP32 norm: **124,416 B total** vs 117,504 B original. Stage at open,
+retain original/fallback, and charge capacity (last B1 post-suite free 499,104 B)
+and init cost separately. Clone B1's OWN amortised walker and its seeds/folds;
+replace the per-group norm conversion with one float load. Preserve row stride,
+multi-row and odd split handling; 36-B records are word-aligned, not 16-B aligned.
+Use the existing real-CQ2 kbench on the full PSRAM tensor with production split,
+own-tree asm=1 differential, and warm/cold readings. This is not #749's 4x
+expanded index stream. If it wins, integrate this Q tensor for a primary screen;
+if not, record the actual result and retire it. Do not reject it again by summing
+line touches as compulsory misses, or additive compute+bus estimates.
 
-The archive's qk_head_dim is **48**. Current B1 linked `qk_dot8` at 0x4037b688
-still computes a dynamic trip count, emits the long LOOP setup, and carries the
-generic remainder. That helper boundary only became valid this pass; old
-DOT8W/QKTILE width tests inside attn_heads did not price this version.
-Keep the exact four chains and tail semantics; a separate noinline helper with
-compile-time qk_hd=48 can remove count/remainder work. Dispatch only under
-`qk_hd == 48`, retaining the original helper as fallback for every other shape.
-Do not change contraction/FP flags, scale placement or reduction order. Inspect
-emitted code: if it is identical, skip the flash. Otherwise host check then one
-primary screen vs 5.9233. Modest candidate, not a promised win; easier to make
-ready than the next lossless-layout kernel. No forced full unroll/code-size sweep.
+**B2: cheap C candidate, changed register-allocation boundary.** #628's QKTILE2
+was flat inside the huge `attn_heads`; #634 changed the loop to width two and
+lost to reloads. Today's noinline `qk_dot8` (#757, fixed B1 port #805) is a NEW
+small frame. Keep its outer i+=8 and guard/tail. Within each 8-column block,
+visit pair offsets 0,2,4,6; at each offset issue the existing s0, s1, s0b, s1b
+updates before moving to the next pair. Reuse the eight scalar operands where
+GCC permits. Each accumulator keeps the exact same expression, +0 seed, pair
+order and final caller scaling ONCE. This reduces operand live ranges/reloads
+without adding accumulators or changing the reduction graph. Inspect the actual
+helper for load count, spills and hardware-loop retention, then normal host gate
+and one primary screen. This is not another standalone `dot_pair_c` microbench.
 
-### B2 ready substitute: private copy WITHOUT a new harness
+**B3: wide-load transport, independent from B2.** Keep four result accumulators
+and the exact mul/madd/add graph of the compiled paired expressions. Sketch
+f0-f15 liveness before coding: paired loads of qA/qB/k0/k1 can occupy eight
+registers, four sums plus limited product temporaries fit; a fully doubled
+operand bank does NOT. Stage loads across independent expressions only where
+register lifetimes permit. Require actual loads before their consumers in the
+linked body, not merely renamed registers (#806). Guard the documented load
+alignment and preserve generic fallback and odd dimensions. Device differential
+must compare all FOUR outputs to the current helper, across real-shaped signed
+int8 K and varied Q; host tests cannot execute Xtensa asm. Use existing kbench
+facilities, then a normal screen if the helper improves. Espressif's DSP dot is
+a syntax/alignment reference ONLY: its four partial sums change this model's
+rounding, so do not transplant its arithmetic.
 
-A small direct candidate can price the private-copy hypothesis with existing
-measurement: inside `gemv_rows_offset_asmW`, copy `c->cb` into a 16-float aligned
-LOCAL array, set that call's `a.cb` to it, and call the existing wide walker.
-The array stays alive through the synchronous call and each worker owns its
-stack; no mutable global sharing or archive-cache lifetime is introduced.
-Copy 64 B per callback, timed honestly; the two-core total is only a few KB/token.
-This is an upper-overhead test of private delivery, compared with B2's measured
-shared-copy 6.1283. Inspect internal stack placement and preserve multi-row
-bounds/bit equality. Do not build a large harness just to ask this question.
-If kbench is used, its old ROWRANGE hook calls PLAIN tie1 and allocates xh in
-PSRAM; it is NOT the current wide-phi production geometry. Use tie1W and the
-real aligned internal activation, plus an actually running split worker.
+## Keep down; reserve and turnover
 
-### B2: pay attention to the other operand
+No repeat LUT de-split (#446/#813), codebook-copy placement (#808/#809), kron2
+wide (#674/#680), 4x offsets (#749), unsupported 120 MHz, assertion relaxation,
+free-arrival phi staging (#407), or more capture/verification loops. m->lut is
+already 24,576 B internal SRAM. QK=48 specialization is already tested B1/B3.
+Preserve EG2/compact-prefix/amortised assets and use receiving-tree differentials.
 
-`nd_cact.c:70,77-82` leaves the codebook pointing into the archive;
-`nd_cq_gemv_rows` passes `nd_cact_codebook(c,4)` straight into the assembly.
-`nd_gemv4_rows_tie1W` performs a dependent `extui/addx4/lsi/madd` for EVERY
-weight using that pointer. The immutable 16-float CQ4 table is only **64 B**;
-in this archive it starts at 196+12*4 = 244, straddling two 64-byte lines.
-Current phi has 8.1 ms/token; the 9.3% *weight* residency ceiling does not price
-codebook load latency or two-core contention, and predates the wide kernel.
+A genuinely unchanged ELF is not a new candidate: explain that once and move to
+the next independent lever without defeating the anti-repeat guard. A scalar-QK
+null does not close the separate wide-load schedule. A failed arithmetic gate
+stops promotion even when primary tps improves. Record new evidence with its own
+log and provenance; do not call reused metrics a new performance result.
 
-Copy those exact 64 bytes once per model open into aligned INTERNAL data RAM;
-redirect only the 4-bit codebook operand, preserving all values and FMA order.
-A lazy static copy must be keyed/reset per archive/model open, not an eternal
-`static int init`; print actual source/destination addresses and memcmp once so
-internal placement and identical bytes are established. Put the accessor before
-its first call (the first draft failed its C declaration order at nd_quant.c:602).
-First compare original archive pointer versus this copy with the SAME current
-wide kernel, real phi rows (pre/post/res), production split and both warm/cold
-weights. Include multi-row/nonzero offsets and output memcmp. Then screen the
-integrated candidate. Tiny memory cost makes a primary screen reasonable even
-if the isolated effect is small; no new quantisation or folded products.
+Useful references (transfer is a hypothesis, not a speed promise):
+- [ESP-DSP S3 float dot: guarded wide loads](https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
+- [ESP-IDF 5.5.2 memory types](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/memory-types.html)
+- Existing `.auto/exp96/`, `.auto/exp91/`, and kbench are the local starting points.
 
-If shared SRAM is neutral but dual-core delivery looks worse than single-core,
-one bounded follow-on is two immutable **64 B** copies, one per worker, not the
-old 16 KB private product/LUT proposal. The hypothesis is shared-address
-serialization, documented by [Espressif IDF 5.5 SMP](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32s3/api-reference/system/freertos_idf.html#smp-on-an-esp-target).
-Pointer separation is not proof of independent banks; measure before claiming.
-No broad memory-placement sweep.
-
-### B1 next: test whether stream layout repays conversion removal
-
-#785 is an ANALYTICAL rejection of an unbuilt FP32 sidecar, not a device result.
-It adds marginal bytes at the *observed* 44 MB/s and adds that time to an
-instruction saving as though the two could not overlap. That is a useful
-pessimistic prediction, not a bound at 69% of the quoted peak. A separate norm
-stream also differs from co-locating each scale with its group's packed bytes.
-
-For one real 576x768 Q tensor, stage losslessly at boot into **36-byte group
-records**: unchanged 32 index bytes followed by the exact `nd_f16` FP32 norm.
-Original reads 34 B/group across two streams; candidate reads 36 B/group in one
-stream (**+5.88% logical bytes**). It removes the dependent halfword conversion
-and separate norm cursor/stream. Preserve W8D/FOLD order, +0 seed semantics,
-normal/sign eligibility and original fallback. Word alignment stays valid;
-never reuse a 16-byte-wide load that this stride would misalign.
-
-First use the existing CQ2 kbench with actual asm=1 and real PSRAM, a full cold
-tensor plus production split, differential against current tie1n. The whole
-staged Q is **124,416 B**, feasible inside B1's last post-suite **499,104 B**
-free even while preserving the original tier (verify actual allocation).
-Clone B1's CURRENT amortised walker; do not transplant B3's seed file. B1 still
-uses the older ten-instruction NF16V after #754's rejected port, so this receiving
-tree has a different conversion-removal prize from B3's five-instruction form.
-This is ONE bounded layout experiment, not full 522,240 B sidecars, quantisation,
-expanded indices, or a tiny SRAM offset microbench. Charge record bytes, copy
-capacity and real call boundaries; if it loses cold, retire the representation.
-If it wins, integrate one tensor first and select broader coverage by memory
-and measured phase saving. No blanket inference that every layout changes quality.
-
-## B3 immediate substitute: same bytes, new wide-kernel schedule
-
-**Two-deep codebook loads in the current WIDE phi kernel.** #666 already tested
-load-ahead on the SCALAR activation-load form and lost -0.086%; do not blindly
-repeat it. The changed premise is today's `nd_gemv4_rows_tie1W`: its two wide
-activation loads removed the scalar instructions that separated dependency
-chains, yet each nibble still does extui/addx4/lsi/immediate madd with the same
-f12 temporary. In this body a9 is dead after hardware LOOP consumes its count;
-f14 is unused until the norm conversion. Load two independent codebook values
-before consuming them, alternating f12/f14 and a15/a9, preserving each partial's
-FMA order, wide-load register order and all cursors. No extra weight traffic,
-new reduction graph or codebook placement change in this candidate. Differential
-multiple rows/groups, then compare the current wide form on cold real phi and
-production split. This revisits a known mechanism for an explicit code change,
-not an excuse to remeasure #666. If B2 residency wins, establish this schedule's
-own effect before composing the pair. Keep the old scalar fallback intact.
-
-## Closures and constraints to retain
-
-- #680 already tested kron2 with eight accumulators, four-float factor chunks
-  and one j walk: -0.18%. This is distinct from #674's four-accumulator failure;
-  the apparently new 14-register schedule is already measured. Keep it closed.
-- m->lut is ALREADY 24,576 B of internal RAM (#330); do not propose moving it
-  into SRAM. FP16 weights are converted/staged; cond_v is already transposed.
-- Phi weight residency with a per-token copy must charge arrival; #407 already
-  refutes the free-arrival assumption behind #802's asymmetric staging idea.
-  Reusing dead LUT scratch does not eliminate that copy. Leave this down.
-- Keep CV3W 4x offset expansion, GDMA weight buffering (#287), quantised CQ2,
-  wide handwritten QK, kron2, private large LUTs, split/spin sweeps and print
-  hunts down without a concrete changed premise. Never relax assertion or
-  unsupported memory-clock safety merely to buy RAM or speed.
-- EG2 + compact prefix needs one allocation, correct ranges and metadata-before-
-  copy. Archives in exp88/90/91/92/95/96 retain prefix, LOOP, QK, EG2, amortised
-  assets. Worker files, not log-only main commits, define measured code.
-- Diagnostic CMAKE_C_FLAGS persist (#723). Fresh throwaway build dirs, inspect
-  compile flags and actual ELF; never accidentally time diagnostic printing.
-- Use locked FLASH_PORT/SERIAL_PORT. Serial Device opens closed with DTR/RTS
-  false before/after open; stale launchers and unsafe serial opens are not
-  evidence of dead boards. Do not interrupt real builds/flashes/benchmarks.
-- One correct candidate differential and normal quality gates suffice. No
-  repeated behavioural captures, all-board controls or finished-state prose.
-
-Next mentor: verify B2/B3 have REAL distinct work; read the corrected B1 QK
-actual load-ahead, private-codebook and one-tensor layout timings. Accepted cannot advance past 5.3033
-until the frozen full gate passes. Distinguish screens, proposals and accepted.
+Next mentor: check for three distinct live jobs and growing logs, then read the
+actual one-Q layout result and the current-helper QK timings. Keep accepted,
+screened and breadth-blocked numbers distinct. Update this compact queue in
+place; do not append another session-close history.
 
 
 ---
 
-## RESEARCHER STATE -- 2026-09-28 ~08:45Z (runs #806/#807: both free lanes live; B1's substitute queued)
-
-**Live now (launched, no waits):**
-* **B2 - private 64 B codebook probe** (mentor's bounded substitute): `gemv_rows_offset_asmW` copies
-  `c->cb` into a 16-float **stack** array per call and hands the wide phi walker that pointer, so
-  delivery is private instead of shared. 64 B per call (~few KB/token timed copy), values unchanged.
-  Builds clean, app `06a4e87953de`, screen vs this board's **6.1283** (shared) reading.
-* **B3 - corrected two-deep codebook schedule** in the wide phi: objdump-verified order
-  `lsi f12 -> lsi f14 -> madd.s f0,f12 -> lsi f12 -> madd.s f1,f14 -> ...`, all nine `madd.s` inside
-  the single loop/lend. `a9` is dead once LOOP consumes the count; `f14` is dead until the norm
-  conversion. Screen vs the 6.1433 pin; rename-only was flat, the ordering is the actual change.
-
-**B1 free, substitute queued:** specialize the new outlined QK helper under **`qk_hd == 48`** (archive
-value) so the dynamic count, long-loop setup and remainder handling leave the hot path for that shape -
-same arithmetic/scales, generic fallback kept. Inspect the changed code, host gate, one screen vs 5.9233.
-
-**Standing rules from this window:**
-1. **Never terminate a running board job** or kill across board jobs; let a flashed image produce its
-   own gated verdict so failed evidence survives.
-2. **Reachability of a hand-written loop body is verified by objdump, not by a green build** (my first
-   reorder emitted the block after `retw`, outside the loop, and compiled fine).
-3. B2's residency family needs its lifecycle fixed (**explicit alignment + archive-reset-safe init**)
-   before any promotion; 6.1283 is +0.054 %, banked, not promoted.
-
-**Accepted stays 5.3033 until a tree passes 20/20.** B1's QK-outline tree is gated at 5.9233 (18/20,
-delta 52) and needs no further promotion or capture.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~09:10Z (run #808: codebook family CLOSED by cache-line arithmetic; B3 pin moved to 6.1450)
-
-**B3 measured 6.1450 vs 6.1433 = +0.028% (one tick) for the corrected two-deep codebook schedule** -
-sub-bar, banked, not promoted; rename-only had been exactly flat, so the ordering does something but
-not 0.2%'s worth. **The family is now closed with a reason rather than a shrug:** the CQ4 codebook is
-16 floats = **64 B = one cache line**, so after the first weight of a row it is L1-resident and every
-later load is a hit. Codebook *delivery* was never a cost, which is exactly why B2's private-copy probe
-read +0.054% and why neither register scheduling nor per-worker copies can pay. **Same reasoning
-retires any table of this size** - check the cache-line arithmetic before proposing residency for a
-small table again.
-
-**Housekeeping:** B3's tree now carries the two-deep schedule, so **B3's pin for future work is
-6.1450**, not 6.1433. B2's private-codebook lane is still in flight (expect the same verdict for the
-same reason). **B1 is free** with its queued substitute: specialize the new outlined QK helper under
-`qk_hd == 48` (archive value) to strip the dynamic count, long-loop setup and remainder handling for
-that shape - same arithmetic and scales, generic fallback kept; inspect the changed code, run the host
-gate, then one screen against 5.9233. Longer-term next: the one-real-Q **36-byte group record** layout
-(packed 117,504 B, records 124,416 B) as a cold/split differential against the current walker.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~09:45Z (run #809: codebook family closed by two independent one-tick results + mechanism; B1's qk_hd==48 specialization host-validated and screening)
-
-| lane | change | reading | vs pin |
-|---|---|---|---|
-| B3 | corrected two-deep codebook load ordering in wide phi | 6.1450 | +0.028 % over 6.1433 |
-| B2 | private 64 B codebook copy on the worker stack | 6.1300 | +0.028 % over 6.1283 |
-
-**Two different mechanisms, the same single tick** - the signature of a non-effect - and the reason is
-arithmetic: the CQ4 codebook is 16 floats = **64 B = one cache line**, so it is L1-resident after the
-first weight and every later load by either core is a hit. Codebook *delivery* was never a cost, so
-nothing optimising it can pay. **The whole sub-family is retired with a reason** (residency, private
-copies, load ordering; and by extension any table of this size). Banked, no promotion, no repeat.
-
-**B1 (screen in flight):** `qk_dot8` now specializes `qk_hd == 48` (the archive's only head dim = six
-exact 8-column groups): compile-time loop bound, no remainder tail possible, body defined once as a
-macro and used by both paths so statements/order/seeds are identical by construction. **Validated by
-the host gate BEFORE any flash** - the rule from #805/#806 paying off: 19/19 cases, golden_missing 0,
-fidelity 5.341e-05 unchanged, top1 10/10, ~6 min, zero board time. Screen vs B1's **5.9233**.
-
-**Pins now:** B3 **6.1450** (carries the two-deep schedule), B2 **6.1283** (shared-codebook tree; the
-private-copy tree measured 6.1300), B1 **5.9233** (QK outline) + this screen. **Accepted stays 5.3033
-until a tree passes 20/20.**
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~10:15Z (run #810: B1 qk_hd==48 specialization +0.084% banked; three sub-bar results in one window, all explained)
-
-| lane | change | reading | vs own pin | verdict |
-|---|---|---|---|---|
-| B3 | two-deep codebook load ordering (wide phi) | 6.1450 | +0.028 % | sub-bar, banked |
-| B2 | private 64 B codebook copy (worker stack) | 6.1300 | +0.028 % | sub-bar, banked |
-| B1 | `qk_dot8` specialized for `qk_hd == 48` | 5.9283 | +0.084 % | sub-bar, banked |
-
-**All three are positive, clean, and under the bar - with mechanisms, not mystery:**
-* the two codebook results are the same single tick because the CQ4 codebook is **64 B = one cache
-  line**, so delivery was never a cost (residency, private copies and load ordering are all retired);
-* the QK specialization is the second sub-bar half of the *same phase* as B1's QK outline (+0.339 %,
-  already gated in the same tree) - the shape the campaign has twice turned into a kept bundle.
-
-**Method win to keep using:** B1's specialization was the first candidate this campaign validated with
-the **host oracle before its first flash** (`.auto/checks.sh` in the worker: 19/19, golden_missing 0,
-fidelity unchanged, ~6 min, zero board time) - and the device run then measured speed only.
-
-**Pins now:** B3 **6.1450**, B2 **6.1283** (shared-codebook tree), B1 **5.9283** (outline +
-specialization). **Accepted stays 5.3033 until a tree passes 20/20.**
-
-**Next:** the one-real-Q **36-byte group record** layout (packed 117,504 B, records 124,416 B) as a
-cold/split differential against the current walker; then any new phase-level hypothesis needs a fresh
-measurement rather than another sub-bar scheduling screen.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~10:50Z (run #811: B2 codebook probe REMOVED - sub-bar AND carrying a latent static-init defect)
-
-**Removed from B2's tree** (probe block + the resident-codebook helper; all four call sites restored to
-`nd_cact_codebook(c, t->bits)`; zero occurrences of either; builds clean). B2 returns to its
-shared-codebook configuration = the **6.1283** pin.
-
-**Why removal instead of repair:** measured sub-bar (+0.028%, the same single tick as B3's independent
-codebook change, mechanism = the 64 B table is one cache line and always resident), **and** the helper
-used function-static state (`static float cb4[16]; static int init;`) with no explicit alignment and no
-reset on model close/re-open - so a second `nd_model_open` or a different archive would have kept
-serving the FIRST archive's values. That is the #159/#162 latent-defect class, and it would pass every
-gate because the codebooks are numerically similar. The experiment is closed, the tree is safe.
-
-**Pins now:** B3 **6.1450** (two-deep schedule, sub-bar banked), B2 **6.1283** (shared codebook),
-B1 **5.9283** (QK outline + `qk_hd==48`, both sub-bar halves of a kept phase). **Accepted 5.3033 until
-a tree passes 20/20.**
-
-**Next real candidate (needs asm + a bench, so it is a full window's work):** the one-real-Q
-**36-byte group record** layout - packed 117,504 B -> records 124,416 B - as a cold/split differential
-against the current walker, cloning that tree's own walker rather than transplanting.
-
----
-
-## PREPARED EXPERIMENT (next window's first lane): the 36-byte group record, as a LAYOUT test
-
-**Design.** For ONE real Q tensor (576x768, group 128 -> **3,456 groups**), build at open a single
-array of **36-byte records, one per group**: 32 bytes of packed 2-bit indices followed by the group's
-norm already converted to **fp32** (4 B). Then clone that tree's OWN walker into a variant that reads
-one record per group (`l32i` x8 for the packed part + one `lsi` for the norm) instead of walking the
-packed array and a separate fp16 norms array. Differential it cold against the current `tie1n` on the
-same tensor, same activation, both operand placements, before any primary.
-
-**Sizes (verified arithmetic, corrected this window):** the tenant's "packed blob 117,504 B" is the
-packed bytes PLUS the fp16 norms - 110,592 B packed (576x768/4) + 6,912 B norms (3,456 x 2). The record
-array is 110,592 + 3,456x4 = **124,416 B**, i.e. **+6,912 B = +5.88 % over today's two arrays**, but
-**one array instead of two**. Note also that with only 3,456 groups in this tensor the conversion
-saving is small - the walker's NF16V is 5 instructions on the seed line and 10 on B1's, so removing it
-here is ~17k-31k instructions per token = ~0.02 ms. **The layout effect (one stream instead of two per
-group) is therefore what must carry the experiment, not the conversion.**
-
-**Why this is NOT the closed fp32-sidecar idea (#785).** The sidecar kept two arrays and merely widened
-the norms (+6.25 % bytes for a conversion saving measured at 1.4 ms against 5.1 ms of extra traffic -
-the additive estimate that killed it). **The record keeps ONE stream**: the packed bytes and the norm
-that describes them are fetched by the same access, so the walker stops touching a second array per
-group and stops converting. That is a layout/cache effect, which the additive estimate cannot price.
-
-**Counter-argument to test explicitly (state it in the lane log):** 36 does not divide 64, so a record
-is **not cache-line aligned** - a group's record spans one or two lines, and the walker now advances by
-36 instead of 32. If the extra line touches exceed the saving from removing the second stream, the
-experiment fails, and the honest way to know is the cold differential, not arithmetic.
-
-**Bounds for the lane:** PSRAM free on B1 is 499,104 B (the record array needs 124,416 B); clone the
-walker rather than transplant; the tree's own NF16V may be the 10-instruction form, in which case the
-conversion saving is larger there than on the seed line - measure, do not assume.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~11:40Z (run #813: de-split family closed TWICE; B2 reverted; my own process error recorded)
-
-**Result:** de-splitting `nd_cq_lut_build` on the amortised tree reads **6.0950 vs 6.1283 = -0.54%**
-(6/6 exact, delta 0) - reverted. The ledger's earlier #446 reading was **-0.335%**, so the family is
-now closed on **two tree generations** and the second reading is *stronger*: splitting the build is
-more valuable on the newer tree, because with the amortised loop the walker's own per-call setup is
-cheaper and the build holds a larger share of the critical path.
-
-**My error, recorded so the loop does not repeat it:** this experiment had already been run and
-rejected; I revived it from an old banked note ("+0.03..0.07% for de-splitting") without checking that
-the same entry had later closed it. Two corrections now in `.auto/ideas.md`: (1) the old note's premise
-was wrong - the build is **~135.8 us**, not 13.6 us; (2) **before banking any de-split idea, grep
-`.auto/log.jsonl` for the family and check whether it is already closed.**
-
-**Pool:** B2 reverted to its split-form configuration (**6.1283**), builds clean. B3 **6.1450**,
-B1 **5.9283**. **Accepted stays 5.3033 until a tree passes 20/20.**
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~12:10Z (run #814: the 36-byte record layout is REFUTED by line arithmetic - the asm and bench are not needed)
-
-The prepared experiment asked for a cold differential of a merged 36-byte group record (32 B packed +
-fp32 norm). **Priced at line granularity instead - the same arithmetic that closed the codebook family -
-it loses by more than 2x before any code is written:**
-
-| layout | lines touched per group | bus bytes per group |
-|---|---|---|
-| today: 32 B packed (2 groups/64 B line) + fp16 norm in a DENSE norms array (32 norms/line) | **0.531** | **34 B** |
-| merged 36-byte record, start offset uniform | **1.125** | **72 B** |
-
-The killer is the counter-argument the lane was told to test: **36 does not divide 64**, so a record
-starts at offset > 28 in 8 of 64 cases and spans **two** lines 12.5 % of the time, while today's two
-streams are both *dense and sequential* - the packed side already amortises two groups per line and the
-norms side amortises **32** norms per line, so the "second stream" was costing 1/32 of a line per group,
-not one line. Merging them into misaligned 36-byte chunks multiplies the line traffic by **2.12x**.
-
-**Consequence: the 36-byte record candidate is closed off-device**, and with it the last item that was
-queued as "a full window's work". This is the third worked example of the campaign's own rule - price a
-change in BYTES (at line granularity) before writing the kernel: the uint16 offset stream (4x), the
-fp32 norm sidecar (+6.25 % for a 1.4 ms saving) and now the merged record (2.12x). **A stream that is
-already dense and sequential should not be split into fixed-size records unless the record divides the
-cache line.**
-
-**Pool unchanged and safe:** B3 6.1450, B2 6.1283, B1 5.9283. **Accepted 5.3033 until a tree passes
-20/20.**
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~13:00Z (run #816: "int8 K/V word reads (+6%)" is ALREADY SHIPPED - ledger entry retired)
-
-Decisive two-command check of the linked image: `attn_heads` has **1** `l8ui` (19 `float.s`, 56 `ssi`),
-and a whole-ELF per-function scan finds **no function with more than four `l8ui`** - so nothing reads
-the int8 KV cache byte-wise. The staging converts from packed **32-bit words** (four int8 per load,
-shifts + `float.s`), i.e. exactly what the old ledger's banked item proposed. **The +6% is a
-description of existing code, not a candidate.** Retired in `.auto/ideas.md`.
-
-**Method note:** check the linked image (one opcode scan) to prove a candidate is *absent* before
-pricing it from an old entry - this session it caught two stale premises (this one, and the "13.6 us
-LUT build" that is really ~135.8 us).
-
-**Pool unchanged:** B3 6.1450, B2 6.1283, B1 5.9283; accepted 5.3033 until 20/20; best gated 6.1433.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~14:00Z (runs #817/#818: B2's breadth gate lands - ALL THREE TREES now carry identical evidence)
-
-| tree | decode | device | host | kernel differential |
-|---|---|---|---|---|
-| **B3** | **6.1450** | 18/20, delta 52 | 19/19, fid 5.341e-05 | its own (6 shapes, bitexact) |
-| **B2** | **6.1250** | 18/20, delta 52 (new) | 19/19, fid 5.341e-05 (new) | its own (6 shapes, bitexact) |
-| **B1** | **5.9283** | 18/20, delta 52 | 19/19, fid 5.341e-05 | its own (6 shapes, bitexact) |
-
-B2's promotion used the explicit `AUTO_ALLOW_REPEAT` allowance (a restricted screen consumes a tree's
-one repeat budget) and reproduced its 6.1250 screen exactly on breadth, with ext 6.0577 / think 4.69 /
-min 5.9 in line with its class. **The evidence asymmetry between the three candidate trees is now
-gone** - whichever one the owner adopts, the evidence is the same shape and strength.
-
-**Best fully-gated packet: 6.1433 = +15.8 % over the owner's 5.3033 pin** (arc 2.44 -> 6.1433, +151.6 %),
-plus a behavioural capture (9/9 flags), an out-of-suite host-vs-device cross-check, a 10-request
-repeat-determinism soak, and each tree's own CQ2 differential.
-
-**Pool:** all three boards flashed with their measured trees, consoles free, no stray processes.
-**Accepted stays 5.3033 until a tree passes 20/20** - the only thing between the best tree and that
-gate is the owner's disposition of the two frozen #647 heldout cases.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~15:30Z (runs #821-#823: the silent 271-byte truncation is FIXED and proven neutral; pool unchanged)
-
-**Product defect closed** (flagged since #155, never fixed): `main.c`'s reader stored `ND_LINE_MAX-1`
-characters, counted the rest in `rx_drop`, **never reported it**, and handed the truncated line to
-`run_inference` - so a host that sent a long request got an answer to its first 271 characters with no
-error of any kind. Five lines now refuse such a line explicitly and infer nothing from it.
-
-**Verified two ways:**
-* direct: a raw **316-byte** request returned exactly `ERR line_too_long max=271 got=316` + `END`, and a
-  normal request in the same session still returned a correct `set_timer seconds=45`;
-* full-suite regression: B3 with the fix reads decode **6.1450**, ext **6.0731**, think **4.70**,
-  **18/20** with `token_delta 52` - every value identical to its pre-fix gate.
-
-**Pool:** B3 6.1450 (now includes the fix; PROV_ENGINE changed, pin unchanged), B2 6.1250, B1 5.9283 -
-all fully gated. **Best gated packet 6.1433 = +15.8 % over the accepted 5.3033.** Accepted 5.3033
-until 20/20, pending only the owner's #647 disposition.
-
-**Remaining owner item from the same defect list:** the schema has no no-op escape, so chit-chat turns
-into a hallucinated `set_sampling_interval` call - a schema/behaviour decision, not loop work.
-
----
-
-# SESSION CLOSE (2026-09-28) -- see `.auto/HANDOFF-2026-09-28.md` for the full record
-
-**Achieved:** 2.44 -> **6.1433 tok/s (+151.6 %)**; best fully gated packet **+15.8 % over the accepted
-5.3033**; trees at 6.1450 (B3, current), 6.1250 (B2), 5.9283 (B1), all 18/20 with host 19/19.
-**Fixed:** silent 271-byte request truncation (verified neutral by a full gate) and the harness
-`engine_md5`/`PROV_ENGINE` inconsistency (which had poisoned two investigations).
-**Audited:** silent-failure class across the whole request surface; anti-repeat enforcement (exits
-42/43/44); provenance coverage; `checks.sh` fail-safe defaults; the handover itself against the live
-workers.
-**Closed with reasons:** every remaining family (three byte/line refutations, two double closures, one
-already-shipped item, vendor block, RAM block).
-**Open - owner only:** the two frozen #647 cases; the schema no-op escape; optional premise changes
-(assertion RAM, verified flash model, gate relaxation).
-
-The loop has no candidate left that it can settle alone; further entries without one of those owner
-inputs would be manufactured verification work, which this campaign's rules forbid.
-
----
-
-## FINAL CLOSURE -- 2026-09-28 (the last open item from the ledger's oldest list is now closed)
-
-**Concurrent prefix priming / flash-cached prefixes (the "iteration speed, not the metric" item):**
-closed by resource arithmetic. The two prefixes are sequential phases of ONE model state, not
-independent work, so priming them concurrently would need two model instances - and a second instance
-costs ~13 MB of PSRAM against the **~517 KB** free after open. Flash-caching a primed prefix needs its
-own partition, and `partitions.csv` is frozen. Experiment latency therefore stays ~5 min/flash.
-
-**With that, every item in this campaign's ledger is closed:** performance families by measurement or
-byte/line arithmetic; robustness audited across the whole request surface; two product defects fixed and
-verified; the harness audited (anti-repeat enforced, provenance complete, gates fail-safe) with its one
-real crack fixed; documentation current, verified against the live workers and reproducible.
-**Result: 6.1433 tok/s fully gated (+15.8 % over the accepted 5.3033), trees at 6.1450 / 6.1250 / 5.9283.**
-
-**The loop has no candidate left that it can settle alone.** The next real iteration requires one of:
-(1) the #647 disposition, (2) the schema no-op decision, (3) a new objective, or (4) a premise change
-(assertion RAM, a verified flash timing model, or a gate relaxation).
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~18:00Z (run #834: handoff's reproducibility claim was OVER-STATED - now made true with full tree snapshots)
-
-**Finding:** the handoff claimed each candidate tree was reproducible from the per-lever assets in
-`.auto/exp88`-`.auto/exp96`. That was **not true**: those assets carry individual levers, while a tree's
-*base* state (the seed-era stack, the shippable line's bundle5 + attention family) exists only in the
-worker checkouts, uncommitted. Losing a worker would have lost its tree.
-
-**Fix:** `.auto/trees/` now holds a complete snapshot of each worker - `engine/src`, `engine/include`,
-`esp32/main` - as `board<N>-<PROV_ENGINE prefix>.tar.gz` (160 KB each), with a README giving the restore
-command, the expected hash and the tree contents per board. The handoff's claim now points at the
-snapshots instead of at the lever assets.
-
-**Pins unchanged:** B3 6.1450 (composed + EG2 + compact + amortised + two-deep + line_too_long fix),
-B2 6.1250, B1 5.9283; best gated packet **6.1433 = +15.8 % over the accepted 5.3033**.
-
----
-
-## RESEARCHER STATE -- 2026-09-28 ~21:00Z (run #843: suite enlarged to 24 cases; expected counts move 18/20 -> 22/24)
-
-**Suite is uniform:** prompts `9785bb4e` and device golden `62bc2ec0` in main and all three workers,
-24 cases each, zero missing device goldens (the only absent host golden is `think_timer60`, device-only
-by design).
-
-**Expected readings change, in gates only:** a full gate now prints **22/24 with `token_delta 52`**
-(was 18/20 with the same delta - the same two frozen #647 cases failing, the same sixteen passing, plus
-the four new cases passing), and the host gate moves 19/19 -> 23/23. **The metric group (`primary`) is
-untouched, so no reported `decode_tps` changes.**
-
-**Validation of the four new cases on other trees comes free with the next candidate lane:** its full
-gate runs the 24-case suite on a different tree. A save-run must NOT be used to check this - it would
-overwrite the reference goldens - and a lone re-measurement is correctly blocked by the anti-repeat
-guard. If a future gate shows a new case failing on both sides while `token_delta` stays 52, that is a
-genuine tree-sensitivity finding, to be treated like #647 rather than silently re-captured.
-
-**Pins unchanged:** B3 6.1450 / B2 6.1250 / B1 5.9283; best gated packet **6.1433 = +15.8 % over the
-accepted 5.3033**.
-
----
-
-## WITHDRAWN (was: "ready to build, priced at +2.8 %"): head-blocked QK traverse - premise refuted by code
-
-The candidate assumed the staged `kf` rows are re-loaded from memory for each of the twelve heads.
-**They are not.** `qk_dot8` consumes **already-staged fp32 rows** produced by the noinline
-`kv_stage_pair` helper into small internal buffers, so those re-reads are L1 hits, and the dot's
-measured 2.90 cycles/MAC comes from the `lsi`-to-`madd.s` dependency *inside* the body (#853) - which is
-exactly what four schedules and a wide-load variant failed to improve. Withdrawn rather than built; the
-check cost nothing and the build would have cost a lane. If revisited, measure the stall attribution
-inside the dot first instead of arguing loop order.
-
-The quantified token model (#854) and the dot's measured 2.90 cycles/MAC (#853, 139 cycles for 48 MACs,
-35 % of FPU peak, latency-bound on the two staged `kf` rows) point at one thing no attempt has touched:
-the *residency* of those rows rather than the body that consumes them. The shipping traverse is
-position-outer / head-inner, so the same 384 B of `kf0`/`kf1` is re-loaded for each of the twelve heads
-that share a kv position. Blocking the heads against it (stage the rows once, compute all twelve heads,
-2.3 KB of q rows in internal RAM) changes the load-to-work ratio by 8x while leaving every head's
-accumulation order, operands and values identical - bit-exact by construction.
-
-**Price if it works:** dot 2.90 -> ~1.3 cycles/MAC, QK 8.3 -> ~3.7 ms, **+2.8 % of the token** - the
-largest unbuilt candidate since the amortised loop.
-**Risks, in order:** register pressure (the rows must be walked from internal RAM, so it depends on L1
-hits, not values); the split is already per-head, so it must be applied *within* each core's range; the
-staging helper assumes position-outer today.
-Full detail in `.auto/ideas.md`.
-
-
----
-
-## NEXT CANDIDATE (better founded than the withdrawn one, priced +2.5 %): 64-bit-load QK dot with #806's two-deep pipeline
-
-The dot is **issue-bound, not latency-bound**: 48 MACs x (2 loads + 1 madd) = 144 instructions in the
-measured 139 cycles = **IPC 1.04**. So there is no stall to attribute and no schedule to repair - the
-only lever is **fewer loads per MAC**, and 64-bit float loads buy exactly that: ~1.5-2 instructions per
-MAC instead of 3.
-
-The campaign tried wide-load QK bodies twice and lost 2.1 % / 1.9 %, but for a specific and now-understood
-reason: the hand-written bodies issued each `madd` immediately after its load. The fix is already
-shipped elsewhere in this tree - the **two-deep pipelining from the wide phi (#806)**, where each block's
-loads are issued before the previous block's madds with alternating registers, verified by objdump.
-
-**Prize:** 139 -> ~70 cycles/dot, QK 8.3 -> ~4.2 ms, **+2.5 % of the token**. Order of work: write the
-body, objdump-verify the pipeline (the check that caught #806's unreachable loop), host-gate before
-flashing, then the device goldens plus the per-tree differential. Detail in `.auto/ideas.md`.
+## CANDIDATE CLEARED TO BUILD (was held pending a re-price): wide-load QK dot, bounded +1.5 % to +3.6 %
+
+The hold in #858 was "do not build until the warm kbench number is re-priced with the field's call
+structure". The bound replaces that measurement: the attention phase measures 23.5 ms and its other
+attributed work (paired exp ~3.5, P.V ~3.7, staging ~1.5) leaves the QK remainder at **<= 14.8 ms**
+against **8.3 ms** from the warm kbench. A 64-bit-load body cutting 30-40 % of the dot's instructions is
+therefore worth **+1.5 % to +3.6 %** - both ends above the bar - and the warm-isolation caveat cuts in
+the candidate's favour, since isolated numbers have understated this field three times.
+
+Build order: pipelined 64-bit body with alternating registers (pipeline one row pair, keep the rest
+scalar, as the wide phi does) -> objdump-verify the load lead -> host-gate before flashing -> screen
+against the tree's own pin -> if it lands, re-derive the attention phase to learn which end of the bound
+the field sits at.

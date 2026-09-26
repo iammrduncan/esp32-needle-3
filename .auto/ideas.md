@@ -684,3 +684,27 @@ state-sensitive - one pure transport change flips exactly that pair while every 
 byte-exact. The owner's options are the same whichever the mechanism is: keep the ring and
 re-baseline/replace those two cases, drop the ring and lose the fix, or keep them as blockers. Further
 probing would be curiosity, not decision support.
+
+## MEASURED: heap layout is bit-reproducible per tree and identical across all three boards
+
+The `STATE` line carries **two** `free_internal_bytes` readings per run (one at model open, one after
+prefix priming), which is why a careless grep appears to show two different figures for one tree. Read
+properly, across ten recent runs:
+
+| tree (PROV_ENGINE) | free internal (open / primed) | free PSRAM | boards |
+|---|---|---|---|
+| `d6b8014fd2fb` (best) | **10,663 / 11,419** | 517,028 | 1, 2, 3 - identical |
+| `36ccbdc32f3e` (seed line) | 11,183 / 11,931 | 50,088 | 2 |
+| `0123a47b5551` (shippable) | 9,439 / 10,195 | 517,028 | 1 |
+| `efa82fec3f6a` (snapshot) | 9,439 / 10,195 | 517,028 | 1 |
+
+Two consequences, both useful:
+
+1. **It strengthens the #647 layout closure.** The best tree's allocation layout is *identical on all
+   three boards and identical across runs* - same internal free, same PSRAM free to the byte - so the
+   ring cannot be changing the model's layout, and a layout-dependent read of uninitialised state is
+   ruled out across boards as well as by placement.
+2. **It corrects a figure I used in the previous entry.** The phi half-residency feasibility check
+   quoted "11,707-12,087 B free" - that reading belongs to a *different* tree (the seed line's
+   11,183/11,931). The best tree's primed free internal is **11,419 B**, so 6 phi rows (9,216 B) still
+   fit with 2,203 B to spare and the retirement stands unchanged; only the cited number was wrong.

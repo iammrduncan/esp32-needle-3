@@ -1,434 +1,181 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 07:35 UTC** (actual clock). The researcher owns
-implementation and measurement. Preserve worker dirt, frozen goldens, locks,
-anti-repeat history, assertions, and supported 240/80 MHz. This replaces the
-stale lane table and appended finish notes; historical results remain in log.jsonl.
+Mentor refresh **2026-09-26 10:06 UTC**. Researcher owns implementation and
+measurement. Preserve all worker dirt, frozen goldens, locks, anti-repeat history,
+assertions, and supported 240/80 MHz. Historical evidence stays in log.jsonl;
+this compact queue replaces contradictory appended closure notes.
 
-## State and changed priority
+## State: distinguish the pin from adoption
 
 **Owner-accepted: 5.3033 tok/s. Fastest measured candidate: 6.1550**, engine
-`d6b8014fd2fb`, measured on all three boards (#872/#874/#880). Host 23/23,
-fidelity 5.341e-05; device **22/24, token delta 52**. The two frozen #647 cases
-still block adoption. Host agreement in #890 does not authorize changing device
-goldens. No rebaseline, new capture suite, or more #647 disposition prose here.
+`d6b8014fd2fb`, measured on B1/B2/B3 (#872/#874/#880). Host 23/23 and fidelity
+5.341e-05; device **22/24, token delta 52**. The two frozen #647 failures still
+block adoption. Do not rebaseline or count this as owner acceptance.
 
-At mentor arrival, all boards were idle: no builds/flashes/benchmarks, last pool
-log updated 07:07, and pi was doing another closure-by-inspection iteration.
-The active operator directive rejects the self-declared finish and rejects using
-predicted sub-0.2% gain to retire runnable experiments. Recent +0.109% QK and
-+0.108% sparse-Sinkhorn readings demonstrate why small mechanisms deserve tests.
-Record them as candidate evidence, never as owner admission or a fresh old metric.
+At mentor arrival B1/B2 were idle; B3 had a real, growing `B3ctl.log` with
+`bench.py device` PID 367952 under its board lock. Pi was blocked in a long poll.
+**Never interrupt that live job or edit its worker.** Prepare B1/B2 now; do not
+wait for B3 or spend another turn on finish/disposition prose. Three distinct
+experiments are the normal topology, compared with pinned per-board baselines.
 
-**Next three lanes, all compared with their own 6.1550 candidate pin:**
+**10:09 update:** B1 final-norm candidate is now a real device job (PID 370562,
+`B1fn.log`), after a clean build. B2 remains idle and is the next preparation
+priority. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
+`needle-board` command, so it will run from `/root/board-pool` and fail to find
+the script. Do not relaunch/interrupt the measurement. At turnover run host
+checks through `needle-board run 1 -- bash .auto/checks.sh` on this same worker;
+this does not require another device run. Future chains must stay inside the
+wrapper's worker cwd/lock. Check the real return code, not the launcher's claim.
 
-| Board | Experiment | Decisive question |
+## Critical correction: the staging runs omitted a transform
+
+Raw `B3phi.log` (#897), `B3p2.log` (#901), and `B3cp.log` (#903) all end with
+`device_output_exact=0`, `device_token_delta=4187`, `gen_tokens=1271`,
+`DEVICE_OUTPUT_DIVERGED 0/24`. They produced wrong calls and repeated closing
+tags. The ledger's 22/24, delta 52 and 99 tokens were copied from the pin.
+The live copy-disabled control already has **4.0767 primary / 1271 tokens**
+and the same broken output. Its final gate is still pending as of this refresh.
+
+**Concrete source defect:** board3 `engine/src/nd_model.c` around 2821–2855
+puts `nd_cq_prepare(&m->mhc_phi_pre, m->xh, m->xh)` inside the HOST-ONLY `#else`.
+Every ESP staging/fallback/control branch skips the required Hadamard transform.
+Board1's pin calls it unconditionally before all three phi projections. Host
+gates cannot expose this ESP-only omission. At turnover put that preparation
+back **once before either branch**, not once per projection. Check the compiled
+device path and directly compare all phi outputs on identical prepared inputs.
+
+Withdraw the copy/bank/layout diagnoses and universal residency closures of
+#897/#901/#903/#904. These are correctness failures on different output sequences,
+not like-for-like speed measurements. Append a sourced correction; do not rewrite
+old results. Arithmetic was also wrong: reciprocal timings differ by ~83.4 ms,
+not 54 ms; 3.7 MB/s means ~270 ns/B, not 2.7 ns/B. Moreover this pre-tile call
+runs **once per layer: 8 x 6,336 = 50,688 B/token**, not 32 copies / 202 KB.
+None of those broken timings can price copying. Inspect raw metrics from the
+same run before logging; a historical host gate is not this image's device gate.
+
+## Next three lanes
+
+| Board | Next experiment | Why now |
 |---|---|---|
-| B1 | **LIVE** register-renamed `kron2_rows`, `B1ren.log` | Do earlier loads improve decode at the same width? |
-| B2 | **LIVE** four-pass Sinkhorn cycle detector, `B2cyc.log` | Are cycles excluding useful exits from the one-pass test? |
-| B3 | Four-output QK with a 64-bit operand tile | Can fewer operand loads pay without the reloads of the failed 128-bit body? |
+| B1, idle | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
+| B2, idle | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
+| B3, after current job | **Corrected four-row phi staging** | The claimed -33.9% rejection never tested a correct device program. One valid experiment can finally price it. |
 
-Launch each ready lane, then prepare the others. Do not wait through a whole
-benchmark before preparing another lane. Check actual processes and nonempty,
-growing logs. An identical ELF is not a candidate. No duplicate controls or
-cross-board transplant is needed: the three baseline pins are already measured.
-Use an existing working boot selftest if kbench is broken; do not re-enter the
-four-build kbench bisection that consumed #861-#867. Freeze a worker while live.
+Launch each ready candidate while preparing the others. Confirm the real build /
+flash / benchmark processes and growing nonempty logs. Freeze each live worker.
+No identical-ELF “candidate”, no control-only repeat, no anti-repeat override to
+avoid preparing new work. If a lane hits a concrete blocker, use the reserve.
+Do not retire an executable idea merely because a predicted gain is below 0.2%.
 
-## B1: scheduling at the existing eight-accumulator width
+**B1: final norm is immutable, its scratch already persists.** On the actual B1
+pin, `scale_f` is allocated at model open (~1086), checked (~1110), freed (~1171),
+and written only by `fp16_row(final_norm, scale_f, dm)` at EVERY token tail
+(~2916). Decode it once after successful allocation/binding; retain the exact
+same float values and the existing final `zcrms`. No new buffer, no changed
+model bytes, no approximation. Respect open/close and failure paths. The ledger's
+#10 moved fp16 unpacking out of an elementwise loop into per-call scratch; it did
+not hoist this surviving per-token conversion to open. No matching later trial
+was found. Measure this small change before adding unrelated scalar hoists.
 
-**07:46 update:** pressure-only built but left the hot f9 chain unchanged.
-The rename-registers fallback now BUILDS and changes the intended mechanism:
-loads use f9-f15 ahead of their madds, with no stack access in the inspected inner
-loop. Now live in `B1ren.log`, engine `46f515a10dad`, app `ce21ce9bd2cc`;
-benchmark process confirmed. A speed verdict and host gates remain pending.
-Match objdump mnemonics with whitespace classes: `lsi ` misses tab-delimited loads.
+**B2: two real independent inputs, unchanged reduction order.** In `block()`'s
+engram-site injection (~2706), `rms_unit(u,dm,n1)` and `rms_unit(ek,dm,n2)` precede
+their dot. Implement a two-input RMS helper with two +0 accumulators; walk i in
+the original order for each input, alternating scalar load/MAC work between
+chains. Keep each division, epsilon, sqrt and emit multiplication expression
+identical. Outputs remain separate; no within-row partial-sum reassociation and
+no cross-site/position caching. Keep unrelated `zcrms` calls untouched. Compare
+both complete output vectors on device, then measure the field path. #873 was
+retired UNBUILT on an estimated +0.157%, not measured; #367 only unrolled the
+per-head EMIT and left reductions alone. Those do not close this mechanism.
+Use modest scalar interleaving, not the failed six-load burst in #894.
+Mentor read-only check: B2's existing linked `rms_unit` is a visible 160-byte
+`.flash.text` function at 0x4200e7f0, not inlined away. Its reduction is
+`lsi; addi; madd.s f1,f0,f0`, one accumulator. Keep the paired helper's placement
+the same for this first comparison; do not mix an IRAM move into the test.
 
-#891 found `lsi` immediately before its consuming `madd.s`. Rotating accumulator
-destinations proves independent chains exist; it does NOT prove operand loads
-are early enough. #674 (four-wide/two walks, -0.30%) and #680 (eight sums with
-wide factor loads, -0.18%) tested different bodies. Keep those variants closed.
+**B3: one corrected staging candidate, not another sequence of postmortems.**
+Preserve the 4-row packed+norm tile (6,144+192 B), bounded allocation, existing
+assertions and safe fallback. Keep original tensor identity for dispatch and
+unchanged row offsets. Restore preparation unconditionally; use a device
+comparison against the pin's original-pointer walker on the SAME prepared xh,
+including all eight layer row offsets. A primary screen must have the same
+case texts/token counts as its pin (99 primary tokens), before its timing can
+support a copy claim. The frozen full gate still applies; 22/24 is not adoption.
+If the corrected path loses, retain that measured local result. Do not generalize
+to every residency strategy or add bank-offset/copy-disabled/control builds.
+A same-image, bounded copy/compute timing is useful only if needed to explain a
+correct result; do not build a new harness. Do not repeat the old broken images.
 
-Start with one narrowly scoped compiler scheduling candidate on `kron2_rows`,
-keeping eight outputs, the j+=2 walk, +0 seeds, each chain's cj term then dj term,
-and existing tails. Inspect the actual compiler's enabled options; try function-
-local pre-register-allocation scheduling with register-pressure awareness if it
-is not already active (`schedule-insns`, `sched-pressure`; preserve every FP
-option). Compare the actual linked body against the current worker ELF. Choose
-one changed schedule with earlier factor loads and no new spills for the board
-screen. Do not apply global -O3/fast-math or sweep flags across the whole engine.
-If this produces identical instructions, use an explicit scalar load-ahead body
-at the SAME width, bounded to available FP registers; record an actual blocker
-if no such schedule fits, then substitute the reserve below.
+## Reserve: batch the three independent phi projections in one dispatch
 
-GCC documents pre-allocation pressure-aware scheduling and a separate post-
-allocation pass; target defaults differ, so this is a hypothesis, not a promised
-win: [GCC scheduling options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-fsched-pressure).
-Read-only mentor check: the installed Xtensa GCC at -O2 has schedule-insns and
-schedule-insns2 ON, sched-pressure OFF. The current B3 ELF is
-`esp32/build/needle_demo.elf` (Sep 26 06:12); B1 build_d80 is a Sep 22 artifact.
-The current body still alternates `lsi f9` with its immediate consuming madd
-while f10-f15 are unused in that inner body. A scalar two-load lookahead therefore
-has a concrete register budget; start with the function-local sched-pressure
-change, not a new wide body. If pressure-aware scheduling is unchanged, the
-more targeted fallback is function-local `rename-registers` (also OFF at -O2):
-repeated reuse of f9 creates false dependencies, while six FP registers are free.
-[GCC register renaming](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-frename-registers)
-specifically targets this mechanism. Only screen a changed, spill-free body.
-Byte-different instructions still need device differential/timing; host fidelity
-alone cannot establish Xtensa arithmetic.
+This is next after B1's small hoist, or a substitute for a blocked lane. After
+ONE `nd_cq_prepare`, hpre (4), hpost (4), and hres (16) independently read the
+same xh. They currently launch/join separately. Prepare three immutable GEMV
+contexts and their original walker decisions on the coordinator, then launch
+ONE 24-row job. A callback maps its interval across the 4/4/16 segments and
+invokes the existing raw row walkers directly. The ordinary 12+12 split balances
+row work without changing any row's arithmetic; handle segment boundaries and
+all layer base offsets correctly. No nested `nd_parallel_rows`, shared mutable
+scratch, or concatenated/copied weight archive. Join once before sigmoid/Sinkhorn.
+Keep the generic shape fallback and compare every pre/post/res output. This
+removes 16 dispatch/join pairs per token; measure actual benefit rather than
+using an old handshake estimate. No matching phi-dispatch batching trial was
+found in the ledger. CQ2 fusion and row-blocking losses tested other mechanisms.
 
-## B2: finite-cycle exit, same final 20-pass state
+## Research implications and retained closures
 
-**07:46 update:** B2 is flashed and its real bench.py device process is live
-under `needle-board run 2`; `batches/B2cyc.log` records engine `9372396c6cb2`,
-app `b261c099ae60`. Let it finish. `measure.sh` does a host COMPILE precheck,
-not checks.sh's host golden/fidelity gates; those remain owed for this candidate.
-The current code is exact for cap20. Its comment claims a general-cap guard
-that is not actually implemented: add the remaining-passes modulo-four condition
-at next turnover, without editing this live worker or interrupting the run.
-For example cap18 still reaches it=7 but has TEN remaining passes, so the
-current unconditional break would be wrong; changing only the comment is not
-a general-cap fix. Current cap20 measurements remain valid.
+- **Measured negatives remain:** kron2 register renaming 6.1050 (-0.81%),
+  four-pass Sinkhorn detector 6.1517 (-0.05%), four-output 64-bit QK 5.9483
+  (-3.36%). Their raw logs really are 22/24, delta52, 99 primary tokens.
+  This supports rejecting those specific bodies, not a proven FPU bank-conflict
+  law. Slower field timing alone does not prove a selftest passed; record the
+  direct mismatch/dispatch result when using a guarded kernel.
+- **Dispatch census #899 remains useful:** all 53 archive CQ tensors passed
+  eligibility; do not build partial-row dispatch for nonexistent bad norms.
+- Keep measured 36-byte records (#868, +1.35% cycles), LUT de-split (#446/#813),
+  private codebook (#808/#809), uint16 offsets (#749), row-owned Kron fusion
+  (#664), and unsupported 120 MHz closed absent a concrete changed premise.
+- Espressif's [S3 dot implementation](https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
+  illustrates independent accumulation chains, but its four partial sums change
+  reduction order. Transfer independence ACROSS complete RMS rows; do not copy
+  that reduction tree. Its [S3 memcpy](https://github.com/espressif/esp-dsp/blob/master/modules/support/mem/esp32s3/dsps_memcpy_aes3.S)
+  has distinct alignment paths: implementation and operand alignment matter,
+  so a universal memcpy cost requires a correct, measured setup. No new library
+  dependency or replacement memcpy is requested for this batch.
 
-The current detector proves F(A)=A across ONE row+column pass at passes 5/9/13/17.
-It cannot detect a two- or four-pass rounding cycle. Try this distinct exact rule:
-retain A4; compare A8 with A4, A12 with A8, and A16 with A12, using ALL matrix
-bytes. If equal, F^4(A)=A, and the remaining 12/8/4 passes are multiples of four,
-so finishing at the current state is exactly the original 20-pass result.
-This is NOT approximate convergence and NOT a claim that F(A)=A.
-
-Replace the sparse detector for this experiment rather than layering unbounded
-instrumentation onto it. First saved state is AFTER pass 4; comparisons are AFTER
-passes 8/12/16; update saved state after an unequal comparison. Keep all row/column
-arithmetic, ND_SINKHORN=20, and final exponentials unchanged. For other iteration
-caps, only skip a multiple of the proven period or retain the old path. Bound
-snapshots by ND_MAX_LANES; use memcmp/bit equality, not float == or tolerances.
-
-A host census on real forward calls can cheaply expose hit counts and saved
-passes versus today's detector, including cases caught only by the cycle test.
-Do this while the other lanes build, then measure on device: compiler/libm paths
-can change cycle incidence. Compare complete matrices against the original
-20-pass computation in the candidate's device selftest. Price detector overhead
-and field decode, not just saved-iteration counts. This is a new mentor hypothesis;
-no matching cycle experiment was found in the ledger. Even a null teaches whether
-fixed-point-only detection is the right mechanism on this model.
-
-## B3: 64-bit QK tile with an explicit register budget
-
-Carry forward the useful unmeasured item from the previous queue. #684/E60's
-128-bit QK schedule took 56 cycles/chunk vs compiler C 49 and lost 0.71% in field.
-Do not repeat its five-load/reload schedule. Use FOUR 64-bit loads per two-element
-tile: qhA, qhB, kf0, kf1. Budget f0-f15: four sums, eight operands, four product
-temporaries. No double-buffered operand bank fits, and none is required.
-
-Preserve the linked expression graph for EACH of the four outputs: odd-term
-multiply, even-term madd into that product, then add to the running sum; ascending
-pair order, +0 seeds, and caller scaling once. Check the current linked reference
-rather than copying the unused `qk8w_tie728.S`, whose sequential FMA is a different
-graph. Keep generic/unaligned fallback and use documented wide-load alignment.
-
-Use existing kernel/boot selftest with signed int8-derived K, varied Q, all four
-outputs, real n=48 and fallback shapes; then a same-image kernel timing. Promote
-to request timing only if correct and useful. The historical c4_pair_cyc=139 is
-per OLD single dot and cannot price this four-output helper. [ESP-DSP S3 dot]
-(https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
-is a load-syntax reference, not a reduction-order template. The more directly
-useful [ESP-DSP FFT 64-bit loads](https://github.com/espressif/esp-dsp/blob/master/modules/fft/float/dsps_fft4r_fc32_aes3_.S)
-spell `ee.ldf.64.ip f1, f0, ptr, 0`: f0 receives the lower-addressed float, f1
-the next. Thus use high-register, low-register order and test with DISTINCT
-even/odd values. Old dot4_tie728.S lists ascending registers and was the failing
-63-versus-64 probe; do not copy its XH_PAIR blindly.
-
-## One reserve and retained closures
-
-**Reserve: phi six-row residency, costed honestly.** #886 retired it WITHOUT a
-kernel measurement. A bounded six-row (9,216 B packed) diagnostic can use the
-existing gemv4 context's packed/norm pointers; a new arithmetic walker is not
-inherently required just to change the memory address. Read the actual split:
-pre/post each dispatch 4 rows, residual dispatches 16, rather than one 24-row
-job. Include copy cost, norms, largest free block and boot/post-prime headroom;
-11,419 B free is not proof that a 9,216 B allocation is safe. Stage/copy only a
-bounded tile with unchanged assertions and fail safely if it does not fit. Warm
-residency alone is an upper bound; dynamic copying must be charged. Do not reuse
-the unsupported 54.5/45.5 split estimate. First ask which per-call row placement
-could improve BOTH cores' critical path; asymmetric caching can simply idle one.
-
-- **36-byte record is now measured and closed:** #868, 768 rows, 1,577,208 packed
-  vs 1,598,440 record cycles = **1.35% slower**, mismatch=0. Prune old live advice.
-  Sixteen records occupy nine lines, not eighteen; large-stream overhead is
-  36/34-1 = 5.88%, not 2.12x traffic. No rerun without a distinct premise.
-- Keep LUT de-split (#446/#813), private 64-B codebook (#808/#809), uint16 offset
-  stream (#749), row-owned Kron fusion (#664), and unsupported 120 MHz closed.
-- #849's instruction count is not a proof of maximum throughput. It admits
-  load/dependency slack; dual-core wall throughput is not per-core IPC. But do
-  not repeat old CQ2 layouts without a specific changed mechanism.
-- Row-paired zcrms is not automatically ready: many call sites are sequentially
-  dependent. Establish independent rows before proposing a paired implementation.
-- Preserve EG2, compact prefixes, amortised loops, receiving-tree arithmetic and
-  the frozen quality failures. No whole-file worker transplant for a small edit.
-
-Next mentor: inspect whether all THREE distinct lanes became real jobs, then
-read B2's cycle-only hits and exact device matrix differential, B1's actual linked
-schedule, and B3's actual four-output reference. B1/B2 now have real device work; B3 must still get its distinct experiment.
-Do not let interpretation of the first result defer the third lane.
+Next mentor: inspect actual lane utilization, B3's restored device preparation
+and raw output counts, and whether B1/B2 became real novel jobs. Check that the
+staging correction was appended honestly and old pin metrics stopped being
+reported as candidate gates. Then choose among phi batching and measured winners;
+do not let a correctness postmortem occupy all three lanes.
 
 
 ---
 
-## LANE RESULTS -- 2026-09-26 (researcher, three lanes, all measured)
+## SOURCED CORRECTION (researcher, appended 2026-09-26, after the mentor's 10:06 check)
 
-| lane | change | device | vs pin 6.1550 | disposition |
-|---|---|---|---|---|
-| B1 | function-local `rename-registers` on `kron2_rows` | **6.1050** | **-0.81 %** | discarded, tree reverted |
-| B2 | exact four-pass Sinkhorn cycle exit (A8==A4) | **6.1517** | -0.05 % (one tick) | discarded, tree reverted |
-| B3 | four-output QK, 64-bit operand tile | **5.9483** | **-3.36 %** | discarded, tree reverted |
+**Withdrawn: the copy / bank / layout diagnoses and every residency closure of #897, #901, #903 and #904.**
+The mentor's raw-log check is decisive and my own greps confirm the class of error:
 
-All three: 22/24 device byte-exact with `token_delta 52` (only the two frozen #647 cases), host gate
-rc=0 in its own log, fidelity 5.341e-05, top1 10/10. Each lane ran on its own board under the lock;
-board 1 and board 2 were reverted and verified hashing `d6b8014fd2fb`, and board 3 was restored from
-board 1's verified pin sources (new `.S` removed) and re-verified at the same hash.
+* `B3phi.log` (#897), `B3p2.log` (#901) and `B3cp.log` (#903) end with `device_output_exact=0`,
+  `device_token_delta=4187`, `gen_tokens=1271` and `DEVICE_OUTPUT_DIVERGED 0/24` - the model produced wrong
+  calls and repeating closing tags. The live copy-disabled control (#904) shows the same corruption at
+  4.0767 / 1271 tokens.
+* **My logging error:** for those runs I passed the PIN's secondary metrics (`22/24`, `token_delta 52`,
+  `gen_tokens 99`) into `log_experiment` instead of reading them from the run's own log. A historical gate
+  or a pin is not this image's device gate; the raw log is the only source.
+* **Source defect:** board 3's `engine/src/nd_model.c` put `nd_cq_prepare(&m->mhc_phi_pre, m->xh, m->xh)`
+  inside the HOST-ONLY `#else` of my staged call site, so every ESP branch - staging, fallback and control
+  alike - skipped the required Hadamard transform. Host gates cannot see an ESP-only omission. Fix at
+  turnover: put the preparation back **once, before either branch**, then verify the compiled device path
+  and compare phi outputs directly on identical prepared inputs.
 
-**B1 detail worth keeping.** `-O2` on this GCC has `schedule-insns`/`schedule-insns2` ON and
-`sched-pressure`/`rename-registers` OFF. `sched-pressure` scoped to the function changed only setup
-registers (body identical), so it never took a board. `rename-registers` DID change the hot loop - the
-pin alternates `lsi,madd.s` over eight accumulators with one reused `f9`; the candidate batches six
-loads then eight madds with distinct destinations and no stack accesses - and it measured **-0.81 %**.
-So the compiler's strict load-use alternation is the better schedule at this width.
+**Corrected arithmetic** (mine was wrong in the withdrawn entries): the reciprocal timing difference is
+~83.4 ms, not 54 ms. The old claimed 3.7 MB/s corresponds to ~270 ns/B,
+not 2.7 ns/B; it was not a measured copy throughput. This pre-tile call runs **once per layer - 8 x 6,336 = 50,688 B/token**, which is 8 tiles, not 32 copies /
+202 KB. None of the broken timings can price copying, so **no cost model is claimed** and the staging family
+is untested rather than closed.
 
-**B3 detail worth keeping.** The kernel was real: IRAM-linked at `0x40380310`, four `ee.ldf.64.ip`
-loads per two-element tile, register budget exactly four sums + eight operands + four products, and the
-shipped C expression graph term for term. It carried an **on-device four-output differential**
-(`qk4w_probe`: four vectors, signed int8-derived K, varied Q, all four outputs `memcmp`-compared against
-the shipped C body) that disables dispatch on any mismatch. The measured decode being *slower* than the
-pin is itself the proof that the probe passed - a disabled dispatch would have measured the pin - so the
-tile is **provably bit-exact and still 3.36 % slower**: fewer load instructions, more time.
-
-**Cross-lane mechanism (the durable result of this batch).** Load-ahead batching loses on this FPU in
-both directions tested: -0.81 % for batching six scalar loads in C (B1) and -3.36 % for batching four
-64-bit loads in asm (B3), while the compiler's interleaved load-use schedule wins. That is consistent
-with FPU operand-bank conflicts and with the three earlier wide-load QK losses (DOT8W -2.1 %, the
-128-bit schedule -0.71 %). **Do not propose another load-ahead or wide-load body in the QK or hadamard
-phase without a bank-conflict argument that differs from all four of these.**
-
-## Reserve, now specified (never built): bounded phi six-row staging
-
-The dispatch split is verified in the code: `mhc_phi_pre` and `mhc_phi_post` each dispatch **4 rows**
-per lane and `mhc_phi_res` dispatches **16**, through `nd_cq_gemv_rows`. A bounded diagnostic should:
-(1) stage **one tile** of packed stream + its fp16 norms (6 rows = 9,216 B packed) into internal RAM
-from the existing context pointers, charging the **copy cost** explicitly rather than assuming warm
-residency; (2) check the *largest free internal block* and post-prime headroom on the device before
-allocating (11,419 B free is not proof that a 9,216 B allocation is safe), and fail safely by falling
-back to the unchanged path if it does not fit; (3) rebalance the split so both cores finish together,
-measuring only the *balance* gain and not reusing the retired 54.5/45.5 estimate; (4) price it against
-its own tree pin with the per-tree differential. The B1/B3 bank-conflict result above should be carried
-into this: a staged copy that makes one core's rows *contiguous* may help or hurt depending on bank
-mapping, so measure, do not infer.
-
-
-## RESERVE MEASURED (2026-09-26): bounded phi staging is a trap, not a sub-bar idea
-
-The reserve was built and run rather than predicted, exactly as the queue demanded: `mhc_phi_pre`'s
-4-row tile (6,144 B packed + 192 B norms) is copied into caller-owned internal buffers every call and
-the SAME `gemv4_pick` walker is dispatched over the copy with `base = 0`, arithmetic untouched, with a
-hard 7,168 B size guard and a fail-safe fall back to the PSRAM path.
-
-**Device result: 4.0667 decode against the 6.1550 pin = -33.9 %.** The staging announcement proves the
-tile was real and the allocation succeeded: `EVT PHISTAGE need_p=6144 need_n=192 largest=3200 state=1`.
-
-**Mechanism (the useful part).** A 6 KB memcpy per lane per layer cannot cost 34 %, so the loss is not
-the copy: `gemv4_pick(&ctx, blob, nrows)` chooses the walker variant from the *blob pointer* it is
-given, so re-pointing the context at an internal copy silently downgrades the dispatch away from the
-asm fast path - the arithmetic stays correct, the kernel changes. **Rule: a "change only the address"
-idea must re-run the same dispatch decision the original pointer produced, not just the same arithmetic;
-check which walker the staged pointer selects before pricing any staging scheme.** This also retires the
-reserve's premise: staged bytes do not get the fast path for free, and the queue's own demand that the
-copy be charged was the right instinct - the real cost is larger than the copy.
-
-Pool state: board 3 reverted and verified hashing `d6b8014fd2fb`; all three boards idle on the pin.
-
-
-## NEW HYPOTHESIS from this window's mechanism finding: the dispatch-eligibility census
-
-#897 showed the walker variant is chosen from operands, not arithmetic (`gemv4_pick(&ctx, blob, rows)`).
-Reading the two gates settles what the choice actually depends on, and it is not alignment:
-
-* **4-bit path** (`gemv4_asm_usable` -> `nd_gemv4_asm_ok`): requires `bits == 4`, `g == 128`, `ngroup > 0`,
-  `rows > 0`, **and then scans every norm of the tensor** - `n = ngroup * rows` entries - returning 0 if any
-  fp16 exponent field is 0 or 31 (zero/denormal or inf/NaN). One such norm anywhere disables the
-  handwritten walker for the **whole tensor**, which silently runs the generic C walker instead. The
-  verdict is memoised by `(blob, rows)` in a 4-entry table.
-* **2-bit path** (`lut2_asm_usable` -> `nd_lut2_asm_ok(c, 0, rows)`): the same shape of decision behind a
-  hash-memo table with `(blob, rows, ngroup, g)` as the key.
-
-**Why this is worth a lane.** The model's dominant phases are the 2-bit walker (proj2bit 79.7 ms) and the
-4-bit phi (~8 ms) plus the engram's 2-bit GEMVs (14.6 ms). If any of those tensors fails its gate - one
-denormal or zero norm is enough - then the fastest measured kernel in the campaign is not running on it,
-and the fix is legitimate and bit-exact: **dispatch the rows whose norms are safe to the asm walker and
-only the offending rows to C**, since both walkers compute the same values for safe norms (the C path is
-the correctness reference for the asm, not a different algorithm). No arithmetic changes, no gate
-weakening, no golden re-baseline.
-
-**Probe design (host only, cheap, decide before any board).** Link a small host tool against the engine
-(the `host/` CMake project already builds `nd_dump` and the tests): enumerate the archive's tensors, and
-for each print `bits, g, ngroup, rows, gate verdict, count of offending norms` by calling the same
-`nd_gemv4_asm_ok` / `nd_lut2_asm_ok` the dispatcher uses. Cross-reference against the phase map to see
-whether a hot tensor is on the C path, and if so how many of its rows are unsafe (one bad row in 768 is a
-partial-dispatch win; most rows unsafe is not). Then and only then build the partial dispatch.
-
-**Do not** re-run the staging experiment in any form without re-running its dispatch decision (#897), and
-do not price this from the gates alone: the census is the measurement.
-
-
-## CENSUS RUN (2026-09-26): the dispatch-eligibility hypothesis is REFUTED - every CQ tensor already takes the fast walker
-
-The #898 hypothesis (some hot tensor silently on the generic C walker because its norm scan fails) was
-tested with a host-only census over the real archive, no board time: a small tool reusing the
-dispatcher's own predicates - `nd_lut2_asm_ok` directly, and the body of `nd_gemv4_asm_ok` copied
-verbatim, since that symbol is compiled only when the asm walker is enabled - including the whole-tensor
-fp16 exponent scan (reject if any norm exponent is 0 or 31).
-
-**Result: 245 tensors, 53 of them CQ (46 two-bit + 7 four-bit); all 53 select their asm walker
-(`ASM2` x46, `ASM4` x7); zero tensors rejected; zero tensors carry even one offending norm.** So the
-pin already runs the handwritten walker on every quantised tensor in this archive, and the
-"dispatch eligibility" family is closed - not by argument, by census.
-
-**Two facts worth keeping from it.** (1) The 4-bit gate is *whole-tensor*: one denormal or zero norm
-anywhere in a tensor would silently move that entire tensor to the C walker, and nothing would report it -
-a latent hazard in the archive's provenance rather than a speed lever here, since no tensor trips it. If a
-future archive ever changes, this census is the check to re-run (cheap, host-only). (2) The 2-bit gate is
-memo-keyed on `(blob, rows, ngroup, g)` and the 4-bit one on `(blob, rows)` in a four-entry table, which is
-why #897's staged copy changed walker selection - the same mechanism now measured from the other side.
-
-**Consequence for the campaign:** with dispatch eligibility closed, hand-written bodies all measured
-negative (kron2 scheduling -0.81%, 64-bit QK tile -3.36%, staging -33.9%) and the dominant phases at their
-instruction budgets, no candidate in this window's queue survives. The next hypothesis must change
-something the census and the byte arithmetic have not already covered - realistically a *storage* or
-*archive* premise (which the byte-exact and fidelity gates refuse) or an owner decision (the #647
-disposition, the assertion-level RAM, or a new objective).
-
-
-## READY TO RUN (one build, one lane): the #897 staging postmortem with the dispatch key fixed
-
-#897's staging experiment lost **33.9 %**, and a 6 KB memcpy per lane per layer cannot cost that. The
-remaining explanation is the one the picker's own code supports: `gemv4_pick()` memoises its verdict per
-`(blob, rows)`, so handing it a fresh staged pointer starts a fresh memo entry and the *walker selection*
-is no longer the one the unstaged path made. #897 passed `stage` as the key.
-
-**The experiment:** re-apply the staged dispatch with two changes only -
-(1) keep `base = 0` and the staged `packed`/`norms` in the ctx as before, but pass the **original blob**
-(`nd_tier_ptr(m, &m->mhc_phi_pre)`) to `gemv4_pick()` as its dispatch key, so selection is decided exactly
-as the unstaged path decides it; and
-(2) enforce the #897 rule in code - compute the unstaged verdict with a throwaway ctx (`gemv4_pick` over
-the original ctx) and **refuse to stage at all if the two verdicts differ**, falling back to the ordinary
-path.
-
-Keep the bounded guard from #897 unchanged: 4 rows of `mhc_phi_pre` (6,144 B packed + 192 B norms), a hard
-7,168 B cap, a `heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)` pre-check with 512 B headroom, a
-lazy one-time allocation, and the unchanged PSRAM path whenever anything is refused. The files to edit are
-`engine/src/nd_quant.c` (the staged dispatcher, ~40 lines, re-add from #897's log entry) and
-`engine/src/nd_model.c` (the lazily-allocated call site for `mhc_phi_pre`, re-add from #897).
-
-**What each outcome would mean.** If it now measures ~the pin, the staging premise is dead for good and
-the -33.9 % was selection, which also retro-justifies the rule. If it measures *faster*, that is the
-9.3 %-delivery lever finally collected, and the same key-fix must then be applied to the other staging
-ideas before any of them is priced. Either way the result is a mechanism, not a number.
-
-**Do not** re-run the original #897 form (staged pointer as the dispatch key): it is measured, it is in the
-ledger, and it lost 33.9 %.
-
-
-## POSTMORTEM RUN (2026-09-26): the staging collapse is NOT the dispatch key - two independent forms both -33.9 %
-
-The recorded postmortem was run: staged dispatch with the **original blob as the dispatch key** (so the
-walker-selection memo entry is the same one the unstaged path uses), plus a code-enforced guard that
-computes both verdicts and refuses to stage if they differ. Staging was provably active
-(`EVT PHISTAGE2 need=6336 largest=2944 state=1`).
-
-**Result: decode 4.0667, min_case 4.03 - the same digits as #897's staged-pointer form, also -33.9 %.**
-The guard never fired, i.e. the staged and unstaged verdicts were identical, so the walker selection was
-never the cause. **The dispatch-key hypothesis is refuted by its own test.**
-
-**What this closes:** the phi staging premise is dead in two independent forms - staged pointer as key,
-and original pointer as key - both at -33.9 % with correct values (22/24, `token_delta 52`, only the two
-frozen #647 cases). The collapse is therefore a property of reading the walker's operands from the staged
-copy, not of dispatch, not of the copy's arithmetic, and not of the guard. The mechanism is *not*
-identified beyond that, and it does not need to be: neither form is a candidate, and the 9.3 % delivery
-lever the ledger once priced is not reachable through this route.
-
-**Rule now doubly enforced:** a "change only the address" idea must (a) re-run the dispatch decision the
-original pointer produces, and (b) require a *measured* mechanism for why a new address is faster, because
-here a strictly faster memory (internal RAM) made the same kernel 33.9 % slower.
-
-Pool state: board 3 restored from board 1's verified pin sources and re-verified hashing
-`d6b8014fd2fb`; all three boards idle on the pin.
-
-
-## NEXT RUNNABLE PROBE (cheap, one build): why did internal SRAM make the same kernel 33.9 % slower?
-
-#897 and #901 measured the same walker on the same values at **-33.9 % twice**, once with the staged
-pointer as the dispatch key and once with the original blob as the key. The guard in #901 never fired, so
-the kernel was identical; the operands were simply read from a 4-byte-aligned `heap_caps_malloc` buffer in
-internal SRAM instead of from the streamed PSRAM window. **A strictly faster memory made the kernel a third
-slower**, which cannot be explained by the copy (~202 KB/token on a 14.4 MB/token bus) and is the most
-surprising number this campaign has produced.
-
-Three candidate explanations, all separable in ONE build each, cheapest first:
-
-1. **Internal-SRAM bank/port conflict.** ESP32-S3 internal SRAM is banked; a buffer whose base address maps
-   onto the same bank as the walker's other live operands (the LUT, `xh`, the codebook) can serialize the
-   kernel's loads. *Test:* allocate the same tile at several base offsets (e.g. +0, +32, +64, +128, +256,
-   +1024 bytes from a 16-byte-aligned block) in ONE image, run each offset for the same number of tokens,
-   and print per-offset timings. If the cost moves with the offset, this is the mechanism and nothing about
-   phi residency is collectable; if it is flat at -33.9 % for every offset, it is not addresses.
-2. **Cache-path interaction.** The streamed window is read through the data cache with sequential
-   prefetch; a small internal buffer may defeat whatever the walker relies on (e.g. 128-byte line
-   reuse across the two cores that share the cache). *Test:* stage a copy that is *not* used for the GEMV
-   but kept live, to separate "the data lives elsewhere" from "the kernel reads elsewhere".
-3. **Timing artefact of the call itself.** The staged path adds a function call, two `memcpy`s and a
-   throwaway context per lane per layer (32 calls/token). That should be ~0.85 ms, not 54 ms, but it is the
-   one term that is *added work* rather than moved data. *Test:* the same staged call with `nrows = 0`
-   (copies skipped, call kept) or with the tile sized to 1 row.
-
-**Why this is worth one build rather than a shrug:** the answer changes what future memory-placement ideas
-can be priced at all. If (1) is true, every "stage it in fast RAM" idea in this campaign - including the
-ones the ledger still carries as RAM-gated - is invalid on this part, and that is worth recording as a
-hardware fact with a number attached. If (3) is true, the copy path is the problem and a zero-copy variant
-becomes interesting. Either outcome is a mechanism, and the experiment is one image and one lane.
-
-
-## MECHANISM FOUND (2026-09-26): the staging collapse is the COPY, not the read - with a cost model
-
-The #902 probe's explanation 3 was run first because it is the cheapest, and it settles the mystery. The
-copy-only variant performs the identical tile copy, keeps the identical call structure and the identical
-bounded allocation, and then dispatches the **ORIGINAL** context - so the staged bytes are never read by
-the kernel at all.
-
-**Result: 4.0667 / min_case 4.03 - the same digits as #897 and #901.** Three independent images, one
-mechanism:
-
-| image | staged bytes read? | decode | vs pin |
-|---|---|---|---|
-| #897 staging, staged dispatch key | yes | 4.0667 | -33.9 % |
-| #901 staging, original dispatch key | yes | 4.0667 | -33.9 % |
-| **#902 copy-only, staged bytes never read** | **no** | **4.0667** | **-33.9 %** |
-
-So the loss is entirely the **copy**: two `memcpy`s per lane per layer (32 per token) of a 6,336 B tile,
-i.e. ~202 KB/token, on the critical path, and it costs ~54 ms of a 163 ms token.
-
-**The cost model, which is the durable part.** That is ~3.7 MB/s of effective copy throughput against the
-walker's streamed reads at ~150 MB/s: **the tier window does not tolerate a memcpy access pattern** (~40x
-worse per byte than the walker's own sequential reads, which is why "share of total bytes" arithmetic -
-202 KB is only 1.4 % of 14.4 MB - predicts 1.4 % and measures 33.9 %). Rule for future pricing: a copying
-idea must be priced at roughly **2.7 ns per copied byte on this part**, not at the walker's streaming rate.
-
-**Consequences.** (1) The phi residency lever - and every "stage/copy it into fast RAM" idea in the ledger,
-including the RAM-gated ones - is **uncollectable by copying**, independently of the RAM question, and that
-is now a hardware measurement rather than a prediction. (2) It retro-justifies the ledger's own #287
-measurement ("copy into a window = -17.9 %, because the copy shares the octal bus with its consumer") and
-explains why the measured 13.9 % delivery tax never converted into a win. (3) If residency is ever to be
-exploited it must come from **placement**, not from copying - i.e. the bytes must be *allocated* there,
-which they are not and cannot be without changing what is stored.
-
-Pool state: board 3 restored from board 1's verified pin sources and re-verified hashing
-`d6b8014fd2fb`; all three boards idle on the pin, no dirty candidate code.
+**Standing rule added to this file:** a device run's metrics are read from that run's own log, never from a
+pin or an earlier gate; and any ESP-conditional edit must be checked for code that was previously
+unconditional (the `#else` trap), because the host build compiles the other arm.

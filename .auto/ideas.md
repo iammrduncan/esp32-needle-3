@@ -213,3 +213,31 @@ re-reads 16 floats per j step *on purpose* - that is how it affords eight accumu
 Together with the earlier per-phase closures (engram at the LUT-GEMV floor, phi delivery-bound and
 unpaid, sinkhorn exp/log-bound, mix swept, transform measured on every axis), that is a complete
 account of where 163 ms goes and why none of it is addressable without changing what is stored.
+
+## SELF-CORRECTION: "one IPC across all phases" is NOT supported - only the two walker phases are
+
+I nearly recorded a tidy global claim ("every phase runs at the same effective IPC, so there is one
+bottleneck"), and the arithmetic refused it. Checked properly:
+
+| phase | ms | work used | instr/product | Mcycles | implied IPC |
+|---|---|---|---|---|---|
+| proj2bit | 79.7 | 14.36 M weights | 2.0 | 19.13 | **1.50** |
+| engram | 14.6 | 2.36 M weights | 2.0 | 3.50 | **1.35** |
+| phi | 8.1 | 73.7 K weights | 4.1 | 1.94 | 0.16 |
+| hadamard | 20.2 | 1.05 M products | 1.75 | 4.85 | 0.38 |
+
+The last two rows are absurd, and the fault is mine, not the engine's: those phase timers **bracket
+more than the multiply work** - `mhc_phi4` includes `nd_cq_prepare` and the LUT build alongside the
+GEMVs, and my hadamard product count was simply wrong. This is the ledger's own standing warning
+("the timers overlap; do not sum them") applied to a computation I was about to publish.
+
+**What IS supported:** the two phases that are *pure* 2-bit walker work - proj2bit and the engram's
+GEMVs - land at **1.50 and 1.35 IPC respectively**, i.e. the same kernel at the same measured rate
+(1.33-1.5), which is exactly the 24-ALU-ops-plus-slack accounting of #849. The other phases cannot be
+priced per weight from their timers at all, which is a statement about the instrumentation, not about
+the code.
+
+**Rule extracted:** never derive a per-operation rate from a phase timer whose bracket is not
+single-purpose. If a phase looks anomalously slow per unit of work, suspect the attribution before
+suspecting the kernel - this campaign has now done that twice (#295's phi "4.3x gap" was a units
+error; this is the same class caught before publication).

@@ -559,3 +559,34 @@ confirmed to the digit, 22/24 with only the two frozen #647 cases, host gates gr
 5.341e-05 unchanged); B1 = **5.9383** with the shippable line plus both forms. 6.1550 = +16.05% over the
 owner's accepted 5.3033 and +152.3% over the 2.44 session baseline. The single outstanding decision is
 the owner's disposition of the two ring-related held-out cases.
+
+## MEASURED: the #647 divergence is NOT console backlog or per-request timing (5 s gaps change nothing)
+
+The owner's packet has carried two competing explanations for the two frozen held-out cases: a
+per-request *timing/backlog* effect (the ring changes when bytes arrive relative to other work) or a
+*persistent state* the ring establishes earlier. The campaign's own ledger flagged the first as
+unproven ("ring correlation is not proof of the repeatedly claimed timer mechanism").
+
+**Tested, on the best tree, with the harness's own gap diagnostic** (`AUTO_GROUPS=extended
+AUTO_CASE_GAP_S=5`, i.e. five idle seconds before every request, so any console or firmware backlog is
+fully drained before each case):
+
+| | result |
+|---|---|
+| extended suite | **15/17 byte-exact** - exactly the same two cases |
+| token_delta | **52** - unchanged |
+| `heldout_long_tools_note_only` | still **63 tokens**, the same repeating chain, not the 67-token golden |
+
+So draining the console completely before each request does **not** restore the goldens: the divergence
+is not backlog, not per-request arrival timing, and not a transient that idles away. Combined with the
+earlier probes (inputs byte-identical, answers deterministic across repeats, order-independent within an
+image, host agreeing with the device on `heldout_interval_one`), the surviving explanation is a
+**persistent state the ring establishes at or before priming** - which is a firmware-state question, not
+a benchmark-harness artefact, and therefore squarely the owner's decision:
+
+* **keep the ring** and re-baseline or replace the two cases (the ring is what fixed the >128-byte
+  request wedge and made the 20-case suite completable), or
+* **drop the ring** and lose that fix and the suite, or
+* **keep them as blockers**.
+
+The measurement above removes the "it might just be timing" escape hatch from that decision.

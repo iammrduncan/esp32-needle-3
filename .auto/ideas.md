@@ -870,3 +870,33 @@ reconciling numbers later should compare `raw`, not `tokens`.
 **Gate-integrity note:** this is the third time the campaign has opened a harness number to check that it
 means what its name says (after the metric-hash inconsistency in PROV_ENGINE and the additive-save rule),
 and this one passes: the delta is correctly computed, correctly reported and correctly attributed.
+
+## VERIFIED: `decode_tps` is exactly the mean of the six primary cases, and `min_case_tps` is primary-only
+
+The last unopened harness claim was the one the whole campaign rests on: what the headline number *is*.
+Read from `.auto/bench.py` (lines 272-278), inside the `group == 'primary'` branch only:
+
+| metric | definition | consequence |
+|---|---|---|
+| `decode_tps` | `mean(tps)` over the **primary group only** | six cases, equally weighted, nothing else can enter |
+| `prefill_tps` | `mean(ptps)`, same group | - |
+| `gen_tokens` | `sum` of the group's token counts | - |
+| `min_case_tps` | `min(...)` over the group's cases | **primary-only**, so ext's lower 5.92 cannot set it (confirmed: the ext cases read 5.92 against a reported 5.93) |
+| `ext_decode_tps`, `think_tps` | separate groups, separate metrics | no path by which they can move the headline |
+
+**Two useful corollaries.**
+
+1. **The gap diagnostic is metric-safe by construction**, and the code says why: "The firmware times its
+   own decode, so an idle gap between requests cannot change decode_tps". That independently confirms the
+   #881 experiment - inserting five-second gaps could not have moved the metric, and it did not (the gap
+   run read the same primary numbers as the canonical runs), so its conclusion about the two frozen cases
+   is valid rather than confounded.
+2. **The harness carries its own lessons in place.** Two past defects are documented at the metric site: a
+   case with no `EVT done` yields `None` metrics, and the aggregate used `or 0.0` while one consumer did
+   not, so the first such case killed the suite mid-run with a TypeError "which cost the golden save and
+   every case after it" (the 128-token truncation case, now fixed by the lossless ring). Both the fix and
+   its cause are comments, which is why a reader can check the claim rather than trust it.
+
+**Harness-integrity tally:** four numbers opened this campaign - `PROV_ENGINE`, the anti-repeat budget,
+the golden-save semantics, and now the metric definition - three were found wrong and fixed (metric hash
+set, silent re-baseline, non-additive save), and this one is verified correct as written.

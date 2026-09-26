@@ -421,3 +421,19 @@ cache line.**
 
 **Pool unchanged and safe:** B3 6.1450, B2 6.1283, B1 5.9283. **Accepted 5.3033 until a tree passes
 20/20.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~13:00Z (run #816: "int8 K/V word reads (+6%)" is ALREADY SHIPPED - ledger entry retired)
+
+Decisive two-command check of the linked image: `attn_heads` has **1** `l8ui` (19 `float.s`, 56 `ssi`),
+and a whole-ELF per-function scan finds **no function with more than four `l8ui`** - so nothing reads
+the int8 KV cache byte-wise. The staging converts from packed **32-bit words** (four int8 per load,
+shifts + `float.s`), i.e. exactly what the old ledger's banked item proposed. **The +6% is a
+description of existing code, not a candidate.** Retired in `.auto/ideas.md`.
+
+**Method note:** check the linked image (one opcode scan) to prove a candidate is *absent* before
+pricing it from an old entry - this session it caught two stale premises (this one, and the "13.6 us
+LUT build" that is really ~135.8 us).
+
+**Pool unchanged:** B3 6.1450, B2 6.1283, B1 5.9283; accepted 5.3033 until 20/20; best gated 6.1433.

@@ -89,3 +89,16 @@ in a dense array that puts **32** norms per line - while a 36-byte record, whose
 spans **two** lines 12.5 % of the time and costs **1.125 lines/group (72 B)**, i.e. **2.12x** the bus
 traffic. **Rule: never split a dense sequential stream into fixed-size records unless the record divides
 the cache line.** (Third worked example after the uint16 offset stream and the fp32 norm sidecar.)
+
+## CLOSED as ALREADY-SHIPPED: "int8 K/V word reads (+6%)"
+
+The old ledger banks this as a candidate. **It is in the tree already.** Evidence from the linked
+image: `attn_heads` contains exactly **1** `l8ui` and 19 `float.s` / 56 `ssi`, and a per-function scan
+of the whole ELF finds **no function with more than four `l8ui`** - nothing reads the int8 KV cache a
+byte at a time. The conversion runs from packed 32-bit words (four int8 per load, expanded with shifts
+plus `float.s`), which is what the item proposed. **Do not re-derive the +6%.**
+
+**Method note (cheap and general):** before pricing a candidate from an old ledger entry, make the
+linked image prove the code is absent - one `objdump` scan of the relevant opcode is usually enough,
+and it has now caught two stale entries in one session (this one, and the "13.6 us LUT build" that was
+really ~135.8 us).

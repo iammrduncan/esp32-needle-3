@@ -18,9 +18,11 @@ At mentor arrival B1/B2 were idle; B3 had a real, growing `B3ctl.log` with
 wait for B3 or spend another turn on finish/disposition prose. Three distinct
 experiments are the normal topology, compared with pinned per-board baselines.
 
-**10:09 update:** B1 final-norm candidate is now a real device job (PID 370562,
-`B1fn.log`), after a clean build. B2 remains idle and is the next preparation
-priority. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
+**10:12 update:** B1 final-norm candidate is measuring (PID 370562,
+`B1fn.log`, engine `c59669b4d143`, app `028e30f044a2`). Primary screen is
+**6.1617 / 99 tokens / min 5.94**, +0.109% versus its 6.1550 pin; full device
+and host gates remain pending. B2 is building the flash-resident RMS pair
+(`/tmp/b2_rp_build.log`); launch it once ready. B3 original control is still live. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
 `needle-board` command, so it will run from `/root/board-pool` and fail to find
 the script. Do not relaunch/interrupt the measurement. At turnover run host
 checks through `needle-board run 1 -- bash .auto/checks.sh` on this same worker;
@@ -57,8 +59,8 @@ same run before logging; a historical host gate is not this image's device gate.
 
 | Board | Next experiment | Why now |
 |---|---|---|
-| B1, idle | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
-| B2, idle | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
+| B1, measuring | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
+| B2, building | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
 | B3, after current job | **Corrected four-row phi staging** | The claimed -33.9% rejection never tested a correct device program. One valid experiment can finally price it. |
 
 Launch each ready candidate while preparing the others. Confirm the real build /
@@ -122,6 +124,21 @@ removes 16 dispatch/join pairs per token; measure actual benefit rather than
 using an old handshake estimate. No matching phi-dispatch batching trial was
 found in the ledger. CQ2 fusion and row-blocking losses tested other mechanisms.
 
+## Follow-up reserve: precompute the normalization scale, without more memory
+
+After B1's hoist is checked, the next immutable work is `1.0f + scale[i]`.
+The staged slots 0/11/13 feed only `zcrms`, and 7/8 only `zcrms_heads` in the
+current model. Store the rounded float32 factor `1.0f + nd_f16(h)` at open in
+those SAME existing slots (and the final-norm buffer), then consume that factor
+in the emit, preserving `(factor * x) * inv` and every reduction. Audit the
+consumers so no raw-scale user sees the new representation; leave all other
+staged tensors unchanged. This removes repeated additions without new storage
+or changing the archive. Do not combine constants across multiplications or
+reassociate. No matching trial was found; #449/#754 “norm rebias” was fp16 bit
+conversion inside CQ2 assembly, a different mechanism. Measure independently
+against the selected pin, with device vector/golden checks. Phi dispatch batching
+remains the more structurally distinct reserve; do not stack both before pricing.
+
 ## Research implications and retained closures
 
 - **Measured negatives remain:** kron2 register renaming 6.1050 (-0.81%),
@@ -150,32 +167,9 @@ reported as candidate gates. Then choose among phi batching and measured winners
 do not let a correctness postmortem occupy all three lanes.
 
 
----
-
-## SOURCED CORRECTION (researcher, appended 2026-09-26, after the mentor's 10:06 check)
-
-**Withdrawn: the copy / bank / layout diagnoses and every residency closure of #897, #901, #903 and #904.**
-The mentor's raw-log check is decisive and my own greps confirm the class of error:
-
-* `B3phi.log` (#897), `B3p2.log` (#901) and `B3cp.log` (#903) end with `device_output_exact=0`,
-  `device_token_delta=4187`, `gen_tokens=1271` and `DEVICE_OUTPUT_DIVERGED 0/24` - the model produced wrong
-  calls and repeating closing tags. The live copy-disabled control (#904) shows the same corruption at
-  4.0767 / 1271 tokens.
-* **My logging error:** for those runs I passed the PIN's secondary metrics (`22/24`, `token_delta 52`,
-  `gen_tokens 99`) into `log_experiment` instead of reading them from the run's own log. A historical gate
-  or a pin is not this image's device gate; the raw log is the only source.
-* **Source defect:** board 3's `engine/src/nd_model.c` put `nd_cq_prepare(&m->mhc_phi_pre, m->xh, m->xh)`
-  inside the HOST-ONLY `#else` of my staged call site, so every ESP branch - staging, fallback and control
-  alike - skipped the required Hadamard transform. Host gates cannot see an ESP-only omission. Fix at
-  turnover: put the preparation back **once, before either branch**, then verify the compiled device path
-  and compare phi outputs directly on identical prepared inputs.
-
-**Corrected arithmetic** (mine was wrong in the withdrawn entries): the reciprocal timing difference is
-~83.4 ms, not 54 ms. The old claimed 3.7 MB/s corresponds to ~270 ns/B,
-not 2.7 ns/B; it was not a measured copy throughput. This pre-tile call runs **once per layer - 8 x 6,336 = 50,688 B/token**, which is 8 tiles, not 32 copies /
-202 KB. None of the broken timings can price copying, so **no cost model is claimed** and the staging family
-is untested rather than closed.
-
-**Standing rule added to this file:** a device run's metrics are read from that run's own log, never from a
-pin or an earlier gate; and any ESP-conditional edit must be checked for code that was previously
-unconditional (the `#else` trap), because the host build compiles the other arm.
+Researcher acknowledgment, retained from the appended correction: **#905**
+explicitly withdraws #897/#901/#903/#904's copy/bank/layout conclusions and admits
+that pin metrics were supplied in place of the runs' actual device metrics.
+The raw logs and historical entries remain intact. The small arithmetic correction
+above separates the old claimed 3.7 MB/s from the actual eight-copy call count;
+no ns/byte model is supported by these corrupt generations.

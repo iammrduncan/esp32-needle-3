@@ -422,3 +422,36 @@ every load is issued at least one block ahead of its consumer; (3) **host-gate b
 re-association is a rounding change and the host oracle is where it must be caught; (4) screen against
 the tree's own pin; (5) if it lands, re-derive the attention phase to see which end of the bound the
 field actually sits at, which is itself a useful number for every future attention idea.
+
+## B1's kbench image is unrunnable on this tree - the record experiment needs a different vehicle
+
+Four builds of bisection produced no localisation, and the honest reading of the evidence is that the
+console is not a usable probe for this fault:
+
+* With `bench_reco()` placed as the **first statement** of `kbench_run` - immediately after the `KB CFG`
+  line - its own first print (`RECO step=1`) still never appeared.
+* With my edits removed entirely (pristine snapshot kbench) the same panic appears, with no shape-sweep
+  lines.
+* And per #863 the panic's `LBEG`/`LEND` are last-set loop registers, so they do not identify the
+  faulting function either.
+
+So either the fault is before `bench_reco`'s first statement (call setup plus six allocations, which
+cannot LoadProhibit) or - more plausibly now - **the panic path loses buffered console output**, which
+would also explain why the shape-sweep lines appeared in one run and not in another. Either way, more
+bisection builds are not the answer: the probe itself is unreliable.
+
+**Consequence for the 36-byte record experiment:** the clone `nd_lut2_rows_reco` is built, linked and
+untouched in the engine assembly, and the differential/timing bench is written and known-good as
+source. What is missing is a *measurement vehicle*. Three options, best first:
+
+1. **Put the record differential and timing in the engine's own boot self-test path** (the pattern the
+   campaign already uses for kernel selftests, which prints on the normal console and runs before any
+   of the kbench's machinery). This avoids the kbench entirely.
+2. Use the existing CQ2 shape-bench machinery that *did* print on this tree - it ran successfully with
+   the sweep hoisted, so the fault is in the arm that runs before it, and a bench inserted at the
+   sweep's own position does execute.
+3. Diagnose the kbench fault properly (e.g. with an early `esp_rom_printf` that bypasses the stdio
+   buffer), but that is harness work with no experiment attached.
+
+Nothing about the layout is tested or refuted; the clone remains intact. Pins unchanged: B3 6.1467
+(carries the Sinkhorn exit), B2 6.1317 (sparse Sinkhorn lane), B1 5.9283.

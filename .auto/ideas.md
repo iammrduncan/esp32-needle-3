@@ -241,3 +241,28 @@ the code.
 single-purpose. If a phase looks anomalously slow per unit of work, suspect the attribution before
 suspecting the kernel - this campaign has now done that twice (#295's phi "4.3x gap" was a units
 error; this is the same class caught before publication).
+
+## The QK dot is LATENCY-bound, quantified (measured 2.90 cycles/MAC)
+
+Using only measured numbers, as the #852 rule requires (no rates derived from multi-purpose timers):
+the campaign's own kbench reports the shipping 48-dim QK dot at **139 cycles**
+(`KB DOT n=48 c4_pair_cyc=139`), i.e. **2.90 cycles per MAC against a ~1 MAC/cycle FPU**, so the
+hottest kernel in the attention phase runs at **35 % of peak** and carries **1.9 cycles of exposed
+latency per MAC** that only the compiler's interleaving hides.
+
+That single number explains the whole measured history of this kernel:
+
+| attempt | result |
+|---|---|
+| pair the two dots of a position pair | 404 cyc = **-46 %** |
+| four accumulators, fold once (reorder) | 214 cyc = **-54 %** |
+| 128-bit `ee.ldf.128.ip` asm | 286 cyc = **-107 %** |
+| wide-load DOT8W in the field | **-2.1 % / -1.9 %**, because the hand-written body issued each madd immediately after its load, exposing exactly the latency the C body hides |
+| exp pairing in the same phase (kept) | **+19.96 % isolated** - a latency-hiding win, not an instruction-count win |
+
+**So the lever in this phase is latency hiding, and the compiler is already the best scheduler
+measured here**: four hand-written schedules and one wide-load variant all lost to it. Beating it
+would need a pipeline over the six 8-column chunks that the four attempts conspicuously failed to
+produce - and the one place a hand-written pipeline *did* win in this campaign was the two-deep
+codebook load in the wide phi (#806), whose payoff was +0.028 %, i.e. sub-bar. Do not re-open the QK
+dot without a concrete schedule that differs from all four.

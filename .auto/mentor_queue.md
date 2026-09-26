@@ -314,3 +314,38 @@ cheap add. Measured +0.109% / +0.163% on two boards. Rule of thumb now supported
 paid for a conversion, the rms pairing and the phi fusion paid nothing for restructuring): on this part,
 **hoisting conversions out of per-token paths pays; hoisting a single FP add does not**, because 768 adds
 are noise next to the loads and the conversions around them.
+
+
+## B4 MEASURED AND BROKEN: the mHC conversion hoist failed on CORRECTNESS, with the cause identified
+
+The candidate was built on the new "conversions pay" rule: the mHC block converts 23 fp16 constants per lane
+per layer inside the token (`a_pre`/`a_post`/`a_res`, the 4 bias terms of `mhc_b_pre` and `mhc_b_post` each,
+and the 16 terms of `mhc_b_res`), i.e. ~736 fp16->fp32 conversions per decode token - almost exactly the
+count B1 removed for +0.109 %. The hoist staged all six tensors once into internal RAM (216 floats = 864 B)
+and replaced the six per-token `fp16_get()` sites with array reads.
+
+**Device result: `device_output_exact 14/24`, `device_token_delta 344`, `gen_tokens 100`** - the answers
+changed, so the change is NOT bit-exact and is discarded on correctness, whatever it does to speed (primary
+6.1567 is meaningless on wrong output).
+
+**Cause, identified by comparing the fill to the call sites:** the fill sized each staging array by
+`t->shape[0]`, but these bias tensors are multi-dimensional - `shape[0]` is the *first* dimension only, not
+the element count. `mhc_a_pre` needs 8 elements and `mhc_b_pre`/`mhc_b_post` 32 while their `shape[0]` is
+smaller, and `mhc_b_res` needs 128; so the fill covered only a prefix and every index beyond it read zeros
+out of the static array. The per-token `fp16_get()` indexes the tensor *linearly*, which is why the original
+code was correct and the "same indexes" port was not.
+
+**Corrected recipe for a retry (not run - it needs one build and the class is worth keeping):** derive the
+element count the way the archive does (`numel` = product of the tensor's non-zero shape entries, or simply
+`nbytes / sizeof(uint16_t)` from the tensor record), assert `numel <= ND_MHC_STAGE_MAX` for each of the six,
+and fill exactly `numel` elements into arrays sized for the *largest* of them (128), not for `shape[0]`.
+Then the same six call sites can read the arrays unchanged and the values are bit-identical by construction,
+because `fp16_get` is exactly `nd_f16(raw[i])`.
+
+**What this run is worth beyond the discard:** it is the first candidate built under the new
+conversion-hoist rule, and it shows the rule's *shape* is right (the conversion count matched B1's) while the
+implementation must respect the archive's own element accounting. The gates caught it immediately - 14/24
+with delta 344 and a changed token count - which is exactly what the byte-exact device gate is for.
+
+Pool: board 2 reverted and verified hashing the pin `d6b8014fd2fb`; boards 1 and 3 hold the confirmed
+final_norm hoist (c59669b4d143, 6.1617 / 6.1650).

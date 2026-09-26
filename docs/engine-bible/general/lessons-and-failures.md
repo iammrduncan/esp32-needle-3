@@ -185,9 +185,12 @@ mechanistically understood and the bundle is gated as a new tree.
 
 Composition is not additive. Register pressure, cache occupancy, task timing,
 and compiler decisions change with the receiving tree. A result on one lineage
-is evidence for the idea, not proof for another lineage. The noinline QK dot is
-the clearest example: it won on the seed line and diverged when ported to the
-shippable line.
+is evidence for the idea, not proof for another lineage. The three-tree
+hardware-loop values and the tree-dependent NF16V history demonstrate that
+need. The QK-outline port first looked like another example, but run #805 found
+a simpler transcription bug: its four scales were applied in both helper and
+caller. After fixing that, the restricted B1 screen was positive; it still
+needed the full gate at the snapshot.
 
 ## Dead ends and their changed-premise tests
 
@@ -292,4 +295,3 @@ The detailed chronology and raw measurements remain in
 final [`HANDOFF-2026-09-28.md`](../../../.auto/HANDOFF-2026-09-28.md). Interpret
 all numbers using the state labels and proof rules in
 [the evidence policy](../evidence-policy.md).
-

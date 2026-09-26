@@ -75,12 +75,13 @@ Target kernel microbenchmark/differential firmware. It establishes local timing
 and numerical behavior but does not replace integrated request measurement.
 
 **KV window**  
-The finite attention key/value history. This model stores an int8 KV cache with
-a 256-token window inside a 384-token overall sequence limit.
+The finite attention key/value history. The archive reports `kv_window=256`,
+but this port sets its runtime window and allocates int8 K/V caches from
+`max_seq_len=384`. Keep metadata and implementation allocation distinct.
 
 **mHC**  
 The model's multi-lane hyper-connection/residual mechanism. This archive uses
-four lanes; its recurrent state must be included in prefix snapshots.
+four lanes. Lane arrays are per-token block scratch, not recurrent prefix state.
 
 **Monarch MLP**  
 The model's structured feed-forward path using staged factors and Hadamard
@@ -100,7 +101,9 @@ or overlap and therefore may not sum to 100%.
 
 **Prefix snapshot/cache**  
 Saved state after evaluating a fixed schema/system prefix. Correct restoration
-includes KV, convolution, engram/mHC and positional state, not just tokens.
+includes KV vectors/scales, convolution histories, engram token/value history,
+optional confidence state, and position/sink bookkeeping—not mHC scratch or
+grammar state.
 
 **Primary / ext / think**  
 Primary is the tuned constrained benchmark group; `ext` is a held-out prompt
@@ -136,4 +139,3 @@ main checkout.
 **ZC-RMS**  
 The model's zero-centered/root-mean-square normalization variant used around
 attention/MLP residual paths.
-

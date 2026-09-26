@@ -482,3 +482,22 @@ until 20/20, pending only the owner's #647 disposition.
 
 **Remaining owner item from the same defect list:** the schema has no no-op escape, so chit-chat turns
 into a hallucinated `set_sampling_interval` call - a schema/behaviour decision, not loop work.
+
+---
+
+# SESSION CLOSE (2026-09-28) -- see `.auto/HANDOFF-2026-09-28.md` for the full record
+
+**Achieved:** 2.44 -> **6.1433 tok/s (+151.6 %)**; best fully gated packet **+15.8 % over the accepted
+5.3033**; trees at 6.1450 (B3, current), 6.1250 (B2), 5.9283 (B1), all 18/20 with host 19/19.
+**Fixed:** silent 271-byte request truncation (verified neutral by a full gate) and the harness
+`engine_md5`/`PROV_ENGINE` inconsistency (which had poisoned two investigations).
+**Audited:** silent-failure class across the whole request surface; anti-repeat enforcement (exits
+42/43/44); provenance coverage; `checks.sh` fail-safe defaults; the handover itself against the live
+workers.
+**Closed with reasons:** every remaining family (three byte/line refutations, two double closures, one
+already-shipped item, vendor block, RAM block).
+**Open - owner only:** the two frozen #647 cases; the schema no-op escape; optional premise changes
+(assertion RAM, verified flash model, gate relaxation).
+
+The loop has no candidate left that it can settle alone; further entries without one of those owner
+inputs would be manufactured verification work, which this campaign's rules forbid.

@@ -727,3 +727,21 @@ Anything that changes model quality (quantisation, vocabulary, grammar, context,
 documented 240/80 MHz) - refused by the gate, and where tested, measured to fail on its own merits.
 Every remaining speed family is closed **with a measured reason** (byte budget, vendor block, gate, or
 measured null), listed in the FINAL EVIDENCE TABLE.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~05:30Z (run #797: sustained-session + repeat-determinism soak on the best tree - 10/10 requests, 5/5 repeats byte-identical, 62 s)
+
+Ten back-to-back requests through the proven attach discipline on the already-primed best tree
+(B3, 6.1433): five distinct prompts (sampling interval, timer, status, a different timer duration, a
+numeric probe reading) and then the same five repeated, each reply's tool-call payload hashed.
+
+* **10/10 succeeded**, whole session 62 s, no timeout, no reconnect, no gap - the console-wedge class
+  (a boot answering only 16-17 requests) does not appear on this tree.
+* **repeat_identical = 5/5** - byte-identical tool calls for the same question.
+
+This sharpens rather than contradicts #647: ordinary behaviour on this tree is repeat-deterministic
+and session-stable, so the two frozen heldout cases are genuinely special (transport state flips
+exactly that pair; host agrees with device; deterministic and order-independent within an image).
+
+**Packet unchanged: B3 6.1433 (best, +15.8 % over the owner's 5.3033) / B2 6.1250 / B1 5.9033.**

@@ -460,3 +460,25 @@ repeat-determinism soak, and each tree's own CQ2 differential.
 **Pool:** all three boards flashed with their measured trees, consoles free, no stray processes.
 **Accepted stays 5.3033 until a tree passes 20/20** - the only thing between the best tree and that
 gate is the owner's disposition of the two frozen #647 heldout cases.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~15:30Z (runs #821-#823: the silent 271-byte truncation is FIXED and proven neutral; pool unchanged)
+
+**Product defect closed** (flagged since #155, never fixed): `main.c`'s reader stored `ND_LINE_MAX-1`
+characters, counted the rest in `rx_drop`, **never reported it**, and handed the truncated line to
+`run_inference` - so a host that sent a long request got an answer to its first 271 characters with no
+error of any kind. Five lines now refuse such a line explicitly and infer nothing from it.
+
+**Verified two ways:**
+* direct: a raw **316-byte** request returned exactly `ERR line_too_long max=271 got=316` + `END`, and a
+  normal request in the same session still returned a correct `set_timer seconds=45`;
+* full-suite regression: B3 with the fix reads decode **6.1450**, ext **6.0731**, think **4.70**,
+  **18/20** with `token_delta 52` - every value identical to its pre-fix gate.
+
+**Pool:** B3 6.1450 (now includes the fix; PROV_ENGINE changed, pin unchanged), B2 6.1250, B1 5.9283 -
+all fully gated. **Best gated packet 6.1433 = +15.8 % over the accepted 5.3033.** Accepted 5.3033
+until 20/20, pending only the owner's #647 disposition.
+
+**Remaining owner item from the same defect list:** the schema has no no-op escape, so chit-chat turns
+into a hallucinated `set_sampling_interval` call - a schema/behaviour decision, not loop work.

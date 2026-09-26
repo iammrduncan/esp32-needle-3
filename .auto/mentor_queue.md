@@ -745,3 +745,59 @@ and session-stable, so the two frozen heldout cases are genuinely special (trans
 exactly that pair; host agrees with device; deterministic and order-independent within an image).
 
 **Packet unchanged: B3 6.1433 (best, +15.8 % over the owner's 5.3033) / B2 6.1250 / B1 5.9033.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~06:15Z (run #798: behavioural capture GREEN on the BEST tree - every evidence axis now covers the exact tree being recommended)
+
+**Reusable technique (worth keeping):** `make capture` hardcodes the single-board `/dev/ttyACM*`
+aliases, so it only ever ran on board 1's tree. Point the API at the board's OWN node instead:
+
+```
+tmux new-session -d -s api -c <repo> "env ... /root/bin/needle-board run <N> -- \
+    .venv/bin/python tools/serial_api.py --serial /dev/needle-pi/board<N>-console > /tmp/api.log 2>&1"
+.venv/bin/python demo/capture.py        # talks HTTP to 127.0.0.1:8081 unchanged
+# afterwards: kill the serial_api.py children BY PID (pkill -f needle-api misses them)
+```
+
+**Result on B3 (6.1433, the recommended tree):** 7/7 scenarios correct (translation -> qwen,
+coding -> gpt_oss, architecture -> opus, all `external_selected` with no external call made;
+status/sampling/timer/batch -> needle, `local_executed`) and **9/9 flags true** - `routes_match,
+tools_match, requests_succeeded, no_external_calls, local_has_two_passes, external_stops_at_selection,
+telemetry_progressed, sampling_interval_applied, timer_expired`.
+
+**Evidence per tree is now complete on the recommended tree itself:** device breadth 18/20 (only the
+two frozen #647 cases), host 19/19 with fidelity 5.341e-05, own-tree CQ2 bitwise differential, the
+10-request repeat-deterministic soak (#797), and this behavioural capture - plus the host-vs-device
+cross-check on an unseen prompt for the same class of tree.
+
+**Packet: B3 6.1433 (best, +15.8 % over the owner's 5.3033) / B2 6.1250 / B1 5.9033.**
+
+---
+
+# ANTI-OVERFIT EVIDENCE: the levers are mechanism-level, measured on four independent monitors
+
+Every lever in this window raises **decode AND prefill AND ext AND think**, not just the primary metric.
+Taken from the gated logs (each row is a full-suite run, `group=all`, on the tree named):
+
+| tree (full gate) | decode | prefill | ext (held-out set) | think (full-vocab path) |
+|---|---|---|---|---|
+| B3 composed, before amortisation | 6.1117 | 6.4533 | 6.0415 | 4.68 |
+| **B3 + amortised loop** | **6.1433** | **6.4833** | **6.0731** | **4.70** |
+| B3 + `qk_dot8` only | 6.0750 | 6.41 | 6.0069 | 4.66 |
+| B2 composed, before amortisation | 6.0883 | 6.4283 | 6.0162 | 4.67 |
+| **B2 + amortised loop** | **6.1250** | **6.4667** | **6.0577** | **4.69** |
+| B1 (shippable line + levers) | 5.9033 | 6.2117 | 5.8346 | 4.56 |
+
+Why this matters for the overfitting question:
+
+* **prefill** is timed by different firmware code (no sampler, no decode loop) - it improves too, so the
+  gain is in the shared per-token kernels, not in anything the decode clock happens to measure.
+* **ext** is the held-out / never-tuned prompt set - it improves in step with the primary, so the gain
+  is not prompt-specific.
+* **think** is the unconstrained full-vocabulary path - it improves as well, so the gain is not an
+  artefact of the constrained/grammar path the primary metric exercises.
+* The proportionality is consistent across three trees and three different lever sets, which is what a
+  mechanism-level improvement looks like and what a benchmark-specific one would not.
+
+**Packet: B3 6.1433 (+15.8 % over the owner's 5.3033) / B2 6.1250 / B1 5.9033.**

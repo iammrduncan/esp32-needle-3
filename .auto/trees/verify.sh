@@ -22,6 +22,28 @@ for T in .auto/trees/board*-*.tar.gz; do
     fi
     rm -rf "$tmp"
 done
+# LIVE DRIFT: a snapshot that matches its own filename is still useless if the worker it came from
+# has moved on. The first version of this script could not see that - it compared each snapshot only
+# against the hash embedded in its filename, so it reported OK while board 3's live tree had already
+# changed. With --live it also hashes each worker's current sources and reports LIVE_DRIFT on a
+# mismatch, which is the case that actually matters when the snapshots are the recovery path.
+if [ "${1:-}" = "--live" ]; then
+    for T in .auto/trees/board*-*.tar.gz; do
+        [ -f "$T" ] || continue
+        b=$(basename "$T" | sed 's/^board\([0-9]*\)-.*/\1/')
+        w="/root/board-pool/board$b"
+        [ -d "$w" ] || continue
+        want=$(basename "$T" .tar.gz | sed 's/^board[0-9]*-//')
+        live=$(cd "$w" && cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c 2>/dev/null \
+               | md5sum | cut -c1-12)
+        if [ "$live" = "$want" ]; then
+            echo "LIVE_MATCH board$b hash=$live"
+        else
+            echo "LIVE_DRIFT board$b snapshot=$want live=$live"
+        fi
+    done
+fi
+
 # A missing directory or an empty glob must fail, not pass vacuously.
 if ! ls .auto/trees/board*-*.tar.gz >/dev/null 2>&1; then
     echo "NO_SNAPSHOTS_FOUND"; fail=1

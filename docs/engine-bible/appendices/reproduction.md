@@ -188,20 +188,30 @@ prefixes. Never merge pre- and post-reset cases into one canonical run.
 
 The final candidates are compositions preserved across `.auto/exp88` through
 `.auto/exp96`, worker-tree fingerprints, run descriptions, and the durable
-handoff—not necessarily one main-branch commit. Reconstruction should:
+handoff—not one complete main-branch commit. The repository does not contain a
+complete worker checkout, full binary manifest, or ordered patch series for
+tree A, B, or C, so byte-identical reconstruction from it alone is impossible.
+Read the [candidate identity manifest](candidate-manifest.md) before starting.
+
+Treat the following as construction and fresh validation of a derivative, not
+as deterministic replay of the measured image:
 
 1. choose tree A, B, or C explicitly;
-2. recover the base lineage named in
-   [`.auto/HANDOFF-2026-09-28.md`](../../../.auto/HANDOFF-2026-09-28.md);
-3. apply each preserved lever in recorded order;
-4. verify resulting source/engine hashes where supplied;
-5. build fresh and inspect the ELF;
-6. run host checks, own-tree CQ2 differential, full device breadth, capture,
+2. obtain the original worker snapshot from an external archive, if one exists,
+   or name a Git base and label the result a reconstructed derivative;
+3. read each relevant `exp*` README and compose the preserved source fragments
+   deliberately—there is no authoritative patch order to apply blindly;
+4. record full source, engine, model, configuration, ELF, and app hashes;
+5. build fresh with a recorded toolchain and inspect the linked ELF;
+6. run host checks, the derivative's CQ2 differential, full device breadth,
+   capture,
    and soak;
 7. record that the two frozen device cases still require owner disposition.
 
 Do not infer reconstruction from the current checkout's last-touch commit per
-file; different source files can represent different points in the campaign.
+file; different source files represent different points in the campaign. Until
+the new derivative passes its gates, it inherits neither a final-tree rate nor
+its evidence status.
 
 ## 11. Failure criteria
 
@@ -220,4 +230,3 @@ The reproduction has failed, rather than merely become inconvenient, if:
 Preserve the failure with enough provenance to distinguish mechanism, harness,
 board, and environment. Do not repair the golden or rerun until green without
 recording the first result.
-

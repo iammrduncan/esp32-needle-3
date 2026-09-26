@@ -25,8 +25,9 @@ the correctness boundary.
 Creating a task per GEMV would dominate small operations. A persistent pinned
 worker amortizes task setup. The retained hybrid briefly spins on the common
 path, then falls back to binary `s_go`/`s_done` semaphores rather than burning a
-core indefinitely. The spin is a latency optimization only; sequence/semaphore ordering must remain
-correct if the worker sleeps immediately.
+core indefinitely. The spin is a latency optimization only;
+sequence/semaphore ordering must remain correct if the worker sleeps
+immediately.
 
 At the 100 Hz FreeRTOS tick, a nominal 5 ms tick-based delay rounds to zero.
 Sub-tick behavior needs a cycle/timer/spin primitive or a different tick rate.
@@ -81,7 +82,7 @@ make the optimization unprofitable.
 
 - Persistent, core-pinned helper rather than task creation per operator.
 - Disjoint output-row splitting for large GEMVs/heads.
-- Sequence-based publication and completion, with notification fallback.
+- Sequence-based publication and completion, with binary-semaphore fallback.
 - Shape/operator thresholds based on integrated timing.
 - Per-worker scratch and immutable shared LUTs.
 - Measuring both worker finish times before changing split ratios.

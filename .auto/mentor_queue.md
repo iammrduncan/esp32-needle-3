@@ -199,3 +199,29 @@ bar), and composing them on the tree that already carries the stack gives a full
 
 **Pins:** B3 **6.1550** (composed attention + EG2 + compact prefix + amortised loop + two-deep schedule +
 `qk_hd==48` + sparse Sinkhorn + interleaved QK chains), B2 6.1383, B1 5.9283.
+
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 late-3 (run #874: 6.1550 CONFIRMED CROSS-BOARD, identical to the digit)
+
+**Cross-board confirmation of the campaign's best tree, in its strongest form: the SAME tree, byte-for-byte, on a second board.**
+
+| | B3 (original) | B2 (confirmation) |
+|---|---|---|
+| tree hash | `d6b8014fd2fb` | `d6b8014fd2fb` (verified identical before the run) |
+| decode | **6.1550** | **6.1550** |
+| prefill | 6.4967 | 6.4967 |
+| min_case | 5.93 | 5.93 |
+| ext | 6.09 | 6.0876 |
+| think | 4.70 | 4.71 |
+| device | 22/24, delta 52 | 22/24, delta 52 |
+
+Zero spread on the primary between two independent boards - tighter than the campaign's own measured
+0.071% board-to-board band - and every monitor agrees. **6.1550 = +16.05 % over the owner's accepted
+5.3033, +152.3 % over the 2.44 session baseline**, with only the two frozen #647 cases outstanding.
+
+**Process note:** the first transplant copied from board 3's *snapshot* (pre-sparse-Sinkhorn) and had to
+be redone from its **live** tree; the snapshot is a recovery asset, not a mirror. B2's own lane state
+(its sparse+interleave tree, `36ccbdc32f3e`) was snapshotted into `.auto/trees/` before the transplant,
+so nothing was lost.

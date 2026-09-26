@@ -805,3 +805,38 @@ recommendation in the previous entry **evidence-backed rather than argued**:
 `heldout_long_tools_note_only` where the golden records 67, for the *same* text. The text is what the gate
 compares (and it is identical), but the token-count field in those two entries is not on a common basis,
 so anyone reconciling counts later should compare the `raw` strings, not the numbers.
+
+## CLOSED BY INSPECTION: the interleave form is already present in BOTH hadamard kernels (verified in the linked image)
+
+The last stretch's wins came from one form - interleaving independent accumulator chains so each chain's
+own operation sequence is untouched while the issue order visits them round-robin. It was verified in
+`kron1_blocks` (#851) but never in `kron2_rows`, the other hot hadamard kernel (17 `madd.s` for ~16
+products). Checked now in the linked image, no board time:
+
+```
+lsi ...          lsi ...
+madd.s -> f?,0x19    madd.s -> f?,0x29      (the madd DESTINATION cycles 0x19, 0x29, 0x39, ... 0x89)
+lsi ...          lsi ...
+madd.s -> f?,0x29    madd.s -> f?,0x39
+... eight times, then the block repeats with a different source register
+```
+
+**The body is already round-robin over EIGHT accumulator registers** - `lsi` followed immediately by a
+`madd.s` into the next accumulator in turn - i.e. the interleave is present, not missing. `kron1_blocks`
+was already confirmed the same way (six loads issued ahead of four `madd.s`).
+
+**Consequence: the form family is now closed on every kernel that has more than one accumulator**, and it
+is closed by inspection rather than by another null run:
+
+| kernel | accumulators | form |
+|---|---|---|
+| `qk_dot8` QK body | 4 | **APPLIED** (chain-major -> pair-major; +0.109 % B2, +0.081 % composed B3, part of +0.169 % B1) |
+| Sinkhorn fixed-point check | 1 test | **APPLIED** (dense -> sparse; +0.108 % B2, +0.054 % over dense B3) |
+| `kron1_blocks` | 8 | **ALREADY INTERLEAVED** (six loads lead four madds, #851) |
+| `kron2_rows` | 8 | **ALREADY INTERLEAVED** (round-robin over eight madd destinations, this entry) |
+| elementwise loops (zcrms, lane mix, SiLU, gate) | 1 per element | no independent chains exist; pairing measured null or sub-bar |
+| `kron2` wider variants | - | closed earlier on register pressure (four-across -0.30 %, eight-across -0.18 %) |
+
+So there is no kernel left where this form could be applied for a gain, which is a stronger statement
+than "we measured several nulls": it is a census of every multi-accumulator loop in the engine against
+the linked image, and four of the six rows are verified present-in-code rather than argued.

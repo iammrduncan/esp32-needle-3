@@ -365,3 +365,27 @@ the tree before flashing, since any re-association is a rounding change and must
 (4) the values must be bit-identical - each head still sums its own products in the same ascending
 order, only the load width and issue order change - so the device goldens and the per-tree CQ2
 differential decide it; (5) screen against the tree's own pin, never another tree's.
+
+## CORRECTED PRICE for the wide-load QK candidate: ~+1.5 %, and it rests on a warm number
+
+Two corrections to my own last two entries, made before building anything:
+
+1. **The figure I used was a PAIR.** The kbench line says `KB DOT n=48 c4_pair_cyc=139` - that is the
+   **two dots of a position pair, 96 MACs**, not one dot's 48. So the measured cost is
+   **1.45 cycles/MAC, not 2.90** - my earlier arithmetic divided a pair figure by one dot's MAC count.
+2. **The pair form already shares the `qh` load** across its two kf dots: 1 qh load + 2 kf loads +
+   2 madds per 2 MACs = **2.5 instructions/MAC**, which at 1.45 cycles/MAC is an **IPC of 1.73**, i.e.
+   **86 % of the S3's 2-wide peak**. The dot is therefore *nearly issue-saturated* in that measurement.
+
+**Corrected prize for a 64-bit-load body:** 64-bit loads fetch two floats, so a term pair costs one load
+instead of two - about **1.75 instructions/MAC** against 2.5, i.e. 139 -> ~97 cycles, QK 8.3 -> ~5.8 ms,
+**about +1.5 % of the token** rather than the +2.5 % I first quoted. Still above the bar, but smaller.
+
+**The caveat that matters more than the number:** 139 cycles is a **kbench** figure - warm, isolated,
+back-to-back. This campaign's own rule, paid for three times (#295, #364, #745), is that a warm isolated
+number prices nothing, and the field dot is called in a loop with staging and softmax around it. So the
++1.5 % is an **estimate from a measurement whose structure does not match the field**, and the honest
+next step is not to build it but to **re-price it with the field's call structure** - a small kbench
+variant that calls the dot once per group immediately followed by its consumer, as the transform screen
+eventually had to do. Only then is the wide-load body worth writing, because its whole justification is
+an instruction-count ratio against a number that may not hold in situ.

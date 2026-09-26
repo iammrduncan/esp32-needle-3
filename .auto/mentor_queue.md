@@ -306,3 +306,33 @@ instruction budgets, no candidate in this window's queue survives. The next hypo
 something the census and the byte arithmetic have not already covered - realistically a *storage* or
 *archive* premise (which the byte-exact and fidelity gates refuse) or an owner decision (the #647
 disposition, the assertion-level RAM, or a new objective).
+
+
+## READY TO RUN (one build, one lane): the #897 staging postmortem with the dispatch key fixed
+
+#897's staging experiment lost **33.9 %**, and a 6 KB memcpy per lane per layer cannot cost that. The
+remaining explanation is the one the picker's own code supports: `gemv4_pick()` memoises its verdict per
+`(blob, rows)`, so handing it a fresh staged pointer starts a fresh memo entry and the *walker selection*
+is no longer the one the unstaged path made. #897 passed `stage` as the key.
+
+**The experiment:** re-apply the staged dispatch with two changes only -
+(1) keep `base = 0` and the staged `packed`/`norms` in the ctx as before, but pass the **original blob**
+(`nd_tier_ptr(m, &m->mhc_phi_pre)`) to `gemv4_pick()` as its dispatch key, so selection is decided exactly
+as the unstaged path decides it; and
+(2) enforce the #897 rule in code - compute the unstaged verdict with a throwaway ctx (`gemv4_pick` over
+the original ctx) and **refuse to stage at all if the two verdicts differ**, falling back to the ordinary
+path.
+
+Keep the bounded guard from #897 unchanged: 4 rows of `mhc_phi_pre` (6,144 B packed + 192 B norms), a hard
+7,168 B cap, a `heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)` pre-check with 512 B headroom, a
+lazy one-time allocation, and the unchanged PSRAM path whenever anything is refused. The files to edit are
+`engine/src/nd_quant.c` (the staged dispatcher, ~40 lines, re-add from #897's log entry) and
+`engine/src/nd_model.c` (the lazily-allocated call site for `mhc_phi_pre`, re-add from #897).
+
+**What each outcome would mean.** If it now measures ~the pin, the staging premise is dead for good and
+the -33.9 % was selection, which also retro-justifies the rule. If it measures *faster*, that is the
+9.3 %-delivery lever finally collected, and the same key-fix must then be applied to the other staging
+ideas before any of them is priced. Either way the result is a mechanism, not a number.
+
+**Do not** re-run the original #897 form (staged pointer as the dispatch key): it is measured, it is in the
+ledger, and it lost 33.9 %.

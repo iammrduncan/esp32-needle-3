@@ -253,3 +253,36 @@ rather than tree-specific, unlike those two.
 
 **Pins:** B3 = B2 = **6.1550** (identical tree `d6b8014fd2fb`, confirmed cross-board to the digit),
 B1 **5.9383** (shippable line + both forms).
+
+
+---
+
+## RESEARCHER STATE -- 2026-09-29 (run #880: 6.1550 CONFIRMED 3/3 BOARDS, identical tree)
+
+**The campaign's best reading is now confirmed on ALL THREE boards, on a byte-identical tree, to the last digit.**
+
+| board | tree hash | decode | prefill | min_case | ext | think |
+|---|---|---|---|---|---|---|
+| B2 | `d6b8014fd2fb` | **6.1550** | 6.4967 | 5.93 | 6.0876 | 4.71 |
+| B3 | `d6b8014fd2fb` | **6.1550** | 6.4967 | 5.93 | 6.09 | 4.70 |
+| **B1** | `d6b8014fd2fb` | **6.1550** | 6.4967 | 5.93 | 6.0882 | - |
+
+Zero spread on the primary, prefill and min_case across three independent boards; ext varies by one
+metric tick. Device 22/24 with `token_delta 52` on every board - only the two frozen #647 cases - and
+host gates green on the tree (23/23, fidelity 5.341e-05 unchanged).
+
+**The tree:** composed attention (B4W paired-head shared-V P.V + DOT8W 8-column QK + SELRES selective
+rescale) + engram[1] staging (EG2) + narrow compact prefix + amortised group hardware loop + two-deep
+codebook schedule + `qk_hd==48` specialization + sparse Sinkhorn fixed-point check + interleaved QK
+accumulator chains.
+
+**Result: 6.1550 = +16.05% over the owner's accepted 5.3033, +152.3% over the 2.44 session baseline.**
+
+**B1's own shippable-line tree is preserved** as `.auto/trees/board1-0123a47b5551.tar.gz` (shippable +
+plain loop + EG2 + amortised + QK outline + `qk_hd==48` + the two new forms, measured at 5.9383), so the
+owner can choose either policy - the fastest tree or the conservative lineage - without any further
+measurement.
+
+**The single outstanding item remains the owner's disposition of the two ring-related #647 held-out
+cases:** keep the lossless RX ring and re-baseline/replace them (6.1550 then becomes adoptable), drop
+the ring (losing the >128-byte request fix and the 20-case suite), or keep them as blockers.

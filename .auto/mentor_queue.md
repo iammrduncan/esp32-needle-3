@@ -336,3 +336,29 @@ ideas before any of them is priced. Either way the result is a mechanism, not a 
 
 **Do not** re-run the original #897 form (staged pointer as the dispatch key): it is measured, it is in the
 ledger, and it lost 33.9 %.
+
+
+## POSTMORTEM RUN (2026-09-26): the staging collapse is NOT the dispatch key - two independent forms both -33.9 %
+
+The recorded postmortem was run: staged dispatch with the **original blob as the dispatch key** (so the
+walker-selection memo entry is the same one the unstaged path uses), plus a code-enforced guard that
+computes both verdicts and refuses to stage if they differ. Staging was provably active
+(`EVT PHISTAGE2 need=6336 largest=2944 state=1`).
+
+**Result: decode 4.0667, min_case 4.03 - the same digits as #897's staged-pointer form, also -33.9 %.**
+The guard never fired, i.e. the staged and unstaged verdicts were identical, so the walker selection was
+never the cause. **The dispatch-key hypothesis is refuted by its own test.**
+
+**What this closes:** the phi staging premise is dead in two independent forms - staged pointer as key,
+and original pointer as key - both at -33.9 % with correct values (22/24, `token_delta 52`, only the two
+frozen #647 cases). The collapse is therefore a property of reading the walker's operands from the staged
+copy, not of dispatch, not of the copy's arithmetic, and not of the guard. The mechanism is *not*
+identified beyond that, and it does not need to be: neither form is a candidate, and the 9.3 % delivery
+lever the ledger once priced is not reachable through this route.
+
+**Rule now doubly enforced:** a "change only the address" idea must (a) re-run the dispatch decision the
+original pointer produces, and (b) require a *measured* mechanism for why a new address is faster, because
+here a strictly faster memory (internal RAM) made the same kernel 33.9 % slower.
+
+Pool state: board 3 restored from board 1's verified pin sources and re-verified hashing
+`d6b8014fd2fb`; all three boards idle on the pin.

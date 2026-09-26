@@ -775,3 +775,33 @@ which is exactly the guard that stopped an unscoped capture from silently re-bas
 **Method note.** The mechanism was found by comparing the two golden sets case by case - a 24-row diff
 that costs nothing - after six device probes had failed. When two oracles disagree about one artefact, the
 disagreement is the datum.
+
+## CONCLUSIVE: on both #647 cases the ring device's answer is byte-identical to the HOST golden
+
+The #888/#889 conclusion rested on a log line truncated to ~120 characters, which is not evidence by this
+campaign's own rules. The untruncated strings exist in git history: the capture commit `e3e5574` recorded
+the ring device's full answers before `7d16028` restored the frozen pair. Comparing all three sets:
+
+| case | pre-ring device golden | **ring device (full string)** | **host golden** | equal? |
+|---|---|---|---|---|
+| `heldout_interval_one` | 2 calls (`120` + `get_status`) | 1 call (`120`) | 1 call (`120`) | **IDENTICAL** |
+| `heldout_long_tools_note_only` | 1 call (`300`) | `45` + `set_timer 300` x3 + `get_status` | same | **IDENTICAL** |
+
+Both device answers are **byte-for-byte equal to the host golden** - not merely similar, not a prefix:
+`p['raw'] == h['raw']` is True for both cases.
+
+**So the current firmware has converged to the host oracle on exactly the two cases where the device and
+host expectations ever differed.** The frozen device goldens for those two ids record a *pre-ring console
+artefact*, not model behaviour; with the ring, the device produces the host's own answer. That makes the
+recommendation in the previous entry **evidence-backed rather than argued**:
+
+* scoped re-capture of those two ids (`AUTO_REBASELINE=1`, additive default otherwise preserves them)
+  makes the device suite consistent with the quality authority the campaign already trusts;
+* the other 22 cases are unaffected, because device and host already agree byte-for-byte on all of them;
+* and after the re-capture the device gate would read **24/24**, which is an *honest* 24/24 - every device
+  golden then matches the host oracle - rather than a 24/24 bought by weakening the gate.
+
+**One inconsistency recorded for accuracy:** the capture's own line printed 63 tokens for
+`heldout_long_tools_note_only` where the golden records 67, for the *same* text. The text is what the gate
+compares (and it is identical), but the token-count field in those two entries is not on a common basis,
+so anyone reconciling counts later should compare the `raw` strings, not the numbers.

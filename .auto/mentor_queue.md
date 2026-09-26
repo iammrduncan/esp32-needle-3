@@ -207,3 +207,32 @@ receiving tree's own pin.
 
 **Host side.** The change is ESP-independent (no `#if` branch), so `checks.sh` alone must stay green,
 and the device run decides the speed.
+
+
+## CORRECTION to the `1+scale` item (found by reading the slot fill before building): it is NOT buffer-free
+
+The queue said to precompute `r[j] = 1.0f + s[j]` into "an existing norm-only slot" with no new buffer. That
+assumption is wrong, and checking it cost nothing while building it would have cost a lane:
+
+`nd_model_open` fills the per-layer slots with **pointers into the archive**, not copies -
+`m->fp16_slot[li][SLOT[f]] = p` at nd_model.c:714, where `p` is `nd_cact_data()` of a tensor. So a scale row
+like `fp[0]`, `fp[7]`, `fp[8]`, `fp[11]` or `fp[13]` is archive memory: writing `1.0f + s[j]` back into it
+would **corrupt the mapped weights**, and there is no existing norm-only buffer holding that row to write
+into instead.
+
+**What this changes:**
+1. The change needs a real destination: one fp32 row per layer that needs it (768 x 4 B = 3,072 B) either as
+   a new internal allocation or by re-pointing the slot at a precomputed row. Internal free at the pin is
+   11,491 B after priming, so 3 KB fits - but this is now a RAM-plus-layout change, not a free hoist.
+2. The consumers must then read the precomputed row, and every other reader of that same slot must be
+   checked first: `fp[0]` has exactly one consumer (`zcrms` at line 2717), `fp[7]`/`fp[8]` are consumed by
+   `zcrms_heads` (lines 2282-2283), `fp[11]`/`fp[13]` by `zcrms` (2719, 2733), while `fp[14]`-`fp[18]`,
+   `fp[25]` and `fp[26]` are consumed as *weights* elsewhere and must never be pre-incremented.
+3. Pricing therefore moves from "hoist a value out of a loop" (the B1 class, which measured +0.109 %) to
+   "spend 3 KB of internal RAM and one precompute pass per layer per token" - still cheap, still
+   bit-identical, but it must be scored against the RAM it consumes and the layout it disturbs, and the
+   precompute pass itself has to be charged.
+
+**Recommended next build order:** the phi 24-row dispatch batching reserve first (it is pure dispatch
+restructuring with no RAM and no copy), then this item re-specified as above with `fp[0]` (single consumer)
+as the first and smallest step.

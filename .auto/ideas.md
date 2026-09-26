@@ -168,3 +168,20 @@ the lookup needs no scaling - costs **4x the bytes** and was measured dead again
 **Consequence: no scheduling, unrolling, register, layout or load-width idea can move this phase, and
 that is now a statement about the instruction set rather than about the ~20 nulls measured here.** The
 only lever left would change what is stored, which the byte-exact and fidelity gates refuse.
+
+## ALREADY IMPLEMENTED: floating-point fusion (checked in the linked image, 2026-09-28)
+
+Hypothesis going in: the S3's FPU has `madd.s`, so every `a*b + c` in attention and the MLP could be
+one instruction instead of two - a potentially large instruction-count win that the byte-exact gate
+would forbid because fusion changes the rounding. **The check refutes the hypothesis at the first
+step: fusion is already ON.** `attn_heads` in the linked image contains **119 `madd.s`** against 58
+`mul.s` and 29 `add.s`, i.e. GCC has already contracted every pairable multiply-add, and the engine's
+CMakeLists carries no `-ffp-contract=off` (the flag appears only in the campaign's *test* builds,
+where it is needed to make bit comparisons meaningful). The residual 58 multiplies and 29 adds are
+standalone operations, not halves of a pairable pair.
+
+**So the FP instruction budget of the attention path is at its floor already**, and no "enable FMA"
+proposal should be made again - it was never disabled. This is the third item this session found to be
+already shipped rather than missing (after the int8 K/V word reads and the answer-side truncation
+report), which is why "prove the code is absent before pricing it" is now the first step of any
+candidate review here.

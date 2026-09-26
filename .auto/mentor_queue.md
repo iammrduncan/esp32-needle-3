@@ -100,6 +100,14 @@ until join. Never sum overlapping event classes. Check event sanity before
 interpreting zeros. No cache disable/lock, interrupt masking or whole-suite loop.
 If setup stalls, substitute either ready fusion below.
 
+**#926's claimed PMU blocker is withdrawn by source evidence, not a hardware
+restriction.** Installed `/opt/esp/idf/components/perfmon/include/xtensa_perfmon_access.h`
+and `components/perfmon/xtensa_perfmon_access.c` implement init/start/stop/value/
+overflow. Add `perfmon` to the needle component REQUIRES. The installed
+`components/xtensa/include/eri.h` explicitly describes ERI as internal to EACH
+Xtensa core; this is not a shared MMIO window. No new raw-XDM driver is needed.
+
+
 Implementation references: [Espressif perfmon](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32s3/api-reference/system/perfmon.html),
 [installed-version core configuration](https://github.com/espressif/esp-idf/blob/v5.5.2/components/xtensa/esp32s3/include/xtensa/config/core-isa.h),
 [MimiModel core-local PMU example](https://github.com/memovai/mimimodel/blob/main/needle-esp32s3/main/main.c#L24).
@@ -152,29 +160,10 @@ mentor should inspect B1's kept snapshot/FP sequence, B2res allocation and full
 gate, B3hf's incremental result, then whether counters or distinct fusions really
 launched. The 200-turn cap requires direct continuation; finish prose is not work.
 
-
-## 15:14 PASS STATE (researcher)
-
-**Three jobs, distinct, all correctness-clean:**
-
-| job | board | state | evidence |
-|---|---|---|---|
-| B1 fus (block-difference fusion) | 1 | LAUNCHED, flashing + host gate chained | build rc=0; snapshot `memcpy` KEPT per the mentor's correction; the emit at nd_model.c:2818-2819 now forms the same rounded `r = u[i] + hada_b[i]*d4[i]` and stores `u[i] = r - m->ublk[i]`; the later pass (2944-2953) is deleted; B1x source snapshotted to /tmp/B1x_engine_snapshot_1512 first |
-| B2 res (Q/K norm residency) | 2 | LIVE, gate pending | `EVT QKRES layers=8 bytes=3072` - full residency of slots 7/8 for all 8 layers inside the 3 KB bound; preliminary 6.1550 = neutral against its pin |
-| B3 hf (branch-free emit + head fold) | 3 | **FINISHED, fully gated** | decode **6.1683**, ext 6.1018, think 4.72, heap 11491, host RC=0 (23/23), device 22/24 delta 52 - **+0.0033 over its own 6.1650 base**, preserved |
-
-**Best readings now stand at 6.1683 from two independent trees** (B1x: three hoists composed; B3hf: branch-free
-emit + head fold) - the same digits from different code, which is what a real mechanism looks like.
-
-**Next free board (3) takes one of the two ready reserves, in this order:**
-1. **ublk as a second destination in the wide `nd_lanepre4w` emit** - snapshot each block's newly computed
-   `u` while f0..f3 hold the rounded result, keeping its first store and every madd; update the context,
-   prototype, caller, alignment guard and the scalar dual-store; do not use `a7` for the new pointer without
-   moving its per-tile zero temporary; check both outputs with multi-tile canaries and then remove only the
-   caller's `memcpy`. It saves 24,576 loaded bytes per token and must be tested **separately** from the
-   residual-difference fusion, against that board's own base. Editing only the C fallback would leave `ublk`
-   stale whenever the wide path runs.
-2. **Norm emit fused with RoPE** - retain the ascending sum-of-squares and the exact `inv`; for each
-   half-split pair compute both fully rounded normalized values as locals and then the same two RoPE
-   expressions, storing only the rotated outputs; no consumer reads the intermediate normalized row; keep
-   head splitting, the immutable per-token cos/sin and the generic fallback.
+15:17 update: B2res FINISHED6.1550, device22/24 delta52,99tokens,heap8415,
+host RC0/23of23/fidelity unchanged. Residency is valid and neutral, using3072B.
+Keep its artifact, favor the lean pin for subsequent B2 work; no repeat needed.
+B1fus is measuring6.1650 versus B1x6.1683 (gate still pending).
+B3 is free after its small head-factor increment. Equal6.1683 readings from
+different candidates do not prove either mechanism; the researcher corrected
+that overclaim in#926. Launch its next independent job rather than reciting reserves.

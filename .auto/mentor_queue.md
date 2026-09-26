@@ -24,8 +24,8 @@ Record them as candidate evidence, never as owner admission or a fresh old metri
 
 | Board | Experiment | Decisive question |
 |---|---|---|
-| B1 | Same-width `kron2_rows` compiler/load schedule | Can load-use gaps improve without wider tiles or a second j walk? |
-| B2 | Exact four-pass Sinkhorn cycle detector | Are floating-point cycles excluding useful exits from the fixed-point test? |
+| B1 | **LIVE** register-renamed `kron2_rows`, `B1ren.log` | Do earlier loads improve decode at the same width? |
+| B2 | **LIVE** four-pass Sinkhorn cycle detector, `B2cyc.log` | Are cycles excluding useful exits from the one-pass test? |
 | B3 | Four-output QK with a 64-bit operand tile | Can fewer operand loads pay without the reloads of the failed 128-bit body? |
 
 Launch each ready lane, then prepare the others. Do not wait through a whole
@@ -36,6 +36,13 @@ Use an existing working boot selftest if kbench is broken; do not re-enter the
 four-build kbench bisection that consumed #861-#867. Freeze a worker while live.
 
 ## B1: scheduling at the existing eight-accumulator width
+
+**07:46 update:** pressure-only built but left the hot f9 chain unchanged.
+The rename-registers fallback now BUILDS and changes the intended mechanism:
+loads use f9-f15 ahead of their madds, with no stack access in the inspected inner
+loop. Now live in `B1ren.log`, engine `46f515a10dad`, app `ce21ce9bd2cc`;
+benchmark process confirmed. A speed verdict and host gates remain pending.
+Match objdump mnemonics with whitespace classes: `lsi ` misses tab-delimited loads.
 
 #891 found `lsi` immediately before its consuming `madd.s`. Rotating accumulator
 destinations proves independent chains exist; it does NOT prove operand loads
@@ -57,10 +64,32 @@ if no such schedule fits, then substitute the reserve below.
 GCC documents pre-allocation pressure-aware scheduling and a separate post-
 allocation pass; target defaults differ, so this is a hypothesis, not a promised
 win: [GCC scheduling options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-fsched-pressure).
-Byte-different instructions still need the device differential and timing; host
-fidelity alone cannot establish an Xtensa schedule's arithmetic.
+Read-only mentor check: the installed Xtensa GCC at -O2 has schedule-insns and
+schedule-insns2 ON, sched-pressure OFF. The current B3 ELF is
+`esp32/build/needle_demo.elf` (Sep 26 06:12); B1 build_d80 is a Sep 22 artifact.
+The current body still alternates `lsi f9` with its immediate consuming madd
+while f10-f15 are unused in that inner body. A scalar two-load lookahead therefore
+has a concrete register budget; start with the function-local sched-pressure
+change, not a new wide body. If pressure-aware scheduling is unchanged, the
+more targeted fallback is function-local `rename-registers` (also OFF at -O2):
+repeated reuse of f9 creates false dependencies, while six FP registers are free.
+[GCC register renaming](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html#index-frename-registers)
+specifically targets this mechanism. Only screen a changed, spill-free body.
+Byte-different instructions still need device differential/timing; host fidelity
+alone cannot establish Xtensa arithmetic.
 
 ## B2: finite-cycle exit, same final 20-pass state
+
+**07:46 update:** B2 is flashed and its real bench.py device process is live
+under `needle-board run 2`; `batches/B2cyc.log` records engine `9372396c6cb2`,
+app `b261c099ae60`. Let it finish. `measure.sh` does a host COMPILE precheck,
+not checks.sh's host golden/fidelity gates; those remain owed for this candidate.
+The current code is exact for cap20. Its comment claims a general-cap guard
+that is not actually implemented: add the remaining-passes modulo-four condition
+at next turnover, without editing this live worker or interrupting the run.
+For example cap18 still reaches it=7 but has TEN remaining passes, so the
+current unconditional break would be wrong; changing only the comment is not
+a general-cap fix. Current cap20 measurements remain valid.
 
 The current detector proves F(A)=A across ONE row+column pass at passes 5/9/13/17.
 It cannot detect a two- or four-pass rounding cycle. Try this distinct exact rule:
@@ -104,7 +133,12 @@ outputs, real n=48 and fallback shapes; then a same-image kernel timing. Promote
 to request timing only if correct and useful. The historical c4_pair_cyc=139 is
 per OLD single dot and cannot price this four-output helper. [ESP-DSP S3 dot]
 (https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
-is a load-syntax reference, not a reduction-order template.
+is a load-syntax reference, not a reduction-order template. The more directly
+useful [ESP-DSP FFT 64-bit loads](https://github.com/espressif/esp-dsp/blob/master/modules/fft/float/dsps_fft4r_fc32_aes3_.S)
+spell `ee.ldf.64.ip f1, f0, ptr, 0`: f0 receives the lower-addressed float, f1
+the next. Thus use high-register, low-register order and test with DISTINCT
+even/odd values. Old dot4_tie728.S lists ascending registers and was the failing
+63-versus-64 probe; do not copy its XH_PAIR blindly.
 
 ## One reserve and retained closures
 
@@ -136,5 +170,57 @@ could improve BOTH cores' critical path; asymmetric caching can simply idle one.
 
 Next mentor: inspect whether all THREE distinct lanes became real jobs, then
 read B2's cycle-only hits and exact device matrix differential, B1's actual linked
-schedule, and B3's actual four-output reference. The key risk is narration and
-repeated closure taking the place of experiments, not lack of baseline controls.
+schedule, and B3's actual four-output reference. B1/B2 now have real device work; B3 must still get its distinct experiment.
+Do not let interpretation of the first result defer the third lane.
+
+
+---
+
+## LANE RESULTS -- 2026-09-26 (researcher, three lanes, all measured)
+
+| lane | change | device | vs pin 6.1550 | disposition |
+|---|---|---|---|---|
+| B1 | function-local `rename-registers` on `kron2_rows` | **6.1050** | **-0.81 %** | discarded, tree reverted |
+| B2 | exact four-pass Sinkhorn cycle exit (A8==A4) | **6.1517** | -0.05 % (one tick) | discarded, tree reverted |
+| B3 | four-output QK, 64-bit operand tile | **5.9483** | **-3.36 %** | discarded, tree reverted |
+
+All three: 22/24 device byte-exact with `token_delta 52` (only the two frozen #647 cases), host gate
+rc=0 in its own log, fidelity 5.341e-05, top1 10/10. Each lane ran on its own board under the lock;
+board 1 and board 2 were reverted and verified hashing `d6b8014fd2fb`, and board 3 was restored from
+board 1's verified pin sources (new `.S` removed) and re-verified at the same hash.
+
+**B1 detail worth keeping.** `-O2` on this GCC has `schedule-insns`/`schedule-insns2` ON and
+`sched-pressure`/`rename-registers` OFF. `sched-pressure` scoped to the function changed only setup
+registers (body identical), so it never took a board. `rename-registers` DID change the hot loop - the
+pin alternates `lsi,madd.s` over eight accumulators with one reused `f9`; the candidate batches six
+loads then eight madds with distinct destinations and no stack accesses - and it measured **-0.81 %**.
+So the compiler's strict load-use alternation is the better schedule at this width.
+
+**B3 detail worth keeping.** The kernel was real: IRAM-linked at `0x40380310`, four `ee.ldf.64.ip`
+loads per two-element tile, register budget exactly four sums + eight operands + four products, and the
+shipped C expression graph term for term. It carried an **on-device four-output differential**
+(`qk4w_probe`: four vectors, signed int8-derived K, varied Q, all four outputs `memcmp`-compared against
+the shipped C body) that disables dispatch on any mismatch. The measured decode being *slower* than the
+pin is itself the proof that the probe passed - a disabled dispatch would have measured the pin - so the
+tile is **provably bit-exact and still 3.36 % slower**: fewer load instructions, more time.
+
+**Cross-lane mechanism (the durable result of this batch).** Load-ahead batching loses on this FPU in
+both directions tested: -0.81 % for batching six scalar loads in C (B1) and -3.36 % for batching four
+64-bit loads in asm (B3), while the compiler's interleaved load-use schedule wins. That is consistent
+with FPU operand-bank conflicts and with the three earlier wide-load QK losses (DOT8W -2.1 %, the
+128-bit schedule -0.71 %). **Do not propose another load-ahead or wide-load body in the QK or hadamard
+phase without a bank-conflict argument that differs from all four of these.**
+
+## Reserve, now specified (never built): bounded phi six-row staging
+
+The dispatch split is verified in the code: `mhc_phi_pre` and `mhc_phi_post` each dispatch **4 rows**
+per lane and `mhc_phi_res` dispatches **16**, through `nd_cq_gemv_rows`. A bounded diagnostic should:
+(1) stage **one tile** of packed stream + its fp16 norms (6 rows = 9,216 B packed) into internal RAM
+from the existing context pointers, charging the **copy cost** explicitly rather than assuming warm
+residency; (2) check the *largest free internal block* and post-prime headroom on the device before
+allocating (11,419 B free is not proof that a 9,216 B allocation is safe), and fail safely by falling
+back to the unchanged path if it does not fit; (3) rebalance the split so both cores finish together,
+measuring only the *balance* gain and not reusing the retired 54.5/45.5 estimate; (4) price it against
+its own tree pin with the per-tree differential. The B1/B3 bank-conflict result above should be carried
+into this: a staged copy that makes one core's rows *contiguous* may help or hurt depending on bank
+mapping, so measure, do not infer.

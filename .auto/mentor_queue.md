@@ -289,3 +289,28 @@ not on the lane-local range; (2) every row's accumulation stays inside one call 
 per-row values are bit-identical; (3) the device gate plus `gen_tokens 99` are the pass criteria, and the
 comparison baseline is the receiving tree's own pin (board 2 is at the pin now; boards 1 and 3 carry the
 confirmed final_norm hoist, so use board 2 for a clean pin-versus-candidate comparison).
+
+
+## REFUTED before building (zero board cost): the `1+scale` precompute cannot pay as specified
+
+Counting the consumption sites settles it, and the count is unambiguous: **every per-layer scale slot is
+consumed exactly once per layer** - `fp16_slot[li][0]` one use (zcrms, line 1860), `[11]` one use (1862),
+`[13]` one use (1876), `[7]` one use (zcrms_heads, 2282), `[8]` one use (2283). There are six zcrms /
+zcrms_heads calls per layer and each takes a different slot.
+
+So precomputing `r[j] = 1.0f + s[j]` once per layer replaces **one add per element in the emit pass** with
+**one add per element in the precompute**: net zero work, minus a 3 KB destination and the layout
+disturbance that spends. The item as written is therefore a loss before it is built, and it should not be
+built in that form.
+
+**What would make it pay** (recorded so the idea is not lost, only corrected): a scale consumed **two or
+more times per layer**, or a **layer-independent** scale. The second case is exactly what the final_norm
+row is - it is not per-layer - and that is precisely what the confirmed hoist did: it converted that row
+once at open instead of per token.
+
+**And this explains why the hoist paid**, which the arithmetic alone did not: what B1 removed from the
+per-token path was an **fp16->fp32 conversion** (a multi-instruction, table-driven op per element), not a
+cheap add. Measured +0.109% / +0.163% on two boards. Rule of thumb now supported by two data points (B1
+paid for a conversion, the rms pairing and the phi fusion paid nothing for restructuring): on this part,
+**hoisting conversions out of per-token paths pays; hoisting a single FP add does not**, because 768 adds
+are noise next to the loads and the conversions around them.

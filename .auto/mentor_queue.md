@@ -658,3 +658,72 @@ them as blockers).
 budget, gate, or vendor support; every kept lever is individually measured, verified and gated; and
 the remaining decision is the owner's. Per this file's own rule, the campaign stops here rather than
 manufacturing verification work.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~04:40Z (run #794: BEHAVIOURAL CAPTURE GREEN on the newest tree - the last owed verification is closed)
+
+`make capture` (demo/capture.py via needle-api on board 1's console) against board 1's tree
+(shippable + plain loop + EG2 + amortised loop):
+
+| scenario | routed to | outcome |
+|---|---|---|
+| translation / coding / architecture | qwen / gpt_oss / opus | external_selected (no external calls made) |
+| status / sampling / timer / batch | needle | local_executed |
+
+**All nine flags true:** `routes_match, tools_match, requests_succeeded, no_external_calls,
+local_has_two_passes, external_stops_at_selection, telemetry_progressed, sampling_interval_applied,
+timer_expired`. So the newest levers leave routing, tool selection, the two-pass local execution model,
+the no-external-call guarantee, telemetry, sampling intervals and timer expiry intact - properties no
+golden or fidelity probe can see. API stopped by pid afterwards (the `pkill -f needle-api` trap in this
+ledger leaves the `serial_api.py` child holding the console); console confirmed free.
+
+**With this, every verification the campaign defines is green on the newest trees:** device breadth
+(18/20, only the two frozen #647 cases), host 19/19 with fidelity 5.341e-05, own-tree CQ2 bitwise
+differentials, a behavioural host-vs-device cross-check on an unseen prompt, mechanism confirmation
+from the fresh phase map, and the behavioural capture. **Packet: B3 6.1433 (best, +15.8 % over the
+owner's 5.3033) / B2 6.1250 / B1 5.9033.** The only outstanding item is the owner's disposition of the
+two frozen heldout cases.
+
+---
+
+# DECISION PAGE -- 2026-09-28 (one screen; full detail in the FINAL EVIDENCE TABLE above)
+
+## Recommendation
+
+**Adopt tree A (B3, 6.1433 tok/s)** or, if the more conservative lineage is preferred, **tree C (B1,
+5.9033)** - the difference between them is which pre-existing engine stack the new control-flow and
+memory levers are attached to, not the levers themselves.
+
+## Why
+
+* **+15.8 % over the currently accepted 5.3033** (A), or +11.3 % (C); +151.6 % / +141.8 % over the
+  2.44 session baseline.
+* Every lever is **individually measured on the tree that carries it**, and the three control-flow
+  levers are **three-tree confirmed** (+0.44 % loop, +0.27/+0.35/+0.34 % amortisation, +0.22 % QK
+  outline on the seed line).
+* Quality is gated six ways on every tree: device breadth 18/20 (only the two frozen cases below),
+  host 19/19, fidelity 5.341e-05 unchanged against a 2e-3 gate, top1 10/10, own-tree kernel bitwise
+  differentials, and a green behavioural capture (9/9 flags, #794).
+* Speed was never bought with quality: the fidelity figure is **identical to the accepted pin's**, and
+  the one class of change that could have moved it (quantisation/arithmetic) was refused throughout.
+
+## The single decision the owner must make
+
+All trees are **18/20**, failing exactly `heldout_interval_one` and `heldout_long_tools_note_only`
+with `token_delta 52`. Evidence says this is **not** an arithmetic defect:
+
+1. a **pure transport change** (the lossless RX ring, engine byte-unchanged) flips exactly that pair (#647);
+2. the **host** produces the same answer the device does on those prompts (#718);
+3. the behaviour is **deterministic and order-independent** within an image (#719);
+4. every other case is byte-exact, with `token_delta 0`.
+
+**Options:** (a) keep the ring and re-baseline/replace those two cases; (b) drop the ring - losing the
+>128-byte request fix and the 20-case suite; (c) keep them as blockers and ship nothing.
+
+## What is not on the table
+
+Anything that changes model quality (quantisation, vocabulary, grammar, context, clocks beyond the
+documented 240/80 MHz) - refused by the gate, and where tested, measured to fail on its own merits.
+Every remaining speed family is closed **with a measured reason** (byte budget, vendor block, gate, or
+measured null), listed in the FINAL EVIDENCE TABLE.

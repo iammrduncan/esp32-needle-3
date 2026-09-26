@@ -117,3 +117,29 @@ per flash spent priming the two schema prefixes. Both proposed routes die on res
 So experiment latency stays at ~5 min/flash, and any future throughput work has to come from somewhere
 else (fewer flashes per hypothesis, which the anti-repeat guard and the pre-screen rules already push
 toward).
+
+## ALREADY ENFORCED BY CODE (2026-09-28) - do not re-learn these by losing a run
+
+This window turned five ways a number could silently change meaning into checks, each tested in both
+directions. They are mechanisms now, not advice:
+
+1. **`engine_md5` == `PROV_ENGINE`** - the metric line used to hash a different file set than the
+   provenance line, so the two numbers for one tree never agreed (cost two investigations). Both now
+   use the concatenation of `engine/src/*.c`, `*.S`, `engine/include/*.h`, `esp32/main/*.c`.
+2. **Anti-repeat is enforced, not conventional** - a seen signature refuses with exit 42, no reason
+   exits 43, a spent allowance exits 44, and every legitimate use prints `EXPLICIT_REPEAT_ALLOWED`
+   with its reason. Do not assume you can re-measure a tree because you have a good reason.
+3. **Golden saves are ADDITIVE** - existing entries are preserved verbatim, only missing ids are
+   added, and any entry whose measurement differed is reported as `GOLDEN_PRESERVED`. Replacing one
+   takes `AUTO_REBASELINE=1`. (A capture run once silently re-baselined the two frozen #647 entries
+   and made a failing test pass.)
+4. **Captures do not spend a tree's allowance** - `AUTO_CAPTURE_ONLY=1` requires `AUTO_SAVE=1`, prints
+   a banner that its metrics are not evidence, and leaves no trace in the signature or repeat history.
+5. **Captures must run worker-side** - main's `engine/` is a stale lineage (no EG2, no `qk_dot8`, no
+   amortised loop), so goldens captured there would encode a different engine while looking valid.
+   The provenance gate caught the attempt; do not repeat it.
+
+**Suite counts also changed:** 24 cases everywhere now, so a full gate prints **22/24 with
+`token_delta 52`** (was 18/20 with the same delta) and the host gate prints **23/23** (was 19/19). The
+metric group is untouched. The four added cases are a fresh out-of-suite sample and landed in band
+(6.09 / 5.92 / 6.23 / 6.11 against a 6.1450 primary mean).

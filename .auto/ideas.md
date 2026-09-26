@@ -39,7 +39,16 @@ split so both cores finish together. With a 9.3 % delivery advantage on the stag
 equal-finish split is roughly 54.5/45.5, and the net gain is the *balance* gain, not the residency
 gain: ~4.5 % of the phase = 0.36 ms = **~+0.22 % token-wide, i.e. right at the bar, not safely over**.
 
-**Why it is not being built now:** it needs a second walker variant that reads the packed stream from
+**RESOLVED (measured, 2026-09-29):** the feasibility question is now answered - the best tree
+(`d6b8014fd2fb`) reports **11,707-12,087 B free internal RAM** at `EVT READY`, so 6 rows (9,216 B) does
+fit and the half-residency variant is *buildable*. It is nonetheless **RETIRED, not built**, on the
+campaign's own rule and on the mentor's pricing: the prize is **+0.22 %**, which is 1.1x the 0.2 % bar
+with no margin, against a build that needs a second walker variant (a new asm entry point that reads
+the packed stream out of internal RAM) plus a split-policy change. **Reopens if** the owner accepts
+assertion level 0/1 (+8,248 B, the #293 decision): with ~20 KB free both cores get full per-core
+residency, the prize roughly doubles to ~+0.45 %, and the same walker variant serves it.
+
+**The original reasoning (kept for the record):** it needs a second walker variant that reads the packed stream from
 internal RAM (a new asm entry point plus a split policy change), and the payoff sits exactly on the
 0.2 % bar with no margin. **What would make it pay:** either the assertion-level RAM decision (which
 frees 8,248 B and would allow the full per-core half, ~18 KB, for the full 9.3 % on one side), or a

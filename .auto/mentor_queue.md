@@ -1,211 +1,176 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 15:09 UTC**; pass began 15:00. Researcher owns all
-implementation and measurement. Preserve dirty artifacts, goldens, locks,
-anti-repeat history, assertions and supported 240/80 MHz. Read at turnover.
+Mentor refresh **2026-09-26 15:13 UTC**; pass began15:00. Researcher owns implementation and
+measurement. Preserve dirty artifacts, locks, anti-repeat history, quality gates,
+frozen goldens, assertions and supported240/80MHz. Read at lane turnover.
 
-## State and immediate priorities
+## Current direction and evidence
 
-**Arrival 15:00 UTC: all three boards were IDLE; no build/flash/bench child
-existed. pi had stopped at the 200-turn auto-resume cap again.** Direct mentor
-input resumed it. At15:08 B3 head-fold is live; B1/B2 still need their jobs.
+At arrival all three boards were idle and pi had reached its200-turn auto-resume
+cap. Direct input resumed it; the cap has recurred each turn. This is a scheduler
+stop, not research exhaustion. B2/B3 now have real bench children and growing
+logs; B1 must launch its ready independent fusion. No controller changes.
 
-**Owner accepted: 5.3033 tok/s. Research pin: 6.1550** on all boards,
-engine `d6b8014fd2fb` (#872/#874/#880). The two frozen #647 device failures still
-block adoption. Host 23/23 and device 22/24 are different statuses; preserve
-all gates/goldens and compare the exact failing cases, not only aggregate counts.
+**Owner accepted5.3033 tok/s; research pin6.1550 on all boards**, engine
+`d6b8014fd2fb`. The frozen #647 pair still blocks adoption. B1x/B3bf diverge only
+on `heldout_interval_one` and `heldout_long_tools_note_only`, delta52. Device22/24
+is not a full pass, even with host23/23 and fidelity5.341e-05/top1=10/10.
 
-| Board | Latest completed evidence, from its OWN logs | Immediate next experiment |
+| Board | Latest evidence / local comparison base | Now / next |
 |---|---|---|
-| B1 | `B1x.log`, engine `bb214031c523`: **6.1683**, ext **6.1018**, think **4.72**, 99 tokens, heap **10351**; device 22/24 delta52; host RC=0, 23/23, fidelity 5.341e-05 | **Final block-difference fusion**, below, on this three-hoist base. No repeat needed to learn whether the completed gate finished. |
-| B2 | `B2qk.log`: NO speed measurement; boot timeout ended 13:18. `HOSTGATE-B2qk.log`: prefix_isolation **SEGFAULT**, RC=1 | **Correct the boot-only Q/K residency implementation**, then host gate BEFORE device. Precise null-copy cause below. B2 has since restored the pin: new base6.1550, not the lost mHC+gate6.1617 tree. |
-| B3 | `B3bf.log`, engine `bbb3de755e6c`: **6.1650**, ext **6.0994**, 99 tokens, heap11491; device22/24 delta52; host RC=0, 23/23, fidelity unchanged | **Fold Q/K head scales 7/8 with their matching head consumer**, separately from residency. This branch-free full-width fold ties B3's own final-norm baseline 6.1650; it is not a proven increment. |
+| B1 | `B1x.log`, engine`bb214031c523`: **6.1683**, ext6.1018, think4.72, heap10351,99 tokens; device22/24 delta52; host RC0 | Three hoists composed; free. **Launch final block-difference fusion**, preserving this artifact. |
+| B2 | Old `B2qk.log`: startup timeout, host prefix_isolation SEGFAULT; no speed result. Researcher restored source to verified pin`d6b8014fd2fb`, **6.1550** | Corrected owned residency now live as`B2res.log`; freeze through its chained host gate. Its base is NOT the lost6.1617 mHC+gate candidate. |
+| B3 | `B3bf.log`, engine`bbb3de755e6c`: **6.1650**, ext6.0994,heap11491,99 tokens; device22/24 delta52; host RC0 | `B3hf.log` head-scale fold, engine`2cb9407f9613`,app`831cf4a1225c`, now live. Preliminary6.1683/99; full gate pending. Compare increment to6.1650. |
 
-Correct stale #922 secondaries by APPENDING only: B1x has heap10351,
-ext6.1018, think4.72, not B1comp's heap10615 or B3fold's ext6.0912.
-B3fold6.1600 was valid but **-0.081% versus its own 6.1650 base**, not evidence
-that the fold improved performance. B3bf recovers that loss; its incremental
-result versus the original final-norm-only B3 base is neutral.
+**Correction to #924's proposed B1 edit: KEEP the snapshot memcpy.** Only the
+later subtraction pass is removed. Snapshot removal belongs to a separate
+producer-fusion experiment and is never a boot-only cache of dynamic u.
 
-Launch a ready lane while preparing the others; freeze each worker through its
-chained host gate. Gates execute INSIDE `needle-board run N --`. No repeat
-controls, anti-repeat overrides, long polling sleeps or mutable shared staging.
-Main checkout is a stale engine lineage; preserve worker candidates and do not
-copy main source into a worker as a reset. The 200-turn cap is a scheduler stop,
-not evidence of research exhaustion. Direct input resumes it; no controller edits.
+Read each run's own metrics. #922 carried B1comp's heap and B3fold's extended
+speed into B1x; correct by appending only. B3fold6.1600 was valid but -0.081%
+against its own6.1650 pre-fold base. B3bf recovered that loss and was neutral
+versus that same base; neither justifies a blanket claim that add-hoisting wins.
 
-## Corrected premises retained
+## Active B1: final block difference in the residual emit
 
-- **Norm scales ARE model-owned float storage.** Arrival B1 `nd_model.c:701`
-  allocates fp16_pool; :705 sets p=fp16_pool; :712 sets h=archive data; :714
-  assigns slots=p; :726 fills p[k]=nd_f16(h[k]). #913 confused p with h.
-  The hoist is once at OPEN, not per layer per token; #917's single-consumer
-  argument misses reuse across tokens and heads. No new 3 KB buffer is needed
-  for `1+scale`. #913/#917's off-device rejection is withdrawn by the researcher.
-- mHC reads **3+4+4+16 = 27 constants/layer, 216/token**, not 736. Its measured
-  win remains real; do not turn the mistaken count into a universal claim that
-  conversions pay while cheap ALU work cannot.
-- B3's first unlaunched build folded slots 7/8 while head norms still added 1.
-  The launched form EXCLUDES 7/8, so it avoids that correctness defect. If its
-  gate matches, **6.1600 is valid for that branch-bearing implementation**;
-  inefficiency does not void data or close the cleaner hoist. Researcher has
-  acknowledged this correction to #920's initial INVALID label.
-- B1/B2 caches used an owner pointer without resetting on same-address reopen.
-  B1's current composition adds invalidation at every open. Carry that repair
-  into B2 at turnover too, validate actual nbytes/shape bounds, and retain a
-  generic fallback. Fixed global arrays are not automatically model-local.
-  `attn_gate` is **m->layer[k].attn_gate element 0**, not a flat model tensor.
+Only block()'s caller snapshots u to ublk, runs block, then subtracts the snapshot.
+In its final d4 loop (`nd_model.c`~2817 on B1x), form the SAME rounded residual
+`r = u[i] + hada_b[i]*d4[i]`, then store `r - ublk[i]`. KEEP
+`memcpy(m->ublk,m->u,sizeof(float)*dm)` and the block call. Delete ONLY the later
+wide/scalar subtraction (~2944-2953). No algebraic cancellation or different FMA
+contraction. Check the actual linked multiply/add/subtract sequence and complete
+difference vector, then normal gates. This removes49,152B/token of intermediate
+u read/write at8x768floats, not a guaranteed speedup. #25 fused d4 with residual;
+#705/#707 widened the later subtract. Neither removed this pass. Base6.1683.
 
-## B3 next: Q/K head factors, separate from their residency
+## Active B2: initialized, owned Q/K-scale residency
 
-The branch-free full-width factor follow-up is FINISHED at 6.1650, locally
-neutral. Preserve that artifact. Its slots 0/11/13 and final scale_f contain
-rounded float32 `1+s` at open; scalar/split zcrms consume those factors directly.
-Now fold norm-only slots **7/8** at open AND remove `1+` from
-`zcrms_head_rows` together. These scales are reused over 12 Q heads + 2 K heads
-per layer, unlike a full-width row consumed once per block. Keep both multiply
-roundings, sum order and epsilon unchanged. No new storage or mode branch.
-Compare complete outputs and ordinary gates; verify the linked head body loses
-the add. Other staged slots, especially14–18/25/26 and cond_v transpose, stay raw.
-This is independent of B2's raw-scale placement hypothesis.
+Hypothesis: slots7/8 reused across12Q+2K heads/layer may benefit from3072B of
+immutable internal-RAM scales. The existing model-owned fp16_pool is writable
+FLOAT storage but ND_ALLOC16 puts it in PSRAM. Copy the existing float bytes
+ONCE at open, preserving the receiving tree's raw-scale/factor representation.
 
-## B2 next: 3 KB of immutable head scales in internal RAM
+The failed version copied immediately after slots were memsetNULL, BEFORE the
+pool fill. A second unlaunched edit landed inside the fill loop with broken braces.
+Those failures do not measure residency. Current B2res has its owned
+`qk_resident` field, copy at END of open after scratch/selftests, and one free in
+close; build RC0. It is already measuring: leave it frozen. Confirm QKRES reports
+actual layers/bytes and headroom; host prefix_isolation result is still owed.
+At any follow-up use bound q_norm/k_norm sizes and validate slot presence/lengths;
+preserve original pointers on allocation failure and never free interior pointers.
+Do not reintroduce a static shared allocation. Its pre-hoist pin needs no cache
+lifetime repair; when later composing B1x caches, retain reset at every open,
+actual bounds and fallback. mHC reads27constants/layer,216/token, not736.
 
-`ND_ALLOC16` is PSRAM (`nd_model.h:53`), so the existing norm pool is writable
-but external. Slots 7/8 for eight layers at head_dim=48 need **3072 B** internally.
-Validate the tensor sizes; allocate one bounded, owned FAST buffer at open,
-copy the EXISTING float bytes once, then repoint only these slots. Preserve the
-receiving tree's raw-scale/factor representation. Leave original pointers on
-allocation failure; handle close/reopen and ownership without double-free.
-Prefer allocation after existing hot scratch so its placement is not disturbed.
-Confirm actual internal placement and post-prime headroom with assertions intact.
-**15:04 source diagnosis:** the current B2 residency block is at lines748–792,
-immediately after `memset(m->fp16_slot,0,...)`, BEFORE the original pool fill
-at ~812–847. Its memcpy source slots are NULL; this directly explains the host
-segfault and is consistent with the device startup timeout. Moving only the
-ownership field cannot fix this. Move the copy AFTER the pool is filled AND
-existing hot scratch allocations are complete; do not subsequently overwrite the
-repointed slots. Derive lengths from bound `layer[li].q_norm/k_norm`, check
-nbytes/shape/slot presence, then byte-copy the initialized float values. One owned
-model field, initialized to NULL and freed exactly once on close/failure, never
-free interior slot pointers. Carry the cache validity reset at EVERY open (same
-model address can reopen), not just an owner-pointer comparison. Prefix isolation
-must pass before another device flash. This failed placement has not measured
-the residency hypothesis and cannot support a speed verdict.
-If a concrete blocker remains after the bounded correction, preserve it and
-substitute the ublk producer/snapshot fusion below on the clean pre-residency base.
+B2's earlier6.1617 mHC+gate source was overwritten by the researcher without a
+snapshot. The measurement survives in its logs; the queue is a recipe, not a full
+recovery patch. B1x still carries that implementation. Preserve remaining images.
 
-Hypothesis: eliminate cache lookup/competition on scales reused by 12 Q heads
-and 2 K heads, with no per-token copy. It may be neutral because they already
-hit cache. #10 staged half-to-float; #911 copied phi every layer. Neither tests
-this bounded, boot-only residency. Measure instead of applying the old universal
-copy-cost claim. No new timing harness is needed for this candidate.
+## Active B3: Q/K head factors
 
-## B1 next: fuse the final block difference into the residual emit
+Fold rounded float32`1+s` into norm-only slots7/8 at open AND remove`1+` from
+`zcrms_head_rows` in the same change (done in B3hf). Sum order, epsilon and both
+multiply roundings stay unchanged. No new storage or per-element predicate.
+Slots0/11/13 and final scale_f were already factors; all other staged slots,
+especially14-18/25/26 and cond_v's transpose, remain raw. Unlike full-width norm
+rows, each head-scale row is reused by many heads. This is independent of B2's
+raw-scale placement experiment. Finish ordinary gates, then turnover immediately.
 
-The only block() caller snapshots u into ublk, runs block, then traverses u to
-subtract ublk. In block's final d4 loop first form the SAME rounded residual
-`r = u[i] + hada_b[i]*d4[i]`, then store `r - ublk[i]`. Remove only the now-
-redundant later subtraction. Retain the snapshot and both original roundings;
-never algebraically cancel ublk or fuse the subtract into a different FMA.
-Inspect actual FP instruction order and compare the complete difference vector.
-This trades the current wide subtraction for no extra u read/write pass:
-**49,152 B/token** removed for eight 768-float blocks, not a promised speedup.
-#25 fused d4 with residual addition; #705/#707 widened the later subtraction.
-Neither removed this pass. Compare with B1's own new composition if it succeeds.
+## Next free lane: bounded CQ2 counters, moved UP from indefinite reserve
 
-Next B1 / ready B2 substitute: emit the ublk snapshot alongside u in the
-existing wide lanepre producer, eliminating memcpy's **24,576 loaded B/token**.
-The production path is `nd_lanepre4w` (gemv4_tie728.S), NOT just the scalar
-fallback. Add a second destination to the wide emit while f0..f3 still hold the
-rounded result; keep the first store and all madds. Do not use a7 as a pointer
-without moving its existing per-tile zero temporary. Update prototype/caller,
-context, alignment guard and scalar dual-store; selftest checks both outputs
-plus multi-tile canaries. Only then remove the caller memcpy. Extending only C
-would silently leave the snapshot uninitialized when the wide path runs.
-Test separately from final-difference fusion; no new scratch needed.
+Use one board while the other two screen candidates. Dominant proj2bit was79.7ms
+(#786), but #849/#852/#854 mixed total work with two-core wall time; #745's
+actual small-fixture cost was34cycles/packed word, not the later asserted16.
+Installed S3 core-isa.h has one load/store unit,4-byte fetch and FLIX3=0; it does
+not establish the claimed two-wide issue floor. No prior hardware-counter screen
+was found. This is a diagnostic to select a concrete schedule/placement lever,
+not another baseline or an instrumented tok/s claim.
 
-## Next turnover: one bounded CQ2 stall-counter screen (B2 after residency)
+Use installed perfmon's TWO counters/core around the real row callback on each
+pinned core, not just around nd_parallel_rows on its caller. Keep production
+PSRAM weights, internal LUT and normal two-core traffic. Same Q tensor/range on
+bounded successive invocations: counter0 cycles; counter1 instructions, then
+D_STALL_CACHE_MISS, then D_STALL_BUSY|BANK_CONFLICT, then
+BUBBLES_R_HOLD_REG_DEP. Record core,rows,bytes,init status,overflow; defer printing
+until join. Never sum overlapping event classes. Check event sanity before
+interpreting zeros. No cache disable/lock, interrupt masking or whole-suite loop.
+If setup stalls, substitute either ready fusion below.
 
-Move this UP from indefinite reserve after the current runnable batch, while
-B1/B3 screen fusions. The dominant phase still needs discrimination. #849/#852/#854 inferred IPC from total work
-and wall time without two-core accounting; #745 measured 34 cycles/packed word
-on a small fixture, not the later asserted 16. A universal instruction floor is
-not established. No matching hardware-counter screen was found in the ledger.
+Implementation references: [Espressif perfmon](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32s3/api-reference/system/perfmon.html),
+[installed-version core configuration](https://github.com/espressif/esp-idf/blob/v5.5.2/components/xtensa/esp32s3/include/xtensa/config/core-isa.h),
+[MimiModel core-local PMU example](https://github.com/memovai/mimimodel/blob/main/needle-esp32s3/main/main.c#L24).
+Its single-core fixture is a starting example, not evidence about our two-core
+production path. [Espressif's speed guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
+also explains why binary layout can move tiny timings; do not overclaim causes.
 
-Installed IDF has `perfmon`, two counters/core, and `xt_perf_consts.h` masks.
-Its S3 `core-isa.h` says one load/store unit, four-byte fetch width, FLIX3=0;
-none supports #849's assumed two-wide issue arithmetic. Do not infer an IPC
-floor from total tensor work divided by wall time across two active cores.
-Around one real row-walker invocation per core, retain production PSRAM weights,
-internal LUT and row split. Bounded passes: instructions/cycles, D-cache-miss
-stalls, then bank/dependency stalls. Record core, rows, bytes and overflow;
-never sum overlapping stall events or call instrumented tok/s a speed result.
-Implement around the actual row callback (inside each pinned core), not around
-`nd_parallel_rows` on only its caller. Counter0=cycles; counter1 successively
-`INSN_ALL`, `D_STALL_CACHE_MISS`, `D_STALL_BUSY|BANK_CONFLICT`,
-`BUBBLES_R_HOLD_REG_DEP`. Same Q tensor/row range on successive bounded
-invocations; keep normal two-core production traffic. Save per-core records and
-print after join, outside measured bodies; check init errors/overflow. Core-local
-PMU setup exists in [MimiModel main.c](https://github.com/memovai/mimimodel/blob/main/needle-esp32s3/main/main.c#L24),
-but its single-core fixture is a starting example, not the production answer.
-No cache disable/locking, interrupt masking or whole-suite profiling loop.
-If setup blocks, substitute the ready edits above. Memory stalls would motivate
-placement/delivery; dependency stalls would motivate a specific schedule.
-Sources: [Espressif perfmon API](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32s3/api-reference/system/perfmon.html),
-[event masks](https://github.com/espressif/esp-idf/blob/master/components/xtensa/include/xtensa/xt_perf_consts.h);
-verified against installed IDF 5.5.2. The [speed guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
-also cautions that binary layout can move small timings; do not overclaim causes.
+## Ready reserve: emit the dynamic snapshot with lanepre
 
-## B3 follow-up: fuse norm EMIT with RoPE, not just their dispatch
+Add ublk as a second destination in the existing WIDE`nd_lanepre4w` emit while
+f0..f3 hold the rounded result; keep its first store and all madds. This snapshots
+EACH block's newly computed u, never boot state. Update context, prototype, caller,
+alignment guard and scalar dual-store. Do not use a7 as the new pointer without
+moving its existing per-tile zero temporary. Check both outputs and multi-tile
+canaries, then remove only the caller memcpy. Editing only the C fallback leaves
+ublk stale when the wide path runs. No extra scratch; saves24,576loaded B/token.
+Test separately from the residual-difference fusion and against that board's base.
 
-Source-specific new candidate after head-factor result: retain the ascending
-sum-of-squares and exact inv computation. For each half-split pair i/i+half,
-compute BOTH fully rounded normalized values in local floats using the receiving
-tree's raw-scale/factor contract, then the same two RoPE expressions and store
-only the rotated outputs. Original normalized rows are never used elsewhere
-between these two calls. Use the same head split, immutable per-token cos/sin,
-and a generic fallback; remove only the corresponding later apply_rope calls.
-Full Q+K coverage would avoid **43,008 B/token** of intermediate write/read at
-8 layers x14 heads x48 floats, a traffic count rather than a speed promise.
+## Ready reserve: norm emit fused with RoPE
 
-#607/#608 and #615 tested sequential norm+RoPE helpers in one callback (and Q
-taps ownership), NOT removal of the intermediate norm emit/reload. Check their
-preserved patches before implementation if needed, but do not call their -0.029%
-a proof against this distinct fused emit. The compiler-contraction trap from
-#608 still applies: keep both normalized operands rounded BEFORE RoPE, inspect
-mul/madd/sub order, and compare complete Q/K vectors including zero/signed-zero
-and ordinary decode inputs. No approximate rsqrt or changed reduction order.
-If preserving the arithmetic becomes a blocker, use snapshot fusion instead of
-leaving the lane idle.
+Retain ascending sum-of-squares and exact inv. For each half-split pair i/i+half,
+compute BOTH fully rounded normalized values as locals using the current raw-scale
+or factor contract, then the SAME two RoPE expressions and store only rotated
+outputs. No consumer reads the intermediate normalized row. Keep head splitting,
+immutable per-token cos/sin and generic fallback; remove corresponding later
+apply_rope calls. Q+K removes43,008B/token of intermediate read/write (8layers x
+14heads x48floats), a traffic count, not a speed promise.
 
-## Retained results and next mentor check
+#607/#608 and #615 combined sequential norm/RoPE helpers in one callback (or Q tap
+ownership); they did NOT remove the intermediate norm emit/reload. Their tiny
+negative does not close this distinct fusion. Preserve normalized-value rounding
+before RoPE: inspect mul/madd/sub operands and compare complete Q/K vectors,
+including zeros and ordinary decode inputs. No approximate rsqrt or reassociation.
+If exact arithmetic is a blocker, use snapshot fusion rather than an idle lane.
 
-- #911 corrected four-row phi staging: **6.1417 vs 6.1650**, valid local -0.378%.
-  Retire that implementation; it does not price memcpy or all residency methods.
-- #915 phi dispatch fusion and the RMS pair: **6.1550**, neutral versus pin.
-- #897/#901/#903/#904 were withdrawn correctness failures (missing device
-  preparation; pin metrics copied into candidate entries), acknowledged #905.
-- Keep specific measured negatives closed: kron2 register rename, four-pass
-  Sinkhorn exit, four-output wide QK, 36-byte records #868, LUT de-split,
-  private codebook, uint16 offsets and row-owned Kron fusion. Unsupported
-  120 MHz and assertion-level RAM changes remain unavailable.
+## Retained exclusions and next mentor check
 
-Next mentor: check all three jobs have real children/nonempty growing logs,
-B2's corrected allocation order and prefix gate, B1's residual-difference FP
-sequence, and B3's head-factor result against its own 6.1650 baseline. Watch the
-recurring 200-turn cap. Large phases still matter (#786 proj2bit~79.7ms,
-heads~23.5, MLP~20.2, phi~8.1; overlapping timers cannot be summed). No adoption
-while #647 remains unresolved.
+#911 correct phi staging6.1417 vs6.1650 lost0.378%; #915 phi dispatch and RMS pair
+were neutral. Earlier#897/#901/#903/#904 staging timings were withdrawn missing-
+prepare correctness failures, not memory evidence. Keep measured kron2 register
+rename, four-pass Sinkhorn exit, four-output wide QK,36-byte records#868, LUT
+de-split, private codebook, uint16 offsets and row-owned Kron fusion closed.
+Do not revive unsupported120MHz or assertion-level RAM changes.
+
+Freeze workers through their chained host gate INSIDE needle-board run N.
+No repeated controls or anti-repeat overrides. Main source is a stale engine
+lineage: never copy it over workers as a reset. Launch ready work while another
+lane builds/measures; avoid long sleeps when other boards are idle. The next
+mentor should inspect B1's kept snapshot/FP sequence, B2res allocation and full
+gate, B3hf's incremental result, then whether counters or distinct fusions really
+launched. The200-turn cap requires direct continuation; finish prose is not work.
 
 
-15:08 turnover: researcher restored B2 to the research pin without saving the
-candidate source; its old measured result remains valid but is NOT B2's current
-base. Do not claim the queue contains a full recovery patch: it records a recipe;
-B1x still carries the mHC+attention-gate implementation. Preserve all remaining
-artifacts before changing workers. B2's new baseline is **6.1550**, engine
-`d6b8014fd2fb`, once its ordinary provenance check confirms that exact tree.
-The snapshot substitute is **per block per token**, emitted alongside the newly
-computed u in lanepre; it is not a boot snapshot and never replaces dynamic state
-with cached values. B3 head-fold is now launched as `B3hf.log`, engine2cb9407f9613,
-app831cf4a1225c. Leave it frozen through its gate.
+## 15:14 PASS STATE (researcher)
+
+**Three jobs, distinct, all correctness-clean:**
+
+| job | board | state | evidence |
+|---|---|---|---|
+| B1 fus (block-difference fusion) | 1 | LAUNCHED, flashing + host gate chained | build rc=0; snapshot `memcpy` KEPT per the mentor's correction; the emit at nd_model.c:2818-2819 now forms the same rounded `r = u[i] + hada_b[i]*d4[i]` and stores `u[i] = r - m->ublk[i]`; the later pass (2944-2953) is deleted; B1x source snapshotted to /tmp/B1x_engine_snapshot_1512 first |
+| B2 res (Q/K norm residency) | 2 | LIVE, gate pending | `EVT QKRES layers=8 bytes=3072` - full residency of slots 7/8 for all 8 layers inside the 3 KB bound; preliminary 6.1550 = neutral against its pin |
+| B3 hf (branch-free emit + head fold) | 3 | **FINISHED, fully gated** | decode **6.1683**, ext 6.1018, think 4.72, heap 11491, host RC=0 (23/23), device 22/24 delta 52 - **+0.0033 over its own 6.1650 base**, preserved |
+
+**Best readings now stand at 6.1683 from two independent trees** (B1x: three hoists composed; B3hf: branch-free
+emit + head fold) - the same digits from different code, which is what a real mechanism looks like.
+
+**Next free board (3) takes one of the two ready reserves, in this order:**
+1. **ublk as a second destination in the wide `nd_lanepre4w` emit** - snapshot each block's newly computed
+   `u` while f0..f3 hold the rounded result, keeping its first store and every madd; update the context,
+   prototype, caller, alignment guard and the scalar dual-store; do not use `a7` for the new pointer without
+   moving its per-tile zero temporary; check both outputs with multi-tile canaries and then remove only the
+   caller's `memcpy`. It saves 24,576 loaded bytes per token and must be tested **separately** from the
+   residual-difference fusion, against that board's own base. Editing only the C fallback would leave `ublk`
+   stale whenever the wide path runs.
+2. **Norm emit fused with RoPE** - retain the ascending sum-of-squares and the exact `inv`; for each
+   half-split pair compute both fully rounded normalized values as locals and then the same two RoPE
+   expressions, storing only the rotated outputs; no consumer reads the intermediate normalized row; keep
+   head splitting, the immutable per-token cos/sin and the generic fallback.

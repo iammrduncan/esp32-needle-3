@@ -538,3 +538,25 @@ snapshots instead of at the lever assets.
 
 **Pins unchanged:** B3 6.1450 (composed + EG2 + compact + amortised + two-deep + line_too_long fix),
 B2 6.1250, B1 5.9283; best gated packet **6.1433 = +15.8 % over the accepted 5.3033**.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~21:00Z (run #843: suite enlarged to 24 cases; expected counts move 18/20 -> 22/24)
+
+**Suite is uniform:** prompts `9785bb4e` and device golden `62bc2ec0` in main and all three workers,
+24 cases each, zero missing device goldens (the only absent host golden is `think_timer60`, device-only
+by design).
+
+**Expected readings change, in gates only:** a full gate now prints **22/24 with `token_delta 52`**
+(was 18/20 with the same delta - the same two frozen #647 cases failing, the same sixteen passing, plus
+the four new cases passing), and the host gate moves 19/19 -> 23/23. **The metric group (`primary`) is
+untouched, so no reported `decode_tps` changes.**
+
+**Validation of the four new cases on other trees comes free with the next candidate lane:** its full
+gate runs the 24-case suite on a different tree. A save-run must NOT be used to check this - it would
+overwrite the reference goldens - and a lone re-measurement is correctly blocked by the anti-repeat
+guard. If a future gate shows a new case failing on both sides while `token_delta` stays 52, that is a
+genuine tree-sensitivity finding, to be treated like #647 rather than silently re-captured.
+
+**Pins unchanged:** B3 6.1450 / B2 6.1250 / B1 5.9283; best gated packet **6.1433 = +15.8 % over the
+accepted 5.3033**.

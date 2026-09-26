@@ -1,0 +1,822 @@
+/* lut2_tie728.S - handwritten CQ2 pair-table GEMV kernels (Experiment 2).
+ *
+ * Prototypes for nd_lut2_rows_c (engine/src/nd_quant.c), written against
+ * Needle 3's actual CQ2 layout, not MimiModel's:
+ *
+ *   - one CQ group = 128 weights (g = 128 for every tensor in needle3.cact),
+ *     packed LSB-first, 2 bits per weight => 32 bytes of indices per group;
+ *   - pair p (weight p and weight p + g/2) owns 16 consecutive floats in the
+ *     pair table, so a nibble lookup is table[16*pair + nibble]: the address is
+ *     a function of the *data*, i.e. a gather, never a contiguous stream;
+ *   - one FP16 group norm per group, stored after the whole index blob;
+ *   - a group's table span is 64 pairs * 16 entries * 4 B = 4096 B, and one
+ *     table is shared by every row of the projection.
+ *
+ * What this core actually offers the loop (each item checked by assembling it
+ * with xtensa-esp32s3-elf-as from esp-14.2.0_20251107):
+ *   - no indexed or scaled-index integer load (l8ux/l16ux/l32rx/l32xe are not
+ *     in the core config) and no integer post-increment load (l32ip), so a
+ *     nibble gather costs exactly extui + addx4 + lsi - three instructions,
+ *     which is also what GCC emits;
+ *   - lsi reaches 0..1020 bytes from one base register, so one body step can
+ *     cover two index words (2 x 512 B of table) from a single base;
+ *   - 16 single-precision FP registers (f16 is rejected) and no packed/quad
+ *     float SIMD (addsq / ee.adds / movspq are all rejected), so eight table
+ *     entries cost eight add.s no matter who writes the loop;
+ *   - the TIE float loads that do exist (ee.ldf.64.xp, ee.ldf.128.xp) only move
+ *     *contiguous* memory, which a nibble gather is not, so they are not used
+ *     here. That is the core of the Experiment 2 disposition.
+ *
+ * Both kernels keep the C accumulation order exactly: four accumulator chains
+ * per row, the same add order, the same FP16 bit arithmetic, and the same
+ * madd.s for the group norm. Their output is therefore bit-identical to
+ * nd_lut2_rows_c, which the microbenchmark checks row by row with memcmp, not
+ * with a tolerance.
+ *
+ * Preconditions, checked by the caller (nd_lut2_asm_ok) and not here:
+ *   - g == 128, gbytes == 32, gpairs == 64: true for every 2-bit tensor in the
+ *     model (in_pad 128 and 768 both use group 128);
+ *   - the index blob is 4-byte aligned - every CQ row is, because tensor blobs
+ *     are 64-byte aligned and a group is 32 bytes;
+ *   - rowbytes == ngroup * 32, which is how nd_cq_row_bytes() is defined, so
+ *     the per-group cursor advances walk a whole row;
+ *   - every norm of the covered rows is an ordinary FP16 number (exponent
+ *     neither 0 nor 31). The C kernel falls back to nd_f16_slow otherwise;
+ *     these kernels do the inline normal-path conversion only.
+ * nd_lut2_rows_tie2 also wants an even row count and falls back to the C
+ * kernel for the whole range when it does not get one.
+ */
+
+	.set	C_PACKED,   0
+	.set	C_NORMS,    4
+	.set	C_LUT,      8
+	.set	C_Y,        12
+	.set	C_NGROUP,   16
+	.set	C_GBYTES,   20
+	.set	C_GPAIRS,   24
+	.set	C_G,        28
+	.set	C_ROWBYTES, 32
+
+/* FP16 -> FP32, inline normal path, same bit arithmetic as nd_f16().
+ * \src halfword cursor, \fpd FP destination, \t1..\t3 scratch ARs. */
+	.macro	NF16 src, fpd, t1, t2, t3
+	l16ui	\t1, \src, 0
+	extui	\t2, \t1, 10, 5
+	extui	\t3, \t1, 15, 1
+	extui	\t1, \t1, 0, 10		/* mantissa, FP16 bits 0..9          */
+	slli	\t1, \t1, 13		/* ... into FP32 bits 13..22: shifting */
+	addi	\t2, \t2, 112		/* it back down made the norm the      */
+	slli	\t2, \t2, 23		/* nearest power of two below it.      */
+	slli	\t3, \t3, 31
+	or	\t1, \t1, \t2
+	or	\t1, \t1, \t3
+	wfr	\fpd, \t1
+	.endm
+
+/* Same conversion, from a halfword the caller loaded earlier: the norm blob is a
+ * separate stream from the index stream, and NF16 sits at the bottom of every
+ * group, so its load latency lands as a bubble between groups. */
+	.macro	NF16V v, fpd, t1, t2
+	/* FP16 -> FP32 for a POSITIVE ORDINARY halfword, five instructions instead
+	 * of ten. Moving exponent and mantissa together with one shift and adding
+	 * exact: adding the bias difference (127 - 15 = 112, i.e. 0x38000000) into
+	 * the exponent field gives (h<<13) + 0x38000000 == ((e+112)<<23)|(m<<13),
+	 * i.e. the value 2^(e-15) * 1.m that the halfword means. Exact because m<<13
+	 * cannot carry into the exponent field, and e+112 stays in 113..142 - clear
+	 * of the 255 that would be infinity.
+	 * The sign bit must be zero or it lands in the exponent - nd_lut2_asm_ok()
+	 * checks that, plus exponent 1..30, per tensor, once, memoised. Verified
+	 * over all 65,536 encodings in .auto/exp80/test_rebias.c: on the 30,720
+	 * in-domain halfwords these bits equal the old ten-instruction result and
+	 * the true IEEE value (h=0x3c00 -> 0x3f800000); everywhere they differ the
+	 * predicate rejects the halfword. The old form split the fields
+	 * (extui/extui/extui) and rejoined them with two ors, which is where the
+	 * five extra instructions went.
+ *
+ * Hoisting the 0x38000000 into a whole-kernel register - three instructions
+ * per norm instead of five - was measured and is EXACTLY NULL (run #452, board 3,
+ * decode 5.4883 for both forms, and the metric is deterministic to the digit on
+ * these trees). The conversion is off the critical path at five instructions, so
+ * the self-contained form stays and no address register is committed to it. */
+	movi	\t1, 112
+	slli	\t1, \t1, 23
+	slli	\v,  \v, 13
+	add.n	\v,  \v, \t1
+	wfr	\fpd, \v
+	.endm
+
+/* Fold one row's four partials into its running total, in C's order. */
+	.macro	FOLD s0, s1, s2, s3, acc, nf
+	add.s	\s0, \s0, \s1
+	add.s	\s2, \s2, \s3
+	add.s	\s0, \s0, \s2
+	madd.s	\acc, \nf, \s0
+	.endm
+
+/* Eight lookups for one 32-bit index word, eight-deep load batch.
+ * a4 = table base, a12..a15 = gather addresses, f8..f15 = gathered values.
+ * Add order is C's: nibbles 0,4,8,12 into s0..s3, then 16,20,24,28 into
+ * s0..s3. */
+	.macro	W8D wd, off, s0, s1, s2, s3
+	extui	a12, \wd, 0,  4
+	extui	a13, \wd, 4,  4
+	extui	a14, \wd, 8,  4
+	extui	a15, \wd, 12, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f8,  a12, \off + 0
+	lsi	f9,  a13, \off + 64
+	lsi	f10, a14, \off + 128
+	lsi	f11, a15, \off + 192
+	extui	a12, \wd, 16, 4
+	extui	a13, \wd, 20, 4
+	extui	a14, \wd, 24, 4
+	extui	a15, \wd, 28, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f12, a12, \off + 256
+	lsi	f13, a13, \off + 320
+	lsi	f14, a14, \off + 384
+	lsi	f15, a15, \off + 448
+	add.s	\s0, \s0, f8
+	add.s	\s1, \s1, f9
+	add.s	\s2, \s2, f10
+	add.s	\s3, \s3, f11
+	add.s	\s0, \s0, f12
+	add.s	\s1, \s1, f13
+	add.s	\s2, \s2, f14
+	add.s	\s3, \s3, f15
+	.endm
+	/* B1: first W8D of a group seeds its partials from f6 (+0.0f). The add.s is kept
+	 * (not a move) so signed-zero and rounding stay bit-identical; that makes the
+	 * per-group reset mov.s dead inside nd_lut2_rows_tie1n only. */
+	.macro	W8D0 wd, off, s0, s1, s2, s3
+	extui	a12, \wd, 0,  4
+	extui	a13, \wd, 4,  4
+	extui	a14, \wd, 8,  4
+	extui	a15, \wd, 12, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f8,  a12, \off + 0
+	lsi	f9,  a13, \off + 64
+	lsi	f10, a14, \off + 128
+	lsi	f11, a15, \off + 192
+	extui	a12, \wd, 16, 4
+	extui	a13, \wd, 20, 4
+	extui	a14, \wd, 24, 4
+	extui	a15, \wd, 28, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f12, a12, \off + 256
+	lsi	f13, a13, \off + 320
+	lsi	f14, a14, \off + 384
+	lsi	f15, a15, \off + 448
+	add.s	\s0, f6, f8
+	add.s	\s1, f6, f9
+	add.s	\s2, f6, f10
+	add.s	\s3, f6, f11
+	add.s	\s0, \s0, f12
+	add.s	\s1, \s1, f13
+	add.s	\s2, \s2, f14
+	add.s	\s3, \s3, f15
+	.endm
+
+/* The same eight lookups with a four-deep load batch, for the two-row kernel,
+ * where the 16-entry FP register file is fully subscribed. */
+	.macro	W8N wd, off, s0, s1, s2, s3
+	extui	a12, \wd, 0,  4
+	extui	a13, \wd, 4,  4
+	extui	a14, \wd, 8,  4
+	extui	a15, \wd, 12, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f12, a12, \off + 0
+	lsi	f13, a13, \off + 64
+	lsi	f14, a14, \off + 128
+	lsi	f15, a15, \off + 192
+	add.s	\s0, \s0, f12
+	add.s	\s1, \s1, f13
+	add.s	\s2, \s2, f14
+	add.s	\s3, \s3, f15
+	extui	a12, \wd, 16, 4
+	extui	a13, \wd, 20, 4
+	extui	a14, \wd, 24, 4
+	extui	a15, \wd, 28, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f12, a12, \off + 256
+	lsi	f13, a13, \off + 320
+	lsi	f14, a14, \off + 384
+	lsi	f15, a15, \off + 448
+	add.s	\s0, \s0, f12
+	add.s	\s1, \s1, f13
+	add.s	\s2, \s2, f14
+	add.s	\s3, \s3, f15
+	.endm
+
+/* ------------------------------------------------------------------------
+ * Candidate A: one output row per pass, four accumulator chains, eight-deep
+ * load batches, the whole 8-word group unrolled so there is no inner loop.
+ *
+ *   void nd_lut2_rows_tie1(void *ctx, uint32_t r0, uint32_t r1)
+ *
+ * ARs: a2 groups left, a3 rows left, a4 table base, a5 index cursor,
+ * a6 norm cursor, a7 output cursor, a10/a11 index words, a12..a15 addresses.
+ * FP:  f0..f3 partials, f4 group norm, f5 row total, f6 +0.0f, f8..f15 values.
+ * The zero lives in f6 because W8D's second load batch writes f12..f15.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1, "ax", @progbits
+	.align	4
+	.global	nd_lut2_rows_tie1
+	.type	nd_lut2_rows_tie1, @function
+nd_lut2_rows_tie1:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Lt1_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Lt1_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Lt1_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Lt1_group:
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 8
+	l32i	a11, a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 24
+	l32i	a11, a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	NF16	a6, f4, a10, a11, a13
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Lt1_gend
+	j	.Lt1_group			/* j reaches; bnez cannot (>.5 kB) */
+.Lt1_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Lt1_ret
+	j	.Lt1_row
+.Lt1_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1, . - nd_lut2_rows_tie1
+
+/* One body step of the two-row kernel: index word \d of both rows, same table
+ * base, so a group is eight of these and the table cursor moves 512 B each. */
+	.macro	PAIR d
+	l32i	a10, a5, \d
+	l32i	a11, a6, \d
+	W8N	a10, 0, f0, f1, f2, f3
+	W8N	a11, 0, f4, f5, f6, f7
+	addi	a4, a4, 0x200
+	.endm
+
+/* ------------------------------------------------------------------------
+ * Candidate B: two output rows per pass, eight independent accumulator chains
+ * (four per row) sharing one table cursor, so the pair-table lines a row pulls
+ * through the cache are still warm when the second row reads them.
+ *
+ *   void nd_lut2_rows_tie2(void *ctx, uint32_t r0, uint32_t r1)
+ *
+ * ARs: a2 groups left, a3 row pairs left, a4 table base, a5/a6 index cursors,
+ * a8/a9 norm cursors, a7 output cursor, a10/a11 index words, a12..a15 addresses.
+ * FP:  f0..f3 row-1 partials, f4..f7 row-2 partials, f8/f9 row totals,
+ *      f10 group norm, f11 +0.0f, f12..f15 gathered values.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie2, "ax", @progbits
+	.align	4
+	.global	nd_lut2_rows_tie2
+	.type	nd_lut2_rows_tie2, @function
+nd_lut2_rows_tie2:
+	entry	a1, 96			/* see tie1: keep the spill area clear */
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20
+	l32i	a12, a2, C_ROWBYTES
+	s32i	a12, a1, 36
+	s32i	a2, a1, 24			/* ctx, for the C fallback */
+	s32i	a3, a1, 28			/* r0 */
+	s32i	a4, a1, 32			/* r1 */
+	bltu	a4, a3, .Lt2_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Lt2_ret
+	extui	a14, a15, 0, 1
+	bnez	a14, .Lt2_c			/* odd: the pair walk cannot cover it */
+	l32i	a8, a2, C_NORMS
+	mull	a14, a3, a9
+	slli	a14, a14, 1
+	add.n	a8, a8, a14			/* nrm1 = norms + r0*ngroup*2 */
+	l32i	a5, a2, C_PACKED
+	mull	a14, a3, a12
+	add.n	a5, a5, a14			/* q1 = packed + r0*rowbytes */
+	l32i	a7, a2, C_Y
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y = ybase + r0 */
+	add.n	a6, a5, a12			/* q2 = q1 + rowbytes */
+	slli	a13, a9, 1
+	add.n	a9, a8, a13			/* nrm2 = nrm1 + ngroup*2 */
+	movi.n	a13, 0
+	wfr	f11, a13			/* f11 = +0.0f */
+	wfr	f8, a13
+	wfr	f9, a13
+	wfr	f0, a13				/* seed the group partials: see tie1 */
+	wfr	f1, a13
+	wfr	f2, a13
+	wfr	f3, a13
+	wfr	f4, a13
+	wfr	f5, a13
+	wfr	f6, a13
+	wfr	f7, a13
+	srli	a3, a15, 1			/* a3 = row pairs left */
+.Lt2_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Lt2_group:
+	PAIR	0
+	PAIR	4
+	PAIR	8
+	PAIR	12
+	PAIR	16
+	PAIR	20
+	PAIR	24
+	PAIR	28
+	NF16	a8, f10, a10, a11, a13
+	FOLD	f0, f1, f2, f3, f8, f10
+	NF16	a9, f10, a10, a11, a13
+	FOLD	f4, f5, f6, f7, f9, f10
+	mov.s	f0, f11				/* both rows restart their partials */
+	mov.s	f1, f11
+	mov.s	f2, f11
+	mov.s	f3, f11
+	mov.s	f4, f11
+	mov.s	f5, f11
+	mov.s	f6, f11
+	mov.s	f7, f11
+	addi	a5, a5, 32
+	addi	a6, a6, 32
+	addi	a8, a8, 2
+	addi	a9, a9, 2
+	addi.n	a2, a2, -1
+	beqz	a2, .Lt2_gend
+	j	.Lt2_group			/* j reaches; bnez cannot (>.5 kB) */
+.Lt2_gend:
+	ssi	f8, a7, 0
+	ssi	f9, a7, 4
+	addi	a7, a7, 8
+	/* Both rows of the pair are done, and the group loop only walked them by
+	 * one rowbytes: the cursors sit on rows 1 and 2, not 2 and 3. Skip the row
+	 * they just consumed before the next pair starts. (Caught by the synthetic
+	 * "norms" check: rows 2 and 3 came back as rows 1 and 2.) */
+	l32i	a12, a1, 36			/* rowbytes */
+	l32i	a13, a1, 20			/* ngroup   */
+	add.n	a5, a5, a12
+	add.n	a6, a6, a12
+	slli	a13, a13, 1
+	add.n	a8, a8, a13
+	add.n	a9, a9, a13
+	mov.s	f8, f11
+	mov.s	f9, f11
+	addi.n	a3, a3, -1
+	beqz	a3, .Lt2_ret
+	j	.Lt2_row
+.Lt2_ret:
+	retw.n
+.Lt2_c:
+	/* Odd row count: let the C kernel do the whole range. Every production
+	 * row range (768/576/128/96 and their half-splits) is even, so this is
+	 * a correctness exit, not a performance path. */
+	l32i	a2, a1, 24
+	l32i	a3, a1, 28
+	l32i	a4, a1, 32
+	call8	nd_lut2_rows_c
+	retw.n
+	.size	nd_lut2_rows_tie2, . - nd_lut2_rows_tie2
+
+/* ------------------------------------------------------------------------
+ * Instruction-schedule probes. These turn "the C loop feels slow" into a
+ * number: they time a fixed instruction mix on the same data the kernels
+ * touch, so cycles per add.s, per dependent add.s and per load-then-dependent-
+ * add can be compared against the measured cycles per inner-loop word.
+ *
+ * All three take (const float *src, uint32_t n) and run n iterations; the
+ * caller brackets them with the CPU cycle counter.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_probe, "ax", @progbits
+	.align	4
+
+/* Eight independent add.s per iteration: the FP issue interval. */
+	.global	nd_lut2_probe_add_thru
+	.type	nd_lut2_probe_add_thru, @function
+nd_lut2_probe_add_thru:
+	entry	a1, 16
+	lsi	f8, a2, 0
+	movi.n	a9, 0
+	wfr	f0, a9
+	wfr	f1, a9
+	wfr	f2, a9
+	wfr	f3, a9
+	wfr	f4, a9
+	wfr	f5, a9
+	wfr	f6, a9
+	wfr	f7, a9
+.Lpt_loop:
+	add.s	f0, f0, f8
+	add.s	f1, f1, f8
+	add.s	f2, f2, f8
+	add.s	f3, f3, f8
+	add.s	f4, f4, f8
+	add.s	f5, f5, f8
+	add.s	f6, f6, f8
+	add.s	f7, f7, f8
+	addi.n	a3, a3, -1
+	bnez	a3, .Lpt_loop
+	add.s	f0, f1, f0
+	ssi	f0, a2, 0
+	retw.n
+	.size	nd_lut2_probe_add_thru, . - nd_lut2_probe_add_thru
+
+/* One dependent add.s chain of eight: the FP add latency. */
+	.align	4
+	.global	nd_lut2_probe_add_lat
+	.type	nd_lut2_probe_add_lat, @function
+nd_lut2_probe_add_lat:
+	entry	a1, 16
+	lsi	f8, a2, 0
+	lsi	f0, a2, 4
+.Lpl_loop:
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	add.s	f0, f0, f8
+	addi.n	a3, a3, -1
+	bnez	a3, .Lpl_loop
+	ssi	f0, a2, 0
+	retw.n
+	.size	nd_lut2_probe_add_lat, . - nd_lut2_probe_add_lat
+
+/* Load-then-dependent-add: the lsi -> add.s distance the gather pays. */
+	.align	4
+	.global	nd_lut2_probe_load_lat
+	.type	nd_lut2_probe_load_lat, @function
+nd_lut2_probe_load_lat:
+	entry	a1, 16
+	lsi	f0, a2, 0
+	lsi	f8, a2, 4
+.Ldl_loop:
+	lsi	f9,  a2, 8
+	add.s	f0, f0, f9
+	lsi	f10, a2, 12
+	add.s	f0, f0, f10
+	addi.n	a3, a3, -1
+	bnez	a3, .Ldl_loop
+	ssi	f0, a2, 0
+	retw.n
+	.size	nd_lut2_probe_load_lat, . - nd_lut2_probe_load_lat
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant A: one row, four index words in flight (a8/a9 are the two
+ registers the gather scratch does not touch). The accumulation order is exactly
+ tie1's, so the result must be bit-identical; only the load schedule moves.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1p, "ax", @progbits
+	.global	nd_lut2_rows_tie1p
+	.type	nd_lut2_rows_tie1p,@function
+nd_lut2_rows_tie1p:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltp_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltp_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Ltp_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Ltp_group:
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	l32i	a8,  a5, 8
+	l32i	a9,  a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	W8D	a8,  0,   f0, f1, f2, f3
+	W8D	a9,  512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	l32i	a8,  a5, 24
+	l32i	a9,  a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	W8D	a8,  0,   f0, f1, f2, f3
+	W8D	a9,  512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	NF16	a6, f4, a10, a11, a13
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Ltp_gend
+	j	.Ltp_group			/* j reaches; bnez cannot (>.5 kB) */
+.Ltp_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Ltp_ret
+	j	.Ltp_row
+.Ltp_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1p, . - nd_lut2_rows_tie1p
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant B: tie1 with the per-group norm halfword l16ui'd at the
+ * top of the group instead of at the bottom, so its load overlaps the gather.
+ * Same arithmetic in the same order, so the result is bit-identical.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1n, "ax", @progbits
+	.global	nd_lut2_rows_tie1n
+	.type	nd_lut2_rows_tie1n,@function
+nd_lut2_rows_tie1n:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltn_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltn_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	/* Amortised hardware group loop: the full long-loop setup (loop / LBEG / LEND /
+	 * LCOUNT, plus the isync the ISA requires after touching the loop registers) is
+	 * paid ONCE, and every later row only re-arms LCOUNT from ngroup-1 in the row
+	 * epilogue. The count is constant per tensor, so it is loaded once. Body,
+	 * endpoints, cursors, norm conversion and fold are untouched, and the `loop`
+	 * instruction itself still owns the per-group iteration count. */
+	l32i	a2, a1, 20			/* ngroup, once per call */
+	l32i	a4, a1, 16			/* LUT base for the FIRST row, before LBEG */
+	loop	a2, .Ltn_gend			/* LBEG = .Ltn_group, LEND = .Ltn_gend */
+.Ltn_group:
+	l16ui	a8, a6, 0			/* this group's norm, loaded early */
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	W8D0	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 8
+	l32i	a11, a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 24
+	l32i	a11, a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	NF16V	a8, f4, a10, a11
+	FOLD	f0, f1, f2, f3, f5, f4
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+.Ltn_gend:			/* fall-through: `loop` exhausted LCOUNT for this row */
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1		/* rows first: the LAST row exits with LCOUNT == 0 */
+	beqz	a3, .Ltn_ret
+	l32i	a4, a1, 16		/* remaining rows: reload the LUT base */
+	addi.n	a10, a2, -1		/* re-arm LCOUNT = ngroup-1, then synchronise */
+	wsr.lcount a10
+	isync
+	j	.Ltn_group		/* straight back into the group body, no label hop */
+.Ltn_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1n, . - nd_lut2_rows_tie1n
+
+/* ------------------------------------------------------------------------
+ * Experiment 4 variant C: the whole FP16->FP32 norm conversion, not just its
+ * load, happens at the top of the group and lands in f4. The fold at the bottom
+ * then has no dependency left on the norm stream. Same value, same order.
+ * ------------------------------------------------------------------------ */
+	.section .iram1.lut2_tie1m, "ax", @progbits
+	.global	nd_lut2_rows_tie1m
+	.type	nd_lut2_rows_tie1m,@function
+nd_lut2_rows_tie1m:
+	/* Frame is deliberately 64 B, not the 32 B the two slots need: the register
+	 * spill area the window handlers use sits at one end of the frame, and at 32 B
+	 * the frame-local slots at +16/+20 sit in it. Returning then restores a0/a1
+	 * from what the kernel wrote there, and retw jumps through a garbage address
+	 * (measured: the core faults right after the last checkpoint with a0 = 6, the
+	 * value stored at +20). 64 B leaves the spill area clear under either layout.
+	 */
+	entry	a1, 64
+	l32i	a5, a2, C_PACKED
+	l32i	a6, a2, C_NORMS
+	l32i	a7, a2, C_Y
+	l32i	a9, a2, C_LUT
+	s32i	a9, a1, 16			/* frame[16] = table base */
+	l32i	a9, a2, C_NGROUP
+	s32i	a9, a1, 20			/* frame[20] = ngroup     */
+	bltu	a4, a3, .Ltm_ret
+	sub	a15, a4, a3			/* rows */
+	beqz	a15, .Ltm_ret
+	movi.n	a13, 0
+	wfr	f6, a13				/* f6 = +0.0f; W8D clobbers f12 */
+	mull	a14, a3, a9			/* norms += r0*ngroup*2 */
+	slli	a14, a14, 1
+	add.n	a6, a6, a14
+	l32i	a14, a2, C_ROWBYTES
+	mull	a13, a3, a14			/* packed += r0*rowbytes */
+	add.n	a5, a5, a13
+	slli	a14, a3, 2
+	add.n	a7, a7, a14			/* y += r0 */
+	mov.n	a3, a15			/* a3 = row counter */
+	mov.s	f5, f6				/* row total = +0.0f */
+	mov.s	f0, f6				/* group partials: the group loop */
+	mov.s	f1, f6				/* resets them at its bottom, so */
+	mov.s	f2, f6				/* the first group needs the seed  */
+	mov.s	f3, f6				/* here or it folds in garbage.    */
+.Ltm_row:
+	l32i	a2, a1, 20
+	l32i	a4, a1, 16
+.Ltm_group:
+	l16ui	a8, a6, 0			/* this group's norm, loaded early */
+	NF16V	a8, f4, a10, a11		/* ... and converted early too: the FOLD
+		* at the bottom only needs f4. a10/a11 are scratch here, they
+		* are reloaded with the first index word right after. */
+	l32i	a10, a5, 0
+	l32i	a11, a5, 4
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 8
+	l32i	a11, a5, 12
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 16
+	l32i	a11, a5, 20
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	l32i	a10, a5, 24
+	l32i	a11, a5, 28
+	W8D	a10, 0,   f0, f1, f2, f3
+	W8D	a11, 512, f0, f1, f2, f3
+	addi	a4, a4, 0x400
+	FOLD	f0, f1, f2, f3, f5, f4
+	mov.s	f0, f6				/* the next group starts from 0 */
+	mov.s	f1, f6
+	mov.s	f2, f6
+	mov.s	f3, f6
+	addi	a5, a5, 32			/* gbytes */
+	addi	a6, a6, 2			/* one FP16 norm */
+	addi.n	a2, a2, -1
+	beqz	a2, .Ltm_gend
+	j	.Ltm_group			/* j reaches; bnez cannot (>.5 kB) */
+.Ltm_gend:
+	ssi	f5, a7, 0
+	addi	a7, a7, 4
+	mov.s	f5, f6
+	addi.n	a3, a3, -1
+	beqz	a3, .Ltm_ret
+	j	.Ltm_row
+.Ltm_ret:
+	/* Poor man's core dump: the fault lands in retw, which the panic printout
+	 * cannot describe (it reports a double exception). RTC memory survives the
+	 * reboot, so the next boot prints the register state at the return. */
+	retw.n
+	.size	nd_lut2_rows_tie1m, . - nd_lut2_rows_tie1m

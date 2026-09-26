@@ -199,3 +199,25 @@ shapes and both operand placements. The last verification gap on the CQ2 control
 **Unblocked:** B2's amortised-variant primary against its own 6.1083 pin (no repeat of completed gates).
 **Lanes:** B1 5.8833 (LOOP+EG2) free -> outline its own 8-column C QK body; B2 -> amortised primary;
 B3 6.1217 free -> small real-tensor FP32 norm-sidecar probe.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~17:00Z (run #777: amortised group loop KEPT, +0.27 % - new campaign best 6.1250)
+
+| tree | decode | vs own pin |
+|---|---|---|
+| B2 composed (plain group loop + `qk_dot8`) | 6.1083 | — |
+| **B2 + amortised loop (#777)** | **6.1250** | **+0.27 %** (prefill 6.4667, min 5.9, 6/6, delta 0) |
+| B3 composed + EG2 + compact prefix | 6.1217 | +0.164 % over its 6.1117 |
+
+Setup paid once per call; later rows reload the LUT base, re-arm `wsr.lcount = ngroup-1`, `isync`,
+`j .Ltn_group`; rows decrement/exit **first** so the last row leaves LCOUNT at 0. Verified by the green
+CQ2 differential (`tie1n exact=96/96 bitexact=1`, plus tie1/tie2/tie1p/tie1m and all `blob_int`
+variants) and by the ELF (`loop a2, 0x4037dc6c`, epilogue jump on that LBEG).
+
+**Control-flow family on the seed line now totals +0.71 %** (plain loop +0.44 %, amortisation +0.27 %),
+the campaign's most productive recent line. **Untried and most promising:** the same amortisation on
+the other dispatched 2-bit kernels and on the 4-bit phi walker. Assets: `.auto/exp96/`.
+**Owed:** breadth promotion + host gates for the 6.1250 tree.
+**Lanes:** B1 5.8833 (LOOP+EG2) free -> outline its own QK body; B2 free (6.1250) -> amortisation on
+another kernel or breadth; B3 6.1217 free -> norm-sidecar probe.

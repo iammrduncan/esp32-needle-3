@@ -221,3 +221,54 @@ the other dispatched 2-bit kernels and on the 4-bit phi walker. Assets: `.auto/e
 **Owed:** breadth promotion + host gates for the 6.1250 tree.
 **Lanes:** B1 5.8833 (LOOP+EG2) free -> outline its own QK body; B2 free (6.1250) -> amortisation on
 another kernel or breadth; B3 6.1217 free -> norm-sidecar probe.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~17:40Z (run #778: campaign-best tree is now FULLY GATED at 6.1250 = +15.5 % over the owner's pin)
+
+| metric | value | vs predecessor |
+|---|---|---|
+| **decode** | **6.1250** | +1.04 % over the seed 6.0617 pin; **+15.5 % over the owner's 5.3033** |
+| prefill / min_case | 6.4667 / 5.9 | both bests |
+| ext / think | 6.0577 / 4.69 | both up |
+| device | 18/20, delta 52 | only the two #647 ring-related goldens |
+| host | 19/19, delta 0, fidelity 5.341e-05, top1 10/10 | identical to the accepted pin |
+
+**Tree (B2):** seed-era stack + plain group hardware loop (+0.44 %) + amortised group loop (+0.27 %,
+CQ2 differential green: `tie1n exact=96/96 bitexact=1` on all shapes and both operand placements) +
+noinline `qk_dot8` (+0.22 %). **Evidence side: complete** except the two frozen heldout cases every
+tree on this line shares (the #647 demo-timer pair) - the owner's disposition.
+
+**Carried-forward candidates:** (1) the same amortisation on other dispatched kernels; (2) B1's own
+8-column C QK body outlined to a noinline helper, against its 5.8833 pin, no whole-file transplant;
+(3) B3's small real-tensor FP32 norm-sidecar probe. **Three boards usable** (B1 5.8833 LOOP+EG2,
+B2 6.1250 gated, B3 6.1217 EG2+compact).
+
+**Assets:** `.auto/exp90` (loop), `.auto/exp91` (qk_dot8), `.auto/exp92`/`94`/`95` (EG2 family),
+`.auto/exp96` (amortised loop + the kbench sweep wiring that produced the differential).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~18:30Z (run #779: B1's QK outline port DIVERGED and was reverted - the lever is tree-specific in CORRECTNESS, not just in sign)
+
+**What was tried:** the same two edits that measured **+0.22 % on the seed line** (extract the
+8-column four-accumulator QK body into a noinline `qk_dot8`; caller keeps the four scale multiplies),
+applied to B1's shippable tree, whose body is **statement-identical** at the same loop head (line 1903).
+
+**Result: 0/6 device byte-exact, `token_delta 239`** - the device gate caught it, as designed. Two
+stages: the first build honestly failed with `-Werror=maybe-uninitialized` because the caller's
+**odd-remainder tail** (`if (i < qk_hd) { for (; i < qk_hd; i++) ... }`) survived my anchor and used
+an `i` the helper now owned; removing that tail compiled, then diverged. So on the shippable line the
+QK dot is **not interchangeable** with the seed line's even though the inner statements match: the
+surrounding code depends on that tail/`i` state in a way the seed tree does not. **A statement-level
+match is not a semantic match** (#333 restated, #754 extended to C bodies).
+
+**Reverted byte-exactly:** B1's `nd_model.c` is back to md5 `94347451dbf093cb429cde539b612e9a`
+(identical to `.auto/exp92/nd_model.c.eng2`), builds clean, and keeps its measured **5.8833**
+(group LOOP + EG2). Nothing kept; no breadth run spent on the divergent image.
+
+**If the shippable QK dot is outlined later:** match the WHOLE region including the remainder
+handling, then differential it against the previous implementation on real rows **before** any primary.
+
+**Lanes now:** B1 5.8833 free; B2 **6.1250 fully gated** (best packet); B3 6.1217 free with the
+norm-sidecar probe outstanding.

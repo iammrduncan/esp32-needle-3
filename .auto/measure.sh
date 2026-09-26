@@ -132,9 +132,22 @@ if [ "${PROV_BAD}" = 1 ]; then
     echo "PROVENANCE_MISMATCH want=${EXPECT_ENGINE_MD5} have=${PROV_ENGINE} tree=${PROV_TREE}"
     exit 3
 fi
+# GOLDEN CAPTURE MODE (AUTO_CAPTURE_ONLY=1): a capture must re-measure an image that has already
+# been seen - that is the point of it - but it is NOT a measurement and must not be mistakable for
+# one. This mode therefore (a) bypasses the anti-repeat refusal, (b) does NOT record the signature
+# and does NOT spend the tree's repeat allowance, and (c) prints a loud banner and refuses to run
+# without AUTO_SAVE=1, so the only thing it can produce is golden files. Metrics in its output are
+# incidental and must never be cited: the tree was already measured by whoever ran it first.
+if [ "${AUTO_CAPTURE_ONLY:-0}" = 1 ]; then
+    if [ "${AUTO_SAVE:-0}" != 1 ]; then
+        echo "CAPTURE_ONLY_REQUIRES_AUTO_SAVE"; exit 45
+    fi
+    echo "CAPTURE_ONLY banner=this_run_saves_goldens_only metrics_are_not_evidence signature=${CURRENT_SHIPPING_SIG}"
+    CAPTURE_ONLY=1
+fi
 SIGNATURE_SEEN=0
 grep -q "^${CURRENT_SHIPPING_SIG} " "$SIG_HISTORY" 2>/dev/null && SIGNATURE_SEEN=1
-if [ "$SIGNATURE_SEEN" = 1 ]; then
+if [ "$SIGNATURE_SEEN" = 1 ] && [ "${CAPTURE_ONLY:-0}" != 1 ]; then
     if [ "${AUTO_ALLOW_REPEAT:-0}" != 1 ]; then
         echo "UNCHANGED_SHIPPING_IMAGE_REFUSED signature=${CURRENT_SHIPPING_SIG}"
         echo "Implement a real candidate first. Controls belong in concurrent candidate batches."

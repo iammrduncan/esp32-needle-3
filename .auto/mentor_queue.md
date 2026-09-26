@@ -393,3 +393,80 @@ costs more than a handful of instructions can recover.
 **B2 6.1250**, **B1 5.9033** - sharing only the two frozen #647 heldout cases as an owner disposition.
 No open above-bar candidate remains that is not already measured or closed by budget, gate or vendor
 support; new hypotheses should start from a fresh phase measurement rather than a re-screen.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~23:15Z (run #786: fresh phase map on the best tree - NO NEW TARGET; the lever's mechanism independently confirmed)
+
+Profiled run on B3's campaign-best tree (engine `391b89a4c159`); the printed 6.13 is diagnostic only.
+
+| phase | ms | share |
+|---|---|---|
+| attn-stage | 81.2 | 50.6% |
+| - proj2bit | **79.7** | 49.7% |
+| - attention head split | 23.5 | 14.6% |
+| hadamard | 20.2 | 12.6% |
+| engram | 14.6 | 9.1% |
+| mhc_phi4 | 8.1 | 5.0% |
+| sinkhorn / mhc-mix / prep+lut / step-tail / rope | 3.1 / 2.0 / 1.7 / 0.6 / 0.2 | - |
+| logits4 / confpool / sample | 0.0 each | - |
+
+**Two conclusions.** (1) **The amortised loop's mechanism is confirmed independently**: proj2bit reads
+79.7 ms against 80.8 ms before it, the ~1.4 % phase reduction a +0.3-0.35 % token-wide gain implies -
+not just an end-to-end number but the right phase moving by the right amount. (2) **No new target
+appeared.** Every phase above 8 ms is already closed by measurement (2-bit walker at its instruction
+floor; attention register-limited with four dot schedules and paired exp settled; transform measured on
+width/fusion/pass-count/rescale; engram at the LUT GEMV floor; phi delivery-bound and unpaid). Nothing
+above the bar is unaddressed.
+
+**Campaign state:** B3 **6.1433** (best, +15.8 % over the owner's 5.3033), B2 **6.1250**, B1 **5.9033** -
+all three fully gated, sharing only the two frozen #647 heldout cases. The remaining upside is the
+owner's disposition, not another kernel.
+
+---
+
+# OWNER ACCEPTANCE PACKET -- 2026-09-27 (end of session; three fully-gated trees, one decision)
+
+## The numbers (all on-device, byte-exact goldens, host-gated)
+
+| tree | board | decode | prefill | min_case | ext | think | device | host | internal_free |
+|---|---|---|---|---|---|---|---|---|---|
+| **A. composed + EG2 + compact + amortised** | B3 | **6.1433** | 6.4833 | 5.92 | 6.0731 | 4.70 | 18/20, d52 | 19/19 | 12,003 |
+| **B. seed + loop + amortised + `qk_dot8`** | B2 | **6.1250** | 6.4667 | 5.90 | 6.0577 | 4.69 | 18/20, d52 | 19/19 | 12,003 |
+| **C. shippable + loop + EG2 + amortised** | B1 | **5.9033** | 6.2117 | 5.69 | 5.8346 | 4.56 | 18/20, d52 | 19/19 | 10,751 |
+| accepted pin (owner) | — | 5.3033 | — | — | — | — | 20/20 | 19/19 | — |
+
+**Best = A at 6.1433 = +15.8 % over the accepted 5.3033**, session arc 2.44 -> 6.1433 (**+151.6 %**).
+
+## The single blocker, stated once
+
+All three trees are **18/20**, failing exactly the same two heldout cases
+(`heldout_interval_one`, `heldout_long_tools_note_only`) with `token_delta 52`. #647 showed a **pure
+transport change** (the lossless RX ring, engine byte-unchanged) flips precisely that pair, and #718/#719
+showed the host produces the same interval answer the device does - so the pair is state/timing
+sensitive, not arithmetic. The accepted pin does not carry the ring. **Owner options:** (a) keep the
+ring and re-baseline/replace those two cases; (b) drop the ring (losing the >128-byte request fix and
+the 20-case suite); (c) keep them as blockers and ship nothing.
+
+## What each tree is made of (every lever individually measured)
+
+* **Control flow (this window's win):** plain group hardware `loop` **+0.44 %**, amortised group loop
+  **+0.27 / +0.35 / +0.34 %** on B2/B3/B1 (three-tree confirmation), CQ2 differential green
+  (`tie1n exact=96/96 bitexact=1`, all shapes, both operand placements, #776).
+* **Attention:** composed family (B4W shared-V P.V, DOT8W 8-column QK, SELRES rescale sweeps),
+  noinline QK dot outline **+0.22 %** (seed tree only - the same port **diverged** on the shippable
+  tree and was reverted, #779).
+* **Memory/transport:** engram[1] narrow staging **+0.164 %** (sub-bar, preserved), narrow compact
+  prefix (**768 KB reclaimed**, quality-neutral, and the enabler that let EG2 fit), late lossless RX
+  ring (wedge fix, no speed).
+* **Closed by measurement, do not re-open:** CV3W offset stream and the FP32 norm sidecar (both die on
+  the byte budget: 4x / +6.25 % of a stream already at ~69 % of the octal bus), 120 MHz (vendor-blocked,
+  #331), assertion-level RAM (no collectable buyer), spurious-wakeoffs, spill class, cache-config maxima.
+
+## Evidence hygiene (so the numbers can be trusted)
+
+Every tree carries device breadth + host 19/19 + `logit_max_delta 5.341e-05` (unchanged from the
+accepted pin) + `token_delta 0` on the passing cases; the CQ2 kernel change additionally carries the
+purpose-built bitwise differential; three separate gates were falsified by mutation earlier in the
+campaign and are wired into `measure.sh`/`checks.sh`; the anti-repeat guard refused two would-be
+re-measurements during this window. Assets for every lever: `.auto/exp88`-`exp96`.

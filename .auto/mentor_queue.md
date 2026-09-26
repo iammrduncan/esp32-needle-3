@@ -560,3 +560,22 @@ genuine tree-sensitivity finding, to be treated like #647 rather than silently r
 
 **Pins unchanged:** B3 6.1450 / B2 6.1250 / B1 5.9283; best gated packet **6.1433 = +15.8 % over the
 accepted 5.3033**.
+
+---
+
+## NEXT CANDIDATE (ready to build, priced at +2.8 %): head-blocked QK traverse
+
+The quantified token model (#854) and the dot's measured 2.90 cycles/MAC (#853, 139 cycles for 48 MACs,
+35 % of FPU peak, latency-bound on the two staged `kf` rows) point at one thing no attempt has touched:
+the *residency* of those rows rather than the body that consumes them. The shipping traverse is
+position-outer / head-inner, so the same 384 B of `kf0`/`kf1` is re-loaded for each of the twelve heads
+that share a kv position. Blocking the heads against it (stage the rows once, compute all twelve heads,
+2.3 KB of q rows in internal RAM) changes the load-to-work ratio by 8x while leaving every head's
+accumulation order, operands and values identical - bit-exact by construction.
+
+**Price if it works:** dot 2.90 -> ~1.3 cycles/MAC, QK 8.3 -> ~3.7 ms, **+2.8 % of the token** - the
+largest unbuilt candidate since the amortised loop.
+**Risks, in order:** register pressure (the rows must be walked from internal RAM, so it depends on L1
+hits, not values); the split is already per-head, so it must be applied *within* each core's range; the
+staging helper assumes position-outer today.
+Full detail in `.auto/ideas.md`.

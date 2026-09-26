@@ -160,7 +160,8 @@ The original 24 KiB CQ2 table for width 768 fit its 64 KiB data cache. On
 another target, recompute:
 
 ```text
-pair_table_bytes = ceil(input_width / 2) * 16 * sizeof(float)
+in_pad = ceil(input_width / group) * group
+pair_table_bytes = (in_pad / 2) * 16 * sizeof(float)
 ```
 
 Then compare that live set with usable cache per concurrent worker. Do not copy

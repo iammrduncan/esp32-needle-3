@@ -24,8 +24,8 @@ the correctness boundary.
 
 Creating a task per GEMV would dominate small operations. A persistent pinned
 worker amortizes task setup. The retained hybrid briefly spins on the common
-path, then uses a notification rather than burning a core indefinitely. The
-spin is a latency optimization only; sequence/notification ordering must remain
+path, then falls back to binary `s_go`/`s_done` semaphores rather than burning a
+core indefinitely. The spin is a latency optimization only; sequence/semaphore ordering must remain
 correct if the worker sleeps immediately.
 
 At the 100 Hz FreeRTOS tick, a nominal 5 ms tick-based delay rounds to zero.
@@ -36,9 +36,12 @@ This corrected several misleading scheduler experiments.
 
 A 50/50 row count is correct only when both halves have equal delivery and
 compute cost. Use measured completion time for the exact operator and placement.
-Small output counts should often stay on one core because publish/wake/wait
-cost exceeds parallel work. Attention can split only eight heads, but each head
-is large enough in this model to qualify; tiny norms/elementwise loops are not.
+Small output counts stay on one core when the generic splitter sees fewer than
+four row units because publish/wake/wait cost exceeds the work. This model's 12
+query heads split 6/6, aligned with its two six-head KV groups, and each head is
+large enough to qualify. Some norm/elementwise operators deliberately expose
+four or more coarse chunks and therefore do use both cores; classify the actual
+callback units rather than the source loop's apparent size.
 
 If one core receives staged operands and the other streams them, balance time,
 not rows. The late one-core phi staging idea estimated about a 54.5/45.5 split,
@@ -66,8 +69,9 @@ executor.
 
 A folded four-bit codebook initially appeared positive. Its 8 KiB
 function-static scratch table was built by both cores. Host execution serialized
-calls and hid the race; device results exposed it. Moving scratch to caller/
-worker ownership restored safety but lost performance.
+calls and hid the race, and favorable timing made three device runs look green.
+Source/concurrency analysis exposed the unsound ownership; moving scratch to
+caller/worker ownership restored safety but lost performance.
 
 Hard rule: writable function-static kernel scratch is forbidden in a concurrent
 row callback unless protected or provably single-owner. Protection can itself

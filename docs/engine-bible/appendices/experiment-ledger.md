@@ -62,8 +62,10 @@ All three candidate trees in the durable handoff have host 19/19, top-1 10/10,
 device 18/20. The two failures are exactly `heldout_interval_one` and
 `heldout_long_tools_note_only`, totaling `device_token_delta=52`. Run #647 showed that
 a transport-only RX-ring change can flip exactly those cases with engine bytes held
-constant; #718 showed host/device agreement on the changed answers; #719 showed the
-answers are deterministic and order-independent within an image. That evidence localizes
+constant; #718 exactly reproduced the changed `interval_one` answer on host and
+showed the same repeated-tool tendency, but not byte-identical output, for the
+long-tools prompt; #719 showed the device answers are deterministic and
+order-independent within an image. That evidence localizes
 the ambiguity but does **not** authorize silently changing goldens. The owner must
 rebaseline/replace those cases, drop the ring and its >128-byte request fix, or block the
 candidate.

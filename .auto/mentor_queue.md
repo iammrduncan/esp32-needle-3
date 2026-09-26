@@ -144,3 +144,29 @@ Next mentor: **are all three distinct lanes actually progressing?** Inspect
 B2's real asm=1/tie1n differential and then its timing, B1's QK boundary port,
 and B3's cold sidecar result. Preserve the two new screens above without
 misattributing B1's combined gain or promoting 18/20 proposals as accepted.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~15:30Z (runs #774/#775: B1 attribution corrected; CQ2 differential wired half-way, sweep never reached)
+
+**B1 result re-attributed (md5-proven):** B1's live `nd_model.c` is byte-identical to
+`.auto/exp92/nd_model.c.eng2` (`94347451dbf093cb429cde539b612e9a`) - the EG2 staging applied during
+the retry window is still in the tree. So B1's **5.8833** (prefill 6.195, min 5.67, 6/6, delta 0) is
+**group LOOP + EG2 together**, not LOOP alone. Preserved as measured; B1's next distinct candidate is
+outlining its own 8-column C QK body (~line 1903) to a noinline helper against its new 5.8833 pin,
+**no whole-file transplant**.
+
+**CQ2 differential: half fixed, still not produced.** A fresh dir with `-DNEEDLE_KBENCH_ASM=1` does
+register the asm (`ND_KBENCH_ASM` in `compile_commands.json`, banner `KB CFG kbench=1 asm=1` - was
+`asm=0`). But 404,815 bytes of kbench output over 150 s contain **zero** `KB CFG shape=`/`KB NUM`/
+`kern=`/`bitexact` lines, so `bench_shape()` (kbench.c:354, called at kbench.c:4133) never runs: the
+`#if/#elif` chain above it ends in `bench_fused()` and the sweep is not reached in this image.
+`EVT KBENCH_DONE` (kbench.c:4145) is likewise absent from the capture, so the image stops earlier.
+**Next step is reading/wiring, not another capture:** check whether the selected bench arm parks or
+returns before line 4133 and, if so, invoke `bench_shape(&SHAPES[i])` directly (or move the sweep
+above the chain). Until then the group-hardware loop - and the built, ELF-verified amortised variant
+(`loop a2, 0x4037dc6c`, epilogue `wsr.lcount`+`isync`+`j 0x4037dc6c`) - is verified only by the
+six-case golden gate.
+
+**Lanes:** B1 5.8833 (LOOP+EG2) free; B2 free (composed 6.1083 + the amortised kernel unmeasured);
+B3 6.1217 (EG2+compact prefix, sub-bar, preserved) free with the norm-sidecar probe as its next work.

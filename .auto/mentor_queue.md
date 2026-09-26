@@ -316,3 +316,60 @@ specialization). **Accepted stays 5.3033 until a tree passes 20/20.**
 **Next:** the one-real-Q **36-byte group record** layout (packed 117,504 B, records 124,416 B) as a
 cold/split differential against the current walker; then any new phase-level hypothesis needs a fresh
 measurement rather than another sub-bar scheduling screen.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~10:50Z (run #811: B2 codebook probe REMOVED - sub-bar AND carrying a latent static-init defect)
+
+**Removed from B2's tree** (probe block + the resident-codebook helper; all four call sites restored to
+`nd_cact_codebook(c, t->bits)`; zero occurrences of either; builds clean). B2 returns to its
+shared-codebook configuration = the **6.1283** pin.
+
+**Why removal instead of repair:** measured sub-bar (+0.028%, the same single tick as B3's independent
+codebook change, mechanism = the 64 B table is one cache line and always resident), **and** the helper
+used function-static state (`static float cb4[16]; static int init;`) with no explicit alignment and no
+reset on model close/re-open - so a second `nd_model_open` or a different archive would have kept
+serving the FIRST archive's values. That is the #159/#162 latent-defect class, and it would pass every
+gate because the codebooks are numerically similar. The experiment is closed, the tree is safe.
+
+**Pins now:** B3 **6.1450** (two-deep schedule, sub-bar banked), B2 **6.1283** (shared codebook),
+B1 **5.9283** (QK outline + `qk_hd==48`, both sub-bar halves of a kept phase). **Accepted 5.3033 until
+a tree passes 20/20.**
+
+**Next real candidate (needs asm + a bench, so it is a full window's work):** the one-real-Q
+**36-byte group record** layout - packed 117,504 B -> records 124,416 B - as a cold/split differential
+against the current walker, cloning that tree's own walker rather than transplanting.
+
+---
+
+## PREPARED EXPERIMENT (next window's first lane): the 36-byte group record, as a LAYOUT test
+
+**Design.** For ONE real Q tensor (576x768, group 128 -> **3,456 groups**), build at open a single
+array of **36-byte records, one per group**: 32 bytes of packed 2-bit indices followed by the group's
+norm already converted to **fp32** (4 B). Then clone that tree's OWN walker into a variant that reads
+one record per group (`l32i` x8 for the packed part + one `lsi` for the norm) instead of walking the
+packed array and a separate fp16 norms array. Differential it cold against the current `tie1n` on the
+same tensor, same activation, both operand placements, before any primary.
+
+**Sizes (verified arithmetic, corrected this window):** the tenant's "packed blob 117,504 B" is the
+packed bytes PLUS the fp16 norms - 110,592 B packed (576x768/4) + 6,912 B norms (3,456 x 2). The record
+array is 110,592 + 3,456x4 = **124,416 B**, i.e. **+6,912 B = +5.88 % over today's two arrays**, but
+**one array instead of two**. Note also that with only 3,456 groups in this tensor the conversion
+saving is small - the walker's NF16V is 5 instructions on the seed line and 10 on B1's, so removing it
+here is ~17k-31k instructions per token = ~0.02 ms. **The layout effect (one stream instead of two per
+group) is therefore what must carry the experiment, not the conversion.**
+
+**Why this is NOT the closed fp32-sidecar idea (#785).** The sidecar kept two arrays and merely widened
+the norms (+6.25 % bytes for a conversion saving measured at 1.4 ms against 5.1 ms of extra traffic -
+the additive estimate that killed it). **The record keeps ONE stream**: the packed bytes and the norm
+that describes them are fetched by the same access, so the walker stops touching a second array per
+group and stops converting. That is a layout/cache effect, which the additive estimate cannot price.
+
+**Counter-argument to test explicitly (state it in the lane log):** 36 does not divide 64, so a record
+is **not cache-line aligned** - a group's record spans one or two lines, and the walker now advances by
+36 instead of 32. If the extra line touches exceed the saving from removing the second stream, the
+experiment fails, and the honest way to know is the cold differential, not arithmetic.
+
+**Bounds for the lane:** PSRAM free on B1 is 499,104 B (the record array needs 124,416 B); clone the
+walker rather than transplant; the tree's own NF16V may be the 10-instruction form, in which case the
+conversion saving is larger there than on the seed line - measure, do not assume.

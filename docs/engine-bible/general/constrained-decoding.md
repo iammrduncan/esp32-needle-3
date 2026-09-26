@@ -8,13 +8,14 @@ misses both important runtime cost and important correctness state.
 
 ## Contract
 
-The device receives a prompt, evaluates a primed system prefix, and generates a
-single structured object. The host bridge validates that object and either:
-
-- executes a local tool such as status, sampling interval, or timer control;
-- stops after selecting an external model/capability; or
-- for local operations that require fresh state, performs a second device pass
-  with the result of the first local tool execution.
+The device receives a prompt, evaluates a primed schema prefix, and generates a
+structured call array. The first, route-schema pass is stricter: it must contain
+exactly one capability call with empty arguments and executes no local device
+operation. The host maps that route through its catalog and either stops at an
+external label or sends the **unchanged original prompt** to a second ESP32 pass
+under the local-tool schema. That second pass may generate multiple calls. The
+firmware validates the entire array before executing any of them and returns
+their device-state results; there is no third inference over those results.
 
 The demonstration does **not** call Claude, Qwen, or GPT-OSS. Those are route
 labels. `remote_called=false` is a product invariant in the saved capture.
@@ -32,8 +33,8 @@ cross several grammar states. At each decode step the runtime:
 5. advances the grammar through every byte of the selected token.
 
 The implementation lives in [`engine/src/nd_grammar.c`](../../../engine/src/nd_grammar.c),
-[`engine/src/nd_vocab.c`](../../../engine/src/nd_vocab.c), and
-[`engine/src/nd_sampler.c`](../../../engine/src/nd_sampler.c). The firmware-side
+[`engine/src/nd_tokenizer.c`](../../../engine/src/nd_tokenizer.c), and
+[`engine/src/nd_sample.c`](../../../engine/src/nd_sample.c). The firmware-side
 generation loop and cached schema states are in
 [`esp32/main/main.c`](../../../esp32/main/main.c).
 
@@ -69,9 +70,11 @@ end-to-end behavior capture. No one layer substitutes for the others.
 
 The firmware primes a fixed system prefix and saves reusable inference state.
 It also maintains schema-dependent cached states used by the routing/tool
-protocol. A cache is valid only if all state that affects the next token is
-captured: KV window contents and positions, recurrent mHC state, grammar state
-where applicable, and bookkeeping such as absolute token position.
+protocol. A model-prefix cache is valid only if all persistent model state that
+affects the next token is captured: KV vectors/scales, Q/K/V convolution
+histories, engram token/value history, optional confidence state, and
+position/sink bookkeeping. Grammar state is initialized for the new generation,
+and mHC lanes are per-token scratch rather than saved recurrent state.
 
 The compact-prefix work reclaimed about 768 KiB and was quality-neutral under
 the host prefix-isolation gate. It was valuable mostly because it made room for
@@ -103,8 +106,9 @@ prompts and validate both the selected route and the arguments.
 - Deterministic selection made exact-output regression practical.
 - Concrete capability-oriented route descriptions performed better than a
   bare model-choice enum.
-- Two-pass local execution allowed the model to consume fresh tool state while
-  external routes stopped at selection.
+- Two-pass local execution separated capability choice from local call
+  generation while preserving the original prompt; external routes stopped at
+  selection and the second-pass tools returned fresh state after execution.
 - End-to-end capture checked routing, tools, telemetry, timer expiry, sampling
   changes, pass count, and the no-external-call invariant together.
 

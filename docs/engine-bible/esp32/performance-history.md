@@ -86,7 +86,7 @@ all gates.
 |---|---:|---|
 | Plain group hardware loop | +0.44% | Device breadth plus own CQ2 differential |
 | Amortized group loop | +0.27% B2 / +0.35% B3 / +0.34% B1 | Three-tree result; ELF/disassembly and per-tree bitwise sweep |
-| Noinline QK dot | +0.22% | Seed line only; diverged twice on shippable line, not portable yet |
+| Noinline QK dot | +0.22% seed; +0.339% B1 restricted | Early B1 ports applied scales twice; run #805 fixed the transcription and passed host plus 6/6 device, with full breadth still due |
 | EG2 narrow engram staging | +0.164% | Below direct bar, kept; enabled by compact prefix |
 | Compact prefix | ~768 KiB reclaimed | Quality-neutral capacity enabler |
 
@@ -138,12 +138,20 @@ Until that decision and an explicit promotion, the accepted performance remains
 
 ## Stop condition
 
-The campaign closed after per-tree differentials, behavioral capture on the
+The durable handoff closed after per-tree differentials, behavioral capture on the
 best tree, repeat soak, pool restoration, an updated phase map, and quantitative
 closures for every remaining above-bar hypothesis. Run #803's exhaustive sweep
-again found no such candidate. A later shippable-line QK retry remained an open
-diagnostic at the documentation snapshot; it does not change the packet.
+again found no such candidate.
+
+Run #805 then corrected the shippable-line QK retry: the failed transplant had
+applied four scale multiplies in the helper and again in the caller. Returning
+raw helper outputs and retaining the caller's single scale step passed host
+checks and a restricted 6/6 device screen at 5.9233 tok/s, `+0.339%` over tree
+C's 5.9033. This is a useful causal and process result—the 19-case host gate
+caught the first double-scaling transcription error before board time—but it
+had not completed a new full 20-case device gate at the bible cutoff. A B2 CQ4
+internal-codebook experiment was merely in flight. Neither changes the accepted
+pin, the best fully evidenced tree, or the owner decision above.
 
 See [experiment ledger](../appendices/experiment-ledger.md) for the raw-run
 index and [reproduction](../appendices/reproduction.md) for commands.
-

@@ -20,10 +20,13 @@ had alive at the same time:
 
 ## Snapshot and headline result
 
-This edition was assembled from repository `HEAD` `28bd4b4`, the working-tree
-research ledger through run **#797**, all documentation and preserved experiment
-assets in this checkout, the available Claude/Pi/Codex session stores, and the
-external sources listed in [sources.md](sources.md).
+This edition was frozen at **2026-09-25 21:42 CDT** from repository `HEAD`
+`82a3cf1`, the working-tree research ledger through run **#805**, all
+documentation and preserved experiment assets in this checkout, the available
+Claude/Pi/Codex session stores, and the external sources listed in
+[sources.md](sources.md). The Pi and scheduled-Codex stores were live during
+the audit; their exact, earlier census cutoffs are recorded in
+[session inventory](appendices/session-inventory.md).
 
 The numbers that are easiest to misquote are:
 
@@ -34,6 +37,13 @@ The numbers that are easiest to misquote are:
 | Accepted pin, commit `2c79104` | 5.3033 tok/s | 20/20 device exact, 19/19 host exact, fidelity and top-1 gates green. |
 | Best candidate tree A, board 3 | 6.1433 tok/s | +15.8% over the accepted pin; 18/20 device exact because of the two frozen transport/state-sensitive cases, with all other gates green. |
 | Conservative candidate tree C, board 1 | 5.9033 tok/s | +11.3% over the pin; same two-case owner decision. |
+
+After the durable handoff, run #805 repaired a double-applied-scale bug in a
+QK-outline port on tree C and measured **5.9233 tok/s** (`+0.339%` over that
+tree) with host checks and a restricted 6/6 device screen. It did not yet have a
+new full 20-case gate at this edition's cutoff, so it is a provisional derivative
+and does not replace the fully evidenced table above. A separate B2 CQ4
+codebook-residency screen was still running and has no verdict in this edition.
 
 The final campaign recommendation was to adopt tree A, or tree C when the more
 conservative lineage is preferred, after deciding how to treat
@@ -102,11 +112,14 @@ weaken the gate silently. See
   Pi, and Codex histories were available and how they were searched.
 - [Repository document inventory](appendices/document-inventory.md) accounts
   for every Markdown research document in the checkout.
-- [Experiment ledger](appendices/experiment-ledger.md) indexes the 797-run
+- [Experiment ledger](appendices/experiment-ledger.md) indexes the 805-run
   JSONL ledger, major result ranges, preserved `exp*` assets, and closed
   families.
 - [Reproduction recipes](appendices/reproduction.md) gives safe commands and
   evidence expectations.
+- [Research operations](appendices/research-operations.md) covers agent
+  compaction, mentor/researcher roles, three-board scheduling, worker provenance,
+  service persistence, queue hygiene, and safe handoffs.
 - [Glossary](appendices/glossary.md) defines project shorthand such as CQ2,
   TIE728, pin, breadth gate, and token delta.
 
@@ -135,4 +148,3 @@ gate, and a pointer to raw evidence. Record a rejected idea with its changed
 premise or reopening condition. Never replace a frozen golden merely because a
 candidate differs; first decide whether the candidate is wrong, the oracle is
 stateful, or the product behavior intentionally changed.
-

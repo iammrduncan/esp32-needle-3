@@ -56,9 +56,11 @@ offsets and geometry, not copied weights. Long-lived mutable state includes:
 - per-layer int8 K/V caches and float scales;
 - q/k/v convolution histories;
 - engram token/history state;
-- mHC lane state;
 - optional confidence pooling state;
 - two independently saved schema prefixes.
+
+mHC lanes are per-token block scratch, not recurrent session state. They do not
+belong in a saved prefix.
 
 Scratch is shared across sequential operators: transformed activation, pair
 LUT, intermediate vectors, attention buffers, MLP buffers, and one dequantized
@@ -139,4 +141,3 @@ partial tool call that the host could otherwise mistake for ordinary failure.
 Keeping those outside lets the same engine serve a host oracle, an ESP32
 firmware, and future embedded products without baking demo policy into model
 math.
-

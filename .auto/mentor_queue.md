@@ -343,3 +343,53 @@ loads above LBEG. Anchor-based edits fail because the comment text differs per t
 **Assets:** `.auto/exp96/` now holds `lut2_tie728.S.amortised` (B2), `.b3` and `.b1`.
 **Owed:** breadth + host gates on B1's 5.9033 tree. **Outstanding:** B3's FP32 norm-sidecar probe.
 **Pool:** B1 5.9033 (LOOP+EG2+amortised), B2 6.1250 gated, B3 **6.1433 gated** (campaign best).
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~21:50Z (run #784: ALL THREE TREES CARRY COMPLETE PACKETS)
+
+| board | tree | decode | evidence |
+|---|---|---|---|
+| **B3** | composed attention + EG2 + compact prefix + amortised loop | **6.1433** | device breadth 18/20 (only #647 x2), host 19/19, CQ2 differential green |
+| **B2** | seed + plain loop + amortised loop + noinline `qk_dot8` | **6.1250** | device breadth, host 19/19, CQ2 differential |
+| **B1** | shippable + plain loop + EG2 + amortised loop | **5.9033** | device breadth, host 19/19 |
+
+**Campaign best: 6.1433 = +15.8 % over the owner's 5.3033 acceptance pin** (session arc 2.44 ->
+6.1433, +151.6 %).
+
+**Every tree's only outstanding item is the same:** the two frozen heldout cases (the #647 demo-timer
+pair) that all three share - an owner disposition, not an engineering task.
+
+**Window's lever:** the amortised group loop, confirmed on all three boards (+0.27 / +0.35 / +0.34 %,
+average ~+0.32 %), ELF-verified to the same shape on each, with the CQ2 differential green and all
+three assets in `.auto/exp96` (`…amortised`, `.b3`, `.b1`).
+
+**Remaining discovery item:** B3's small real-tensor FP32 norm-sidecar probe - it needs a
+purpose-built bench (the existing kbench shape sweep tests kernels, not norm storage layouts), so it
+is the natural first task of the next window, together with any new hypothesis on B1's free board.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~22:30Z (run #785: FP32 norm-sidecar CLOSED by the byte budget; the campaign has no open above-bar candidate)
+
+**The last outstanding discovery item is retired without a bench or a board.** The FP32 norm sidecar
+(store per-group norms as fp32 so NF16V's fp16->fp32 rebias drops from 5 instructions to 1 per group)
+priced on the campaign's own measured numbers:
+
+| quantity | value |
+|---|---|
+| 2-bit stream / groups per token | 3.59 MB = 14.36 M weights = **112.2 k groups** |
+| norms fp16 -> fp32 | 224 KB -> 449 KB (**+224 KB = +6.25 %** of the packed stream) |
+| extra bytes at the measured 44 MB/s | **+5.1 ms/token** |
+| instructions saved (4/group) | 0.45 M = **1.4 ms/token** |
+| **net** | **-3.7 ms/token (~-2.4 % decode)** |
+
+No escape hatch: fp16 is fp16 (cannot be pre-converted), and 224 KB cannot be cached against 64 KB.
+**Second worked example of the CV3W rule (#749): price in BYTES per token before cycles per word** -
+the octal bus runs at ~69 % utilisation on the dominant stream, so any stream that grows a few percent
+costs more than a handful of instructions can recover.
+
+**Campaign state:** all three trees fully gated - **B3 6.1433** (best, +15.8 % over the owner's pin),
+**B2 6.1250**, **B1 5.9033** - sharing only the two frozen #647 heldout cases as an owner disposition.
+No open above-bar candidate remains that is not already measured or closed by budget, gate or vendor
+support; new hypotheses should start from a fresh phase measurement rather than a re-screen.

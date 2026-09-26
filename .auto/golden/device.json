@@ -1,331 +1,313 @@
 {
- "saved_at": "2026-09-26T04:21:19",
- "cases": {
-  "sampling5": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
-   "tokens": 18,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 5
-     }
-    }
-   ]
-  },
-  "timer60": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 60
-     }
-    }
-   ]
-  },
-  "status_heap": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
-   "tokens": 10,
-   "calls": [
-    {
-     "name": "get_status",
-     "arguments": {}
-    }
-   ]
-  },
-  "batch": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":10}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":30}}]</tool_call>",
-   "tokens": 29,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 10
-     }
+  "saved_at": "2026-09-26T04:21:19",
+  "cases": {
+    "sampling5": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":5}}]</tool_call>",
+      "tokens": 18,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 5
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 30
-     }
-    }
-   ]
-  },
-  "heldout_timer45": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":45}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 45
-     }
-    }
-   ]
-  },
-  "route_translate": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "translate_or_write",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_sampling15": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":15}}]</tool_call>",
-   "tokens": 19,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 15
-     }
-    }
-   ]
-  },
-  "heldout_batch": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":7}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":120}}]</tool_call>",
-   "tokens": 31,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 7
-     }
+    "timer60": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 60
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 120
-     }
-    }
-   ]
-  },
-  "heldout_status": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 60
-     }
-    }
-   ]
-  },
-  "route_code": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"write_code\",\"arguments\":{}}]</tool_call>",
-   "tokens": 11,
-   "calls": [
-    {
-     "name": "write_code",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_route_timer": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{}}]</tool_call>",
-   "tokens": 10,
-   "calls": [
-    {
-     "name": "set_timer",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_route_research": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"research_and_plan\",\"arguments\":{}}]</tool_call>",
-   "tokens": 13,
-   "calls": [
-    {
-     "name": "research_and_plan",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_interval_over_max": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":400}}]</tool_call>",
-   "tokens": 19,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 400
-     }
-    }
-   ]
-  },
-  "heldout_free_text": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
-   "tokens": 19,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 120
-     }
-    }
-   ]
-  },
-  "heldout_route_translate_short": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "translate_or_write",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_batch_three_field": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}}]</tool_call>",
-   "tokens": 67,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 300
-     }
+    "status_heap": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+      "tokens": 10,
+      "calls": [
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 25
-     }
+    "batch": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":10}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":30}}]</tool_call>",
+      "tokens": 29,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 10
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 30
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 25
-     }
+    "heldout_timer45": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":45}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 45
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 25
-     }
+    "route_translate": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "translate_or_write",
+          "arguments": {}
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 25
-     }
-    }
-   ]
-  },
-  "heldout_long_route": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "translate_or_write",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_interval_one": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
-   "tokens": 19,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 120
-     }
-    }
-   ]
-  },
-  "heldout_long_tools_note_only": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":45}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":300}},{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
-   "tokens": 63,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 45
-     }
+    "heldout_sampling15": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":15}}]</tool_call>",
+      "tokens": 19,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 15
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 300
-     }
+    "heldout_batch": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":7}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+      "tokens": 31,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 7
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 120
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 300
-     }
+    "heldout_status": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 60
+          }
+        }
+      ]
     },
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 300
-     }
+    "route_code": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"write_code\",\"arguments\":{}}]</tool_call>",
+      "tokens": 11,
+      "calls": [
+        {
+          "name": "write_code",
+          "arguments": {}
+        }
+      ]
     },
-    {
-     "name": "get_status",
-     "arguments": {}
+    "heldout_route_timer": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{}}]</tool_call>",
+      "tokens": 10,
+      "calls": [
+        {
+          "name": "set_timer",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_route_research": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"research_and_plan\",\"arguments\":{}}]</tool_call>",
+      "tokens": 13,
+      "calls": [
+        {
+          "name": "research_and_plan",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_interval_over_max": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":400}}]</tool_call>",
+      "tokens": 19,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 400
+          }
+        }
+      ]
+    },
+    "heldout_free_text": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+      "tokens": 19,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 120
+          }
+        }
+      ]
+    },
+    "heldout_route_translate_short": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "translate_or_write",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_batch_three_field": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}},{\"name\":\"set_timer\",\"arguments\":{\"seconds\":25}}]</tool_call>",
+      "tokens": 67,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 300
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 25
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 25
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 25
+          }
+        },
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 25
+          }
+        }
+      ]
+    },
+    "heldout_long_route": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "translate_or_write",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_interval_one": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}},{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+      "tokens": 27,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 120
+          }
+        },
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_long_tools_note_only": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":300}}]</tool_call>",
+      "tokens": 19,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    "heldout_free_describe": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+      "tokens": 10,
+      "calls": [
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_translate_de": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+      "tokens": 14,
+      "calls": [
+        {
+          "name": "translate_or_write",
+          "arguments": {}
+        }
+      ]
+    },
+    "heldout_probe_reading": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":21}}]</tool_call>",
+      "tokens": 19,
+      "calls": [
+        {
+          "name": "set_sampling_interval",
+          "arguments": {
+            "seconds": 21
+          }
+        }
+      ]
+    },
+    "heldout_status_open": {
+      "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+      "tokens": 10,
+      "calls": [
+        {
+          "name": "get_status",
+          "arguments": {}
+        }
+      ]
+    },
+    "think_timer60": {
+      "raw": "<think>\n'60 second timer' -> seconds 60; '60 second timer' -> seconds 60\n</think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+      "tokens": 37,
+      "calls": [
+        {
+          "name": "set_timer",
+          "arguments": {
+            "seconds": 60
+          }
+        }
+      ]
     }
-   ]
-  },
-  "heldout_free_describe": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
-   "tokens": 10,
-   "calls": [
-    {
-     "name": "get_status",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_translate_de": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
-   "tokens": 14,
-   "calls": [
-    {
-     "name": "translate_or_write",
-     "arguments": {}
-    }
-   ]
-  },
-  "heldout_probe_reading": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":21}}]</tool_call>",
-   "tokens": 19,
-   "calls": [
-    {
-     "name": "set_sampling_interval",
-     "arguments": {
-      "seconds": 21
-     }
-    }
-   ]
-  },
-  "heldout_status_open": {
-   "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
-   "tokens": 10,
-   "calls": [
-    {
-     "name": "get_status",
-     "arguments": {}
-    }
-   ]
-  },
-  "think_timer60": {
-   "raw": "<think>\n'60 second timer' -> seconds 60; '60 second timer' -> seconds 60\n</think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":60}}]</tool_call>",
-   "tokens": 37,
-   "calls": [
-    {
-     "name": "set_timer",
-     "arguments": {
-      "seconds": 60
-     }
-    }
-   ]
   }
- }
 }

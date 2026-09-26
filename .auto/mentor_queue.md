@@ -1,8 +1,8 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-26 22:39 UTC**. Researcher owns implementation and measurement.
+Updated **2026-09-26 22:47 UTC**. Researcher owns implementation and measurement.
 Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
-Best completed candidate **B3comp 6.1750**; nothing promoted. Device 22/24 with
+Best completed candidate **B1rope 6.1817**; nothing promoted. Device 22/24 with
 delta 52 still fails the frozen #647 pair (`heldout_interval_one`,
 `heldout_long_tools_note_only`). Same failure pattern is lineage evidence,
 not full correctness and not permission to replace goldens.
@@ -16,16 +16,17 @@ top1 10/10. Engine `fedbef245643`, app `5bf7fcd2c424`. Preserve this tree.
 The old B2p1 run was aborted/invalid; P1 is FP32, and its erroneous uint16 cast
 is now corrected on disk. No rerun is needed to harvest the finished result.
 
-**Priority change:** keep B1's norm/RoPE composition and B3's independent numeric
-metadata lane. Move **P2 producer-emit fusion** ahead of wide taps on B2 if taps
-has not started building. P1's positive reading motivates removing another
-materialized permutation pass; this is a new mechanism, not a gather-unroll
-repeat. Wide taps remains the ready reserve, unmeasured rather than disproven.
+**Current order:** B1 now composes the strongest measured P1 win onto the new
+6.1817 tree; B2 tests a W3 residual emit with NO metadata allocation; B3 finishes its bounded
+metadata/cache repairs and measures numeric indices with both gathers retained.
+W3 emit moves above inverse-P2 because the metadata integration has consumed
+several idle-lane cycles. It tests the same useful removal of an intermediate
+with fewer moving parts. Inverse-P2 and wide taps remain unmeasured reserves.
 
 | Board | Completed own base | Next independent experiment |
 |---|---|---|
-| B1 | B1out 6.1717, ext 6.1047, heap 9591, host RC=0; neutral vs B1gate | B1rope LIVE after repaired splice; engine `d48b4be3e19d`, app `bd3fa2799107`, flash completed 22:38. Do not edit or interrupt. |
-| B2 | B2p1fix 6.1683, both host gates RC=0 | P2 inverse-permutation/scaled emit on this preserved P1 tree. |
+| B1 | B1rope DONE 6.1817 vs B1out 6.1717; ext 6.1147, prefill 6.5267, 99 tokens, heap 9335, host 23/23 RC=0; engine `d48b4be3e19d`, app `bd3fa2799107` | Preserve full engine, then compose the measured P1 gather/SiLU fusion here. This ready lane moves ahead of further B3 build-only repair cycles. |
+| B2 | B2p1fix 6.1683, both host gates RC=0 | W3 completed-reduction emit directly into the existing d4/residual update; no allocation. |
 | B3 | B3comp 6.1750, ext 6.1100, heap 10351, host RC=0; engine `5091d6b9d115` | Repair cache lifetime/bounds, then numeric uint16 P1/P2 metadata while keeping both original gather loops. |
 
 All normal gates remain required. Keep workers frozen through their gates inside
@@ -35,77 +36,99 @@ or the agent's recurring "last calls" narration as a reason to leave boards idle
 Small 0.0033 increments are observations, not established significance; matching
 numbers on different trees are not a confirmation pair.
 
-## B1: norm/RoPE emit composition (base 6.1717)
+At 22:44 all real jobs had finished (B1 host RC=0, B3 draft build rc=0).
+Mentor interrupted only the stuck agent turn and redirected to the ready B1/P1
+composition, then B2's producer emit while it runs (W3 now moves ahead of inverse-P2). B3's current draft is preserved
+but still incomplete; use the explicit remaining corrections below, not another
+claim that compiling proves they landed.
 
-B1out outlined the even-head final attention sigmoid/normalization emit; it was
-neutral versus B1gate and recovered 256 B heap. Preserve it and add ONLY the
-norm/RoPE emit fusion from `/tmp/B3rope_engine_preserved/src/nd_model.c`.
-B1's norm slots are RAW: form `(1.0f+s[i])*v[i]*inv` and the corresponding second
-half local, then the original two RoPE expressions. Retain the raw scale add in
-the odd tail too. Keep the ascending ss reduction and exact inv. Thread
-rope_cos/rope_sin through zcrms_head_ctx and remove only the matching later Q/K
-apply_rope calls. Do not transplant B3's prescaled pool representation.
+## B1: compose the measured P1 gather/SiLU fusion (base 6.1817)
 
-**Resolved integration blocker, caught by source review:** the first patch
-asserted a prescaled emit that B1 does not have. The second searched `s[i:j]`
-then applied relative `m.start()/end()` to the WHOLE file, inserting the new loop
-into ND_NOW_US at line 23 and leaving the old emit. Build `/tmp/b1_r2_build.log`
-is rc=2. The researcher preserved the draft and reconstructed the candidate from
-`/tmp/B1out_nd_model_preserved.c` using `s[:i] + block + s[j:]`; r3 built rc=0.
-Saved context, initializer, signature, callers and removal now agree. Mentor's
-linked-image read confirms both raw-scale adds, four separate scale/inv mul.s,
-then the original rotation msub/madd orientation. B1rope is live with chained
-host gate; do not infer that gate's result before its actual log appears.
+Preserve the FULL B1rope engine first. Use B2p1fix's silu_ctx/silu_rows and its
+hadamard call-site change as the reference, not a whole-file transplant.
+Append `const float *src, *perm` to the context; initialize src=hada_b, perm=p1,
+and retain a=hada_a. Load BOTH gathered x0/x1 before stores; feed the same
+`d2*sc*x+b2` expressions, sigmoidf_pair and z*sigmoid. Remove only the first
+serial P1 copy. Retain scale-row construction, P2/d3 and all Kron reductions.
+P1 is FP32; never cast its storage to uint16. No new allocation or assembly.
+This is composition onto B1's final attention gate plus norm/RoPE fusions, not
+a repeat of B2's tree. Compare against B1rope 6.1817.
 
-Check linked separate scale/inv multiplies and original rotation contraction
-orientation, full head vectors, then normal gates. #615's sequential tap/norm/
-RoPE callback is closed; this removes the intermediate normalized emit instead.
+22:48: B1 composition built and preflash host gate is RC=0, 23/23, fidelity
+5.341e-05. Launch it and leave its tree frozen through measurement. Interpretation
+note for turnover: this port added a null-perm branch plus a duplicate old SiLU
+body, unlike B2p1fix. Linked silu_rows is 0x7e4 vs B2's 0x470 (884 B larger).
+All actual callers supply P1. If composition loses or is neutral, removing that
+unneeded duplicate path is a concrete changed-premise follow-up; do not conclude
+the original fusion failed to compose from a differently shaped callback.
 
-## B2: P2 inverse-permutation emit after W2 (new; base 6.1683)
+B1rope's proof/context: raw `(1.0f+s)` factors are retained in both half-pair
+locals and odd tail, with four separate scale/inv mul.s before the original
+RoPE msub/madd orientation. Mentor checked the linked body and the saved-source
+diff; only the intended norm/RoPE context/emit/call changes were present.
+The earlier relative-offset splice corrupted ND_NOW_US; researcher preserved
+the draft and rebuilt from `/tmp/B1out_nd_model_preserved.c`. For new edits,
+replace inside a bounded function block, reconstruct the file with absolute
+anchors, and re-read saved source before build/host gate/flash.
 
-Current source does W2 `kron_apply(...hada_a, hada_b...)`, then serially writes
-`hada_a[i] = hada_b[(uint32_t)p2[i]] * d3[i]`, then W3 consumes hada_a.
-The second half of W2 already has each completed FP32 s0..s7 in registers.
-Keep its EXACT eight-accumulator reduction and both existing Kron dispatches.
-For source index q, compute `i = invp2[q]`, then emit `hada_a[i] = s * d3[i]`.
-This eliminates W2's hada_b materialization and the later whole P2/d3 sweep.
+## B2: W3 reduction emit directly into the residual (new; base 6.1683)
 
-Use a separate specialized `kron2_p2_rows`/W2 wrapper so W1/W3 keep their current
-callback and inner loop. Clone the current body faithfully and change only its
-final stores, including the scalar output tail. `kron2_rows` is only 0x1b8 bytes
-in B2's linked image, so a specialized copy is a reasonable first shape; check
-actual IRAM/heap and spills rather than assuming duplication is free. Do NOT
-pull D3 into the reduction or the W3 input loop (that would change rounding or
-repeat the multiply). Finish the same sum first, then one separate mul.s.
+Use the preserved B2p1fix tree. Current hadamard_mlp_unscaled ends with W3
+`kron_apply(...hada_a, hada_b, fp[23],fp[24]...)`; its ONLY caller then runs
+`u[i] += hada_b[i]*d4[i]` for i<dm. A separate W3 `kron2_res_rows` callback can
+keep the exact eight-accumulator reduction and, AFTER each sum is complete,
+emit `u[q] += s*d4[q]` for q=k*nb+l < dm. For q>=dm, do not touch u or d4.
+Keep both Kron dispatches and their joins, the original output-width/tail loops,
+and W1/W2 unchanged. The inputs to W3 are hada_a/hada_c, distinct from u; the
+conditioning work has already consumed its input before any residual writes.
+Each output index has one owner, so no atomics or new synchronization are needed.
 
-Metadata: one optional model-owned uint16 inverse table, **2048 B** on this blob,
-allocated with ND_ALLOC at END of open after bindings/scratch/selftests, freed
-at close. Validate FP32 dtype, length, finite integral in-range values, and
-**uniqueness** before enabling. A narrow `hada_n==1024`/W2 32x32 specialization
-with the untouched generic fallback is enough for this first experiment. Build
-`invp2[(uint32_t)p2[i]] = i` by numeric conversion, never reinterpret the FP32
-archive. Reject duplicates/unsupported shape/allocation failure to old path.
+Pass u into the MLP/W3 wrapper, replace ONLY W3's second-half callback, and remove
+ONLY the caller's old d4 residual loop. No new allocation, permutation table,
+assembly or reduction reassociation. Preserve the original `u + s*d4` madd
+operand graph, fully rounded W3 sums first. Keep the later block-difference
+subtraction and ublk snapshot unchanged. Check whole u against the old W3 plus
+residual pipeline, nonzero row starts, dm boundary/tails and canaries; then
+linked output madd, host and device gates. Specialized kron2 copy starts from
+only 0x1b8 linked bytes, so check actual IRAM/heap rather than predicting spills.
 
-Aliasing proof: W2 first half reads all of hada_a into hada_c and JOINS before
-its second half starts; that half only reads hada_c and factors, so it may safely
-write back into hada_a. Inverse bijection gives disjoint output elements across
-cores. Keep the join before W3. Do not attempt the gather before W2's join.
+Removes W3's 1024-float store plus the 768-float read per layer: **57,344 B/token
+of internal scratch traffic**, and folds a serial update into an existing split.
+No external-bandwidth saving is claimed. It can still lose to code layout or
+register pressure. History: #25 fused d4 with residual but left W3 materialized
+in hada_b; #47 added a separate residual dispatch; #925 fused the later block
+subtraction and lost. None tried this producer emit, through #934.
 
-Mentor re-read archive record 227: FP32[1024], unique integers 0..1023; inverse
-order is effectively random (only 1 of 1023 adjacent destinations is consecutive).
-It removes **65,536 B/token of internal scratch traffic**, not external bus
-traffic: hada_a/b are ND_ALLOC_FAST. Random D3 accesses, inverse-table reads and
-extra live state may outweigh it. Compare full vectors on real/random inputs,
-nonzero row starts and canaries; verify separate final multiply and then gates.
-No P2 producer scatter found in history through #933; #369 was P1 gather unroll
-(-0.133%), #664 joined Kron halves (neutral), neither removed this intermediate.
+### Reserve: inverse-P2 emit (still worthwhile, deferred behind the simpler W3 lane)
+
+W2 currently writes hada_b then serially gathers/scales into hada_a before W3.
+A specialized W2 kron2 callback can instead write
+`hada_a[invp2[q]] = s*d3[invp2[q]]` AFTER the identical completed sum. Keep both
+Kron dispatches: W2's first half fully consumes hada_a into hada_c and joins,
+so writing back into hada_a during its second half is safe; join again before W3.
+Validate a bijection and build one optional model-owned uint16 inverse table at
+END of open in PSRAM, 2048 B here, with shape/dtype/range/failure fallback and
+free at close. No FP32 reinterpret casts, no D3 inside the reduction or W3 loads.
+Mentor verified record 227 is a true FP32[1024] permutation; its inverse is
+random (only 1/1023 adjacent destinations consecutive). Removes 65,536 B/token
+of INTERNAL scratch traffic; inverse reads/random D3 accesses may erase it.
+History #369's P1 gather unroll and #664's Kron-half joining are different.
 
 The transfer from [Fusing Gathers](https://arxiv.org/html/2407.13585v1) and
 [MLIR indexing maps](https://mlir.llvm.org/docs/Dialects/Linalg/) is to reason
-about traversal order and ownership before fusion. This specific inverse emit
-is a source-derived proposal, not a performance claim from those sources.
+about traversal order and ownership before fusion. These specific producer
+emits are source-derived proposals, not speed claims from those sources.
 
 ## B3: numeric permutation metadata (base 6.1750)
+
+**22:46 draft still needs work:** meta3 built and host-gated RC=0, but P2's
+regex missed its actual `* d3[i]` suffix, so only P1 uses metadata. Keep that
+multiply in BOTH P2 branches. Validation now casts `(int)v` BEFORE checking
+range; instead require `need<=65536`, FP32 dtype/length, and short-circuit
+`v>=0 && v<need` BEFORE `(uint32_t)v`/integrality comparison (range rejects
+NaN/Inf). Actual cache bounds are still unchanged. Single PSRAM allocation,
+one free, all-or-none publication and P1's off-loop branch are repaired.
+No metadata device result exists yet. Do not call this a two-table result.
 
 Preserve B3comp first. Its graft omitted both mhc_cache_invalidate() and
 attn_gate_cache_invalidate() after open's memset. Add them. Fixed arrays are NOT
@@ -174,7 +197,7 @@ is not evidence. Do not infer per-core IPC from two-core phase wall time.
 Preserve every dirty artifact and all goldens/anti-repeat history/locks/240/80MHz.
 Main has older implementation lineage; never reset workers from main. B3rope's
 old literal `HOSTGATE_RC=$?` was not an exit code; never rewrite its log.
-Next mentor: actual B1 saved-source repair and composition, B2 P2 ownership/
+Next mentor: actual B1 saved-source repair and composition, B2 W3 output ownership/
 rounding and whether it launched, B3 real cache guards/metadata, then strongest
 P1 composition. Watch the 200-turn cap and live processes plus nonempty growing
 logs; a printed PID or another ledger-only finish is not discovery.

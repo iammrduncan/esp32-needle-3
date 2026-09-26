@@ -331,3 +331,37 @@ one hand-written pipeline that did win in this campaign (two-deep codebook loads
 the premise to test first is a *measured* stall attribution inside the dot (e.g. a kbench variant that
 isolates load-use stalls from issue), not another loop-order argument - the same "measure the premise,
 then price the lever" rule that has now caught this class three times in one session.
+
+## CORRECTION + NEW CANDIDATE: the QK dot is ISSUE-bound (IPC 1.04), and the lever is fewer loads per MAC
+
+**Correction to #853.** I recorded the dot as "latency-bound" on the strength of its 2.90 cycles/MAC.
+It is not. Counting instructions: each of the 48 MACs needs `lsi qhA[i]` + `lsi kf0[i]` + `madd.s` = **3
+instructions**, so 48 MACs is 144 instructions. At the measured 139 cycles that is an implied **IPC of
+1.04**, i.e. the kernel is **issue-bound at essentially full issue for the instructions it executes** -
+there is no stall to attribute and no schedule to fix. (The four failed schedules and the wide-load
+variant remain explained: they either added instructions or changed nothing about the count.)
+
+**The lever that follows:** fewer loads per MAC. 64-bit float loads fetch two floats at once, so a term
+pair costs one load instead of two - about **1.5-2 instructions per MAC instead of 3**. The campaign
+already tried that (`ee.ldf.64.ip`/`ee.ldf.128.ip` variants, then DOT8W in the field) and lost 2.1 %/
+1.9 %, but the failure mode is known and specific: the hand-written bodies issued each `madd` immediately
+after the load it depended on, which exposes the load-use latency instead of hiding it.
+
+**The missing ingredient is already shipped elsewhere in this tree:** the two-deep pipelining technique
+from the wide phi (#806), where each block's `extui`/`addx4`/`lsi` is issued *before* the previous
+block's `madd.s`, with alternating registers (`f12`/`f14`) and an objdump check that the loads really are
+in flight ahead of their consumers. Applied to a 64-bit-load QK body, that is the same transformation
+with a much larger prize, because the dot has three instructions per MAC to remove while the wide phi
+had almost none.
+
+**Prize, from measured numbers:** 3 -> ~1.5 instructions per MAC means 139 -> ~70 cycles per dot, so the
+QK portion of attention falls 8.3 -> ~4.2 ms = **+2.5 % of the token** - larger than anything kept since
+the amortised loop.
+
+**How to build it safely, in order:** (1) write the 64-bit-load body with the two-deep pipeline and
+alternating registers; (2) **verify by objdump** that every load is issued at least one block ahead of
+its consumer (this is the exact check that caught the unreachable-loop mistake in #806); (3) host-gate
+the tree before flashing, since any re-association is a rounding change and must be caught there;
+(4) the values must be bit-identical - each head still sums its own products in the same ascending
+order, only the load width and issue order change - so the device goldens and the per-tree CQ2
+differential decide it; (5) screen against the tree's own pin, never another tree's.

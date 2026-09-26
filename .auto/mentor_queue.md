@@ -587,3 +587,22 @@ largest unbuilt candidate since the amortised loop.
 hits, not values); the split is already per-head, so it must be applied *within* each core's range; the
 staging helper assumes position-outer today.
 Full detail in `.auto/ideas.md`.
+
+
+---
+
+## NEXT CANDIDATE (better founded than the withdrawn one, priced +2.5 %): 64-bit-load QK dot with #806's two-deep pipeline
+
+The dot is **issue-bound, not latency-bound**: 48 MACs x (2 loads + 1 madd) = 144 instructions in the
+measured 139 cycles = **IPC 1.04**. So there is no stall to attribute and no schedule to repair - the
+only lever is **fewer loads per MAC**, and 64-bit float loads buy exactly that: ~1.5-2 instructions per
+MAC instead of 3.
+
+The campaign tried wide-load QK bodies twice and lost 2.1 % / 1.9 %, but for a specific and now-understood
+reason: the hand-written bodies issued each `madd` immediately after its load. The fix is already
+shipped elsewhere in this tree - the **two-deep pipelining from the wide phi (#806)**, where each block's
+loads are issued before the previous block's madds with alternating registers, verified by objdump.
+
+**Prize:** 139 -> ~70 cycles/dot, QK 8.3 -> ~4.2 ms, **+2.5 % of the token**. Order of work: write the
+body, objdump-verify the pipeline (the check that caught #806's unreachable loop), host-gate before
+flashing, then the device goldens plus the per-tree differential. Detail in `.auto/ideas.md`.

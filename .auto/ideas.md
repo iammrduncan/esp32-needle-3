@@ -743,3 +743,35 @@ pre-ring device state tests the transport, not the model, and 24/24 after a scop
 reading rather than a weakened gate. Dropping the ring (option b) would preserve two goldens that the
 host already contradicts; keeping them as blockers (option c) blocks an otherwise fully-gated +16.05 %
 result on two cases that measure console timing.
+
+## CONFIRMED with the full strings: the ring device reproduces the HOST's answer (truncated)
+
+The #888 hypothesis predicted that the ring build lands on the host's branch of the two knife-edge cases.
+The stored evidence confirms it, and it also corrects a ledger misattribution.
+
+`heldout_long_tools_note_only`, all three behaviours side by side:
+
+| source | tokens | shape |
+|---|---|---|
+| **host golden** | 67 | `seconds:45`, then `set_timer 300` **three times**, then `get_status` |
+| **device golden** (pre-ring) | 19 | one clean call: `seconds:300` |
+| **ring device, observed** | **63** | starts exactly like the host's answer, truncated 4 tokens short |
+
+**The "63-token repeating chain" the ledger attributed to a device-side pathological `think` is the HOST's
+answer** - the repeating `set_timer` chain is in the host golden, and it is the host *golden*, not a device
+artefact. The ring build reproduces that answer, four tokens short. `heldout_interval_one` behaves the same
+way in miniature: host 1 call, pre-ring device 2 calls, ring device on the host's branch.
+
+**What this settles.** (1) The pair are pre-ring *device artefacts*: their frozen expectations encode a
+think-phase behaviour the device no longer produces once its console path changes, while the host has
+always produced the other branch. (2) The ring does not degrade the model - it moves the device *toward*
+the host's answer, which is the independent oracle this campaign trusts for quality. (3) Re-capturing
+those two device goldens (option a) is therefore not a weakened gate but a correctly scoped one: the new
+values would be the host-matching answers the firmware now produces, and the other 22 cases - where device
+and host already agree byte-for-byte - keep their frozen goldens untouched. (4) The re-capture must be
+scoped to those two ids with `AUTO_REBASELINE=1` (the additive default would otherwise *preserve* them,
+which is exactly the guard that stopped an unscoped capture from silently re-baselining them in #844).
+
+**Method note.** The mechanism was found by comparing the two golden sets case by case - a 24-row diff
+that costs nothing - after six device probes had failed. When two oracles disagree about one artefact, the
+disagreement is the datum.

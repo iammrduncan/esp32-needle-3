@@ -521,3 +521,20 @@ real crack fixed; documentation current, verified against the live workers and r
 **The loop has no candidate left that it can settle alone.** The next real iteration requires one of:
 (1) the #647 disposition, (2) the schema no-op decision, (3) a new objective, or (4) a premise change
 (assertion RAM, a verified flash timing model, or a gate relaxation).
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~18:00Z (run #834: handoff's reproducibility claim was OVER-STATED - now made true with full tree snapshots)
+
+**Finding:** the handoff claimed each candidate tree was reproducible from the per-lever assets in
+`.auto/exp88`-`.auto/exp96`. That was **not true**: those assets carry individual levers, while a tree's
+*base* state (the seed-era stack, the shippable line's bundle5 + attention family) exists only in the
+worker checkouts, uncommitted. Losing a worker would have lost its tree.
+
+**Fix:** `.auto/trees/` now holds a complete snapshot of each worker - `engine/src`, `engine/include`,
+`esp32/main` - as `board<N>-<PROV_ENGINE prefix>.tar.gz` (160 KB each), with a README giving the restore
+command, the expected hash and the tree contents per board. The handoff's claim now points at the
+snapshots instead of at the lever assets.
+
+**Pins unchanged:** B3 6.1450 (composed + EG2 + compact + amortised + two-deep + line_too_long fix),
+B2 6.1250, B1 5.9283; best gated packet **6.1433 = +15.8 % over the accepted 5.3033**.

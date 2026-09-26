@@ -945,59 +945,7 @@ int nd_model_open(nd_model *m, const void *blob, size_t size)
                      * site is already contained and must not be selected): only
                      * tensors lying wholly outside the staged span are considered.
                      * The guard stays: both copies are byte-compared, the sizes must
-                     * match the pair, and the proof line prints what was chosen. */
-                    {
-                        uint32_t s2, j2, nfind = 0;
-                        nd_tensor *found[2];
-                        size_t total = 0;
-                        m->eg2_psram = NULL;
-                        m->eg2_k_lo = m->eg2_k_hi = m->eg2_k_slot = 0;
-                        m->eg2_v_lo = m->eg2_v_hi = m->eg2_v_slot = 0;
-                        for (s2 = 0; s2 < m->n_sites; s2++) {
-                            nd_tensor *pair[2];
-                            pair[0] = &m->engram[s2].key_proj;
-                            pair[1] = &m->engram[s2].value_proj;
-                            for (j2 = 0; j2 < 2u; j2++) {
-                                nd_tensor *t2 = pair[j2];
-                                if (t2->offset >= m->eg_region_lo &&
-                                    t2->offset + t2->nbytes <= m->eg_region_hi)
-                                    continue;               /* already staged */
-                                if (nfind < 2u) { found[nfind] = t2; total += t2->nbytes; nfind++; }
-                            }
-                        }
-                        if (nfind == 2u && total &&
-                            (m->eg2_psram = (unsigned char *)ND_ALLOC(total)) != NULL) {
-                            const uint8_t *b0 = (const uint8_t *)m->c.base;
-                            size_t off2 = 0, k2;
-                            int ok2 = 1;
-                            for (k2 = 0; k2 < 2u; k2++) {
-                                memcpy(m->eg2_psram + off2, b0 + found[k2]->offset,
-                                       found[k2]->nbytes);
-                                if (memcmp(m->eg2_psram + off2, b0 + found[k2]->offset,
-                                           found[k2]->nbytes) != 0)
-                                    ok2 = 0;
-                                off2 += found[k2]->nbytes;
-                            }
-                            if (ok2) {
-                                m->eg2_k_lo = found[0]->offset;
-                                m->eg2_k_hi = found[0]->offset + found[0]->nbytes;
-                                m->eg2_k_slot = 0;
-                                m->eg2_v_lo = found[1]->offset;
-                                m->eg2_v_hi = found[1]->offset + found[1]->nbytes;
-                                m->eg2_v_slot = found[0]->nbytes;
-                                printf("EG2 ok=1 bytes=%u k=[%u,%u) v=[%u,%u)\n",
-                                       (unsigned)total, (unsigned)m->eg2_k_lo,
-                                       (unsigned)m->eg2_k_hi, (unsigned)m->eg2_v_lo,
-                                       (unsigned)m->eg2_v_hi);
-                            } else {
-                                printf("EG2 ok=0 reason=compare\n");
-                                ND_FREE(m->eg2_psram); m->eg2_psram = NULL;
-                            }
-                        } else {
-                            printf("EG2 ok=0 found=%u bytes=%u\n", (unsigned)nfind, (unsigned)total);
-                        }
-                    }
-                } else {
+                     * match the pair, and the proof line prints what was chosen. */                } else {
                     m->eg_region_lo = m->eg_region_hi = 0;
                 }
             }

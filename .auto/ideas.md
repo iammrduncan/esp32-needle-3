@@ -840,3 +840,33 @@ is closed by inspection rather than by another null run:
 So there is no kernel left where this form could be applied for a gain, which is a stronger statement
 than "we measured several nulls": it is a census of every multi-accumulator loop in the engine against
 the linked image, and four of the six rows are verified present-in-code rather than argued.
+
+## VERIFIED: `token_delta 52` is exactly derivable, and the gate requires the COUNT to match too
+
+Someone reading `22/24 with token_delta 52` for the hundredth time should be able to derive the 52 rather
+than trust it. The arithmetic is in `.auto/bench.py:compare()`:
+
+* a case is exact only if **both** `raw` and `tokens` match the golden;
+* otherwise `delta += abs(res['tokens'] - ref['tokens'])`.
+
+Against the two divergent cases' own DIVERGE lines:
+
+| case | golden | now | |delta| |
+|---|---|---|---|---|
+| `heldout_interval_one` | 27 tok | 19 tok | **8** |
+| `heldout_long_tools_note_only` | 19 tok | 63 tok | **44** |
+| | | | **52** |
+
+So the number that has appeared in every gate print is the sum of the two count differences, with no
+double counting (both lanes print a DIVERGE line, but the delta is accumulated once, in `compare`).
+
+**Consequence for the proposed re-capture, worth knowing before doing it:** because the gate compares the
+*token count* as well as the text, the host golden's count for `heldout_long_tools_note_only` (67) is
+irrelevant to the device gate - the device's own count (63) is what a device-side capture records, and
+later device runs will match it. The text is byte-identical between the two (verified in the previous
+entry) while the counts differ, which is exactly why the capture must be device-side and why anyone
+reconciling numbers later should compare `raw`, not `tokens`.
+
+**Gate-integrity note:** this is the third time the campaign has opened a harness number to check that it
+means what its name says (after the metric-hash inconsistency in PROV_ENGINE and the additive-save rule),
+and this one passes: the delta is correctly computed, correctly reported and correctly attributed.

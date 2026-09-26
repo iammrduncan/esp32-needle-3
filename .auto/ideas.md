@@ -590,3 +590,33 @@ a benchmark-harness artefact, and therefore squarely the owner's decision:
 * **keep them as blockers**.
 
 The measurement above removes the "it might just be timing" escape hatch from that decision.
+
+## PREPARED (decisive, one build): is the #647 divergence an interrupt-timing race?
+
+The gap test above closed "console backlog / per-request arrival timing": five idle seconds before every
+request does not restore the goldens. The ring's effect therefore survives an idle console - which is
+odd, because with no bytes arriving there is no ISR to fire during the request. Two families remain:
+
+1. **Persistent state established at or before priming** (the ledger's own hypothesis).
+2. **An interrupt-timing race inside the model's own execution**: the ring installs a UART driver whose
+   ISR can preempt the two-core `nd_parallel_rows` handshake at arbitrary points, and this campaign has
+   already found one latent cross-core hazard of exactly that shape (the #162 shared-table race, and the
+   #163 single-job-slot fix). A race would be invisible to every probe so far - inputs identical, output
+   deterministic *within* an image, order-independent - because the preemption pattern is the same on
+   every run of the same image.
+
+**The decisive diagnostic, one build, no engine change:** in a *diagnostic* image only, disable
+interrupts around the model step (`portDISABLE_INTERRUPTS()` / `portENABLE_INTERRUPTS()` bracketing
+`nd_model_step_hidden` inside the generation loop), then run the extended group and see whether the two
+cases return to their goldens.
+
+* If they **do**: the divergence is an interrupt-timing race in the firmware - a real defect, and the
+  owner's decision changes completely, because the fix is then a race fix rather than a re-baseline.
+* If they **do not**: the state is established during priming or model open, and the search narrows to
+  what the ring changes there (the UART driver's installation, its TX path, or driver-owned buffers that
+  the model's own allocations then land next to - a *layout* effect, which would be checkable by
+  comparing the PSRAM/internal allocation addresses between the two images).
+
+Cost: one diagnostic build plus one extended-group lane (~8 minutes). Value: it decides between "fix a
+race" and "re-baseline two cases", which is the only remaining decision the campaign cannot make for the
+owner.

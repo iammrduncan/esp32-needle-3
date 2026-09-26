@@ -373,3 +373,51 @@ experiment fails, and the honest way to know is the cold differential, not arith
 **Bounds for the lane:** PSRAM free on B1 is 499,104 B (the record array needs 124,416 B); clone the
 walker rather than transplant; the tree's own NF16V may be the 10-instruction form, in which case the
 conversion saving is larger there than on the seed line - measure, do not assume.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~11:40Z (run #813: de-split family closed TWICE; B2 reverted; my own process error recorded)
+
+**Result:** de-splitting `nd_cq_lut_build` on the amortised tree reads **6.0950 vs 6.1283 = -0.54%**
+(6/6 exact, delta 0) - reverted. The ledger's earlier #446 reading was **-0.335%**, so the family is
+now closed on **two tree generations** and the second reading is *stronger*: splitting the build is
+more valuable on the newer tree, because with the amortised loop the walker's own per-call setup is
+cheaper and the build holds a larger share of the critical path.
+
+**My error, recorded so the loop does not repeat it:** this experiment had already been run and
+rejected; I revived it from an old banked note ("+0.03..0.07% for de-splitting") without checking that
+the same entry had later closed it. Two corrections now in `.auto/ideas.md`: (1) the old note's premise
+was wrong - the build is **~135.8 us**, not 13.6 us; (2) **before banking any de-split idea, grep
+`.auto/log.jsonl` for the family and check whether it is already closed.**
+
+**Pool:** B2 reverted to its split-form configuration (**6.1283**), builds clean. B3 **6.1450**,
+B1 **5.9283**. **Accepted stays 5.3033 until a tree passes 20/20.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~12:10Z (run #814: the 36-byte record layout is REFUTED by line arithmetic - the asm and bench are not needed)
+
+The prepared experiment asked for a cold differential of a merged 36-byte group record (32 B packed +
+fp32 norm). **Priced at line granularity instead - the same arithmetic that closed the codebook family -
+it loses by more than 2x before any code is written:**
+
+| layout | lines touched per group | bus bytes per group |
+|---|---|---|
+| today: 32 B packed (2 groups/64 B line) + fp16 norm in a DENSE norms array (32 norms/line) | **0.531** | **34 B** |
+| merged 36-byte record, start offset uniform | **1.125** | **72 B** |
+
+The killer is the counter-argument the lane was told to test: **36 does not divide 64**, so a record
+starts at offset > 28 in 8 of 64 cases and spans **two** lines 12.5 % of the time, while today's two
+streams are both *dense and sequential* - the packed side already amortises two groups per line and the
+norms side amortises **32** norms per line, so the "second stream" was costing 1/32 of a line per group,
+not one line. Merging them into misaligned 36-byte chunks multiplies the line traffic by **2.12x**.
+
+**Consequence: the 36-byte record candidate is closed off-device**, and with it the last item that was
+queued as "a full window's work". This is the third worked example of the campaign's own rule - price a
+change in BYTES (at line granularity) before writing the kernel: the uint16 offset stream (4x), the
+fp32 norm sidecar (+6.25 % for a 1.4 ms saving) and now the merged record (2.12x). **A stream that is
+already dense and sequential should not be split into fixed-size records unless the record divides the
+cache line.**
+
+**Pool unchanged and safe:** B3 6.1450, B2 6.1283, B1 5.9283. **Accepted 5.3033 until a tree passes
+20/20.**

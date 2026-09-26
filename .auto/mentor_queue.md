@@ -470,3 +470,50 @@ accepted pin) + `token_delta 0` on the passing cases; the CQ2 kernel change addi
 purpose-built bitwise differential; three separate gates were falsified by mutation earlier in the
 campaign and are wired into `measure.sh`/`checks.sh`; the anti-repeat guard refused two would-be
 re-measurements during this window. Assets for every lever: `.auto/exp88`-`exp96`.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~00:15Z (run #788: OUT-OF-SUITE behavioural cross-check PASSES on the amortised tree - anti-overfit evidence)
+
+Prompt used (in no golden, tuned on by nobody):
+`"Set a timer for 12 minutes and then tell me the current status."`
+
+| engine | answer |
+|---|---|
+| host (`nd_dump genp ... nothink`) | `<tool_call>[{"name":"set_timer","arguments":{"seconds":12}},{"name":"get_status","arguments":{}}]</tool_call>` (25 tokens) |
+| **device** (B1, serial_api, uptime 134 s) | `function_calls: set_timer{seconds: 12}, get_status{}` - both executed, second returned live state |
+
+**Same tool sequence, same argument** - and the 12 is read out of the prompt, not the 300/120 the
+frozen cases have taught the campaign to expect. This gives three things the frozen goldens cannot:
+anti-overfit evidence, an end-to-end exercise of the newest levers (the amortised group loop and EG2's
+staged engram pair are both on that path), and a **host-vs-device agreement at the behavioural level**
+- the check that catches two-core/staging defects the host goldens are structurally blind to (#298).
+
+Cost: one request on an already-warm board, no reflash, no goldens touched, no engine change.
+**Packet stands unchanged: B3 6.1433 / B2 6.1250 / B1 5.9033, all fully gated.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~01:00Z (run #789: the last owed verification is NAMED, with its exact cause and two clean fixes)
+
+**The gap:** run #776's green CQ2 differential (`KB NUM ... kernel=tie1n bitexact=1`) was produced on
+**B2's tree only**. B1 and B3 carry kernels of identical structure and ELF shape, but a per-tree
+differential has never been run for them.
+
+**Why the attempt stopped:** copying B2's sweep-hoisted `kbench.c` into B1 fails to link with
+`undefined reference to nd_qk8w4` - that kernel is a seed-line asset and does not exist in the
+shippable tree (the same "unused asset" #754 found in `qk8w8_tie728.S`). Two clean ways to close it:
+
+1. **Better:** hoist the shape sweep in **each tree's own** `kbench.c` (they already contain whatever
+   kernels that tree provides) - the exact two-line hoist from `.auto/exp96/kbench.c.sweep-hoisted`,
+   applied per tree.
+2. Quicker: stub `nd_qk8w4` in the throwaway copy (its QK numbers are meaningless there anyway - the
+   stub failed on my anchors this run, not on principle).
+
+**Current basis for correctness** (unchanged, strong but not the same thing): the differential on B2's
+tree where the kernel text and ELF shape match all three, plus the device byte-exact gate on every
+tree (18/20, only the two frozen #647 cases, `token_delta 0` on all passing cases), plus the
+behavioural host-vs-device agreement of #788.
+
+**B1's tree is restored** (throwaway kbasm dir removed, `kbench.c` reverted; only the amortised-loop
+engine change remains). Packet unchanged: **B3 6.1433 / B2 6.1250 / B1 5.9033**, all fully gated.

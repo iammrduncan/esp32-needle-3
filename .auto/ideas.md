@@ -307,3 +307,27 @@ position-outer.
 1.3 cycles/MAC, the QK portion of attention falls from 8.3 ms to ~3.7 ms, i.e. **+2.8 % of the token**.
 That is the largest unbuilt candidate this campaign has had since the amortised loop, and the first
 that attacks operand residency rather than the body.
+
+## DOWNGRADED before building: the head-blocked QK candidate's premise does not hold
+
+I proposed this candidate last window and priced it at +2.8 % on the argument that the two staged `kf`
+rows are re-loaded for each of the twelve heads that share a kv position. **A code check refutes the
+premise**, and it is worth recording that the check cost nothing while the build would have cost a
+board lane and an hour.
+
+What the code shows: `kv_stage_pair` (nd_model.c:73) is the noinline helper that converts four int8
+values per 32-bit word out of the KV cache into **fp32 staging buffers**, and `qk_dot8` takes
+`const float *kf0, *kf1` - i.e. **the dot consumes already-staged fp32 rows from a small internal
+buffer, not int8 from the cache**. So the "twelve re-reads of an operand that changes once" are L1 hits
+on a buffer of a few kilobytes, not memory traffic, and blocking the heads against it would change the
+loop structure without changing where the data comes from.
+
+Where the dot's 2.90 cycles/MAC then actually comes from is what #853 already established: the
+`lsi`-to-`madd.s` dependency *inside* the body - register/FPU load-use latency, which is why four
+hand-written schedules and a wide-load variant all lost to the compiler's interleaving, and why the
+one hand-written pipeline that did win in this campaign (two-deep codebook loads) was worth 0.028 %.
+
+**Disposition:** the candidate is withdrawn from the queue rather than built. If it is ever revisited,
+the premise to test first is a *measured* stall attribution inside the dot (e.g. a kbench variant that
+isolates load-use stalls from issue), not another loop-order argument - the same "measure the premise,
+then price the lever" rule that has now caught this class three times in one session.

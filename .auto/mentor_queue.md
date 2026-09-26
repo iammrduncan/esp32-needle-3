@@ -563,7 +563,15 @@ accepted 5.3033**.
 
 ---
 
-## NEXT CANDIDATE (ready to build, priced at +2.8 %): head-blocked QK traverse
+## WITHDRAWN (was: "ready to build, priced at +2.8 %"): head-blocked QK traverse - premise refuted by code
+
+The candidate assumed the staged `kf` rows are re-loaded from memory for each of the twelve heads.
+**They are not.** `qk_dot8` consumes **already-staged fp32 rows** produced by the noinline
+`kv_stage_pair` helper into small internal buffers, so those re-reads are L1 hits, and the dot's
+measured 2.90 cycles/MAC comes from the `lsi`-to-`madd.s` dependency *inside* the body (#853) - which is
+exactly what four schedules and a wide-load variant failed to improve. Withdrawn rather than built; the
+check cost nothing and the build would have cost a lane. If revisited, measure the stall attribution
+inside the dot first instead of arguing loop order.
 
 The quantified token model (#854) and the dot's measured 2.90 cycles/MAC (#853, 139 cycles for 48 MACs,
 35 % of FPU peak, latency-bound on the two staged `kf` rows) point at one thing no attempt has touched:

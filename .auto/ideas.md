@@ -533,3 +533,29 @@ should do this with the label anchors and a fresh snapshot, not by porting from 
 **Where the campaign stands after this stretch:** B3 = B2 = **6.1550** on the identical tree
 `d6b8014fd2fb` (cross-board confirmed to the digit, 22/24 with only the known #647 pair, host gates
 green); B1 = **5.9383** (shippable line + interleaved QK chains + sparse Sinkhorn check).
+
+## CLOSED: the "statement-order / detector-cost" form family has no remaining targets
+
+The two forms that produced this campaign's last gains are now applied wherever they can apply, and
+the census is short enough to check by inspection:
+
+| loop | shape | why the form does or does not apply |
+|---|---|---|
+| `qk_dot8` QK body | 4 independent accumulator chains | **APPLIED** - chain-major -> pair-major; +0.109% on B2, +0.081% composed on B3, part of +0.169% on B1 |
+| Sinkhorn fixed-point check | snapshot + compare | **APPLIED** - dense -> sparse (4 of 20 passes); +0.108% on B2, +0.054% over dense on B3, part of the same +0.169% on B1 |
+| `kron1_blocks` | 8 accumulators | **ALREADY INTERLEAVED** - the linked body issues six loads and then four `madd.s`, i.e. the load batch already leads the multiply-adds; there is nothing chain-major to reorder |
+| `kron2_rows` | 8 accumulators + wide rows | closed earlier on register pressure (four-across -0.30%, single-walk eight-across -0.18%) |
+| elementwise loops (`zcrms`, lane mix, SiLU, gate) | one accumulator per element | no independent chains to interleave; pairing them was measured null or sub-bar |
+| `zcrms` reductions | single dependent chain per row | pairing rows priced at +0.157% (sub-bar) and retired unbuilt |
+
+**Consequence: a further gain cannot come from this form.** Interleaving independent chains and making
+exact checks cheap are both spent; the next candidate has to change a *mechanism* - bytes, placement,
+or what is stored - and the byte/line arithmetic in this file already bounds most of those. That is
+worth stating because the form was the most productive lens of the last stretch: it is now exhausted by
+inspection rather than by another null run.
+
+**Where the campaign stands:** B3 = B2 = **6.1550** on the identical tree `d6b8014fd2fb` (cross-board
+confirmed to the digit, 22/24 with only the two frozen #647 cases, host gates green, fidelity
+5.341e-05 unchanged); B1 = **5.9383** with the shippable line plus both forms. 6.1550 = +16.05% over the
+owner's accepted 5.3033 and +152.3% over the 2.44 session baseline. The single outstanding decision is
+the owner's disposition of the two ring-related held-out cases.

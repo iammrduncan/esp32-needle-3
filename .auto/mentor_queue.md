@@ -181,3 +181,29 @@ that pin metrics were supplied in place of the runs' actual device metrics.
 The raw logs and historical entries remain intact. The small arithmetic correction
 above separates the old claimed 3.7 MB/s from the actual eight-copy call count;
 no ns/byte model is supported by these corrupt generations.
+
+
+## READY TO BUILD (next window, one build): precompute the rounded `1+scale`
+
+**Site, verified by reading the code.** `zcrms()` (nd_model.c:144) does
+`out[i] = (1.0f + s[i]) * x[i] * inv` in its emit pass, and the same form appears in
+`zcsplit_rows()` (line 95): three FP ops per element (add, mul, mul). The scale row `s` is one of the
+staged per-layer tensors (`m->fp16_slot[li][k]`) and is already fp32 - the code says so in a comment - so
+the `1.0f + s[i]` add is recomputed on every call for a value that cannot change between calls in a layer.
+`zcrms` is called roughly four times per layer per token (lines 1860, 1862, 1876, and 2043 for the final
+row), each over 768 elements.
+
+**The change.** Precompute `r[j] = 1.0f + s[j]` **once, after the per-layer staging that already fills the
+slot**, into a slot that already exists and holds only that row - no new buffer, no allocation, no
+reassociation, no golden change - and let both emit passes read `r[i] * x[i] * inv`. Every value is
+bit-identical: the add is the same add in the same place, just moved out of the loop.
+
+**Why it is worth a build even though the arithmetic says sub-bar.** Naive arithmetic prices it at
+~0.02 % (about 18 k saved ops/token), and the same naive arithmetic priced the final_norm hoist at
+~0.002 % - which **measured +0.109 % on two boards** (#907/#910). That is a 50x miss in the same
+direction for the same class of change, so on this part the arithmetic is not a reliable veto for
+hoisting work out of a per-token path. Score it as B1's sibling: one build, full gate, compare against the
+receiving tree's own pin.
+
+**Host side.** The change is ESP-independent (no `#if` branch), so `checks.sh` alone must stay green,
+and the device run decides the speed.

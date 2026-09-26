@@ -1,14 +1,14 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 15:04 UTC**; pass began 15:00. Researcher owns all
+Mentor refresh **2026-09-26 15:09 UTC**; pass began 15:00. Researcher owns all
 implementation and measurement. Preserve dirty artifacts, goldens, locks,
 anti-repeat history, assertions and supported 240/80 MHz. Read at turnover.
 
 ## State and immediate priorities
 
-**15:04 UTC refresh. All three boards are IDLE; no build/flash/bench child
-exists. pi stopped at the 200-turn auto-resume cap again.** Last batch is over,
-not still flashing. Resume actual discovery; do not wait or write a finish essay.
+**Arrival 15:00 UTC: all three boards were IDLE; no build/flash/bench child
+existed. pi had stopped at the 200-turn auto-resume cap again.** Direct mentor
+input resumed it. At15:08 B3 head-fold is live; B1/B2 still need their jobs.
 
 **Owner accepted: 5.3033 tok/s. Research pin: 6.1550** on all boards,
 engine `d6b8014fd2fb` (#872/#874/#880). The two frozen #647 device failures still
@@ -18,7 +18,7 @@ all gates/goldens and compare the exact failing cases, not only aggregate counts
 | Board | Latest completed evidence, from its OWN logs | Immediate next experiment |
 |---|---|---|
 | B1 | `B1x.log`, engine `bb214031c523`: **6.1683**, ext **6.1018**, think **4.72**, 99 tokens, heap **10351**; device 22/24 delta52; host RC=0, 23/23, fidelity 5.341e-05 | **Final block-difference fusion**, below, on this three-hoist base. No repeat needed to learn whether the completed gate finished. |
-| B2 | `B2qk.log`: NO speed measurement; boot timeout ended 13:18. `HOSTGATE-B2qk.log`: prefix_isolation **SEGFAULT**, RC=1 | **Correct the boot-only Q/K residency implementation**, then host gate BEFORE device. Precise null-copy cause below. Base remains the pre-residency mHC+gate tree, 6.1617, heap10359. |
+| B2 | `B2qk.log`: NO speed measurement; boot timeout ended 13:18. `HOSTGATE-B2qk.log`: prefix_isolation **SEGFAULT**, RC=1 | **Correct the boot-only Q/K residency implementation**, then host gate BEFORE device. Precise null-copy cause below. B2 has since restored the pin: new base6.1550, not the lost mHC+gate6.1617 tree. |
 | B3 | `B3bf.log`, engine `bbb3de755e6c`: **6.1650**, ext **6.0994**, 99 tokens, heap11491; device22/24 delta52; host RC=0, 23/23, fidelity unchanged | **Fold Q/K head scales 7/8 with their matching head consumer**, separately from residency. This branch-free full-width fold ties B3's own final-norm baseline 6.1650; it is not a proven increment. |
 
 Correct stale #922 secondaries by APPENDING only: B1x has heap10351,
@@ -199,28 +199,13 @@ heads~23.5, MLP~20.2, phi~8.1; overlapping timers cannot be summed). No adoption
 while #647 remains unresolved.
 
 
-## 15:07 SPECS FOR THE NEXT TWO LANES (B1 fusion, B2 substitute) + B2 artifact note
-
-**B1 -- final block-difference fusion (independent, board 1 is free).** Keep the rounded `u + hada_b*d4`
-result exactly as computed, subtract `ublk` **at that emit** instead of computing `u` and subtracting later,
-and remove only the later subtraction loop. One change, one lever: the value `u - ublk` is the same
-expression evaluated in the same place, so per-element bits are unchanged; what disappears is the second
-pass over `u` and the intermediate it wrote. Gate: device 22/24 with `gen_tokens 99` against board 1's own
-base reading, host gate green, then compare with the 6.1683 that board 1 already holds.
-
-**B2 -- safe substitute (the residency needs more than a local).** The corrected residency requires a real
-owner: a `float *qk_resident` member in `nd_model` (zeroed by the existing memset of the struct's scratch),
-allocated once at open **after** the pool fill and the hot scratch/selftests (just before the final `return 0`
-of `nd_model_open`), and released with `ND_FREE` in the close path - a file-scope static is not acceptable
-because it aliases two live models. The substitute the mentor offers is the **ublk snapshot fused into the
-lanepre producer**, on a recorded verified base: snapshot `ublk` once (boot-resident), consume it in the
-producer that already walks the lane rows, and drop the separate pass. Either way the lane must host-gate
-before flashing, because the first attempt crashed the boot (timeout + `prefix_isolation` SEGFAULT) by
-running the memcpy at the memset, when every slot pointer was still NULL.
-
-**B2 artifact note, stated because it is a real loss:** board 2's worker tree was restored to the pin
-WITHOUT first snapshotting its candidate (the attn_gate-hoist tree that measured 6.1617 with host RC=0).
-The change itself is recorded in this queue in full (the hoist block plus the `float g = attn_gate_of(m, li)`
-call-site edit, layer-wise `m->layer[k].attn_gate` element 0), so it is reproducible in one edit, and the
-verdict 6.1617 / 22-24 / delta 52 / gen 99 / host RC=0 stands as a measurement. The process rule that
-follows: snapshot a worker tree before reverting it, always.
+15:08 turnover: researcher restored B2 to the research pin without saving the
+candidate source; its old measured result remains valid but is NOT B2's current
+base. Do not claim the queue contains a full recovery patch: it records a recipe;
+B1x still carries the mHC+attention-gate implementation. Preserve all remaining
+artifacts before changing workers. B2's new baseline is **6.1550**, engine
+`d6b8014fd2fb`, once its ordinary provenance check confirms that exact tree.
+The snapshot substitute is **per block per token**, emitted alongside the newly
+computed u in lanepre; it is not a boot snapshot and never replaces dynamic state
+with cached values. B3 head-fold is now launched as `B3hf.log`, engine2cb9407f9613,
+app831cf4a1225c. Leave it frozen through its gate.

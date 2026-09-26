@@ -194,7 +194,9 @@ idf.py -C esp32 ${CFG[@]+"${CFG[@]}"} build > "$AUTO_LOG_DIR/auto_build.log" 2>&
 echo "build_s=$(( $(date +%s) - t0 ))"
 # A rebuild that silently no-ops is the one failure mode that makes every number
 # below meaningless: it measures the previous candidate. Record what went in.
-{ echo "engine_md5=$(md5sum engine/src/*.c engine/include/*.h | md5sum | cut -c1-12)"
+{ echo "engine_md5=$(cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c 2>/dev/null | md5sum | cut -c1-12)"   # SAME file set and form as PROV_ENGINE: this used to hash only
+  # engine/src/*.c + headers BY PATH, which is a different number for the same
+  # tree and cost a session-hour of confusion twice (#754, #820).
   echo "app_md5=$(md5sum esp32/build/needle_demo.bin | cut -c1-12)"; } > "$AUTO_LOG_DIR/auto_build_id.txt"
 cat "$AUTO_LOG_DIR/auto_build_id.txt"
 

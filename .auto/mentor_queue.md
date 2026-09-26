@@ -517,3 +517,29 @@ behavioural host-vs-device agreement of #788.
 
 **B1's tree is restored** (throwaway kbasm dir removed, `kbench.c` reverted; only the amortised-loop
 engine change remains). Packet unchanged: **B3 6.1433 / B2 6.1250 / B1 5.9033**, all fully gated.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~02:00Z (run #790: B3's OWN CQ2 differential is GREEN - the #789 gap is closed on the best tree)
+
+Method that works: apply the two-line shape-sweep hoist from `.auto/exp96/kbench.c.sweep-hoisted` to
+**each tree's own** `kbench.c` at a code anchor (the line before `#if ND_KB_EXP<n>` that ends in
+`;`/`}`/`)`), build a throwaway `build_kbasm` with `-DNEEDLE_KBENCH=ON -DNEEDLE_KBENCH_ASM=1`, and
+filter the boot capture to the kernel.
+
+**Result on B3 (engine `391b89a4c159`, the campaign-best tree) - six shapes, all bitexact:**
+```
+KB NUM shape=768x768        kernel=tie1n exact=768/768 bitexact=1 maxabs=0.000e+00
+KB NUM shape=576x768        kernel=tie1n exact=576/576 bitexact=1
+KB NUM shape=128x768        kernel=tie1n exact=128/128 bitexact=1
+KB NUM shape=128x768/blob_int kernel=tie1n exact=128/128 bitexact=1
+KB NUM shape=96x768         kernel=tie1n exact=96/96 bitexact=1
+KB NUM shape=96x768/blob_int  kernel=tie1n exact=96/96 bitexact=1
+```
+Covers the densest shape the campaign runs (768x768) and both operand placements. Per-tree timing lines
+also present (`KB DELTA`/`KSUM kernel=tie1n`, e.g. med_pct=+42.22 internal vs +36.88 cold PSRAM).
+
+**Only B1 still lacks a per-tree differential** - its own `kbench.c` references the seed-line-only
+`nd_qk8w4`, so it needs a stub for that unrelated bench (or its removal) in the throwaway copy: a small
+known task, not a research question. **B3's flash holds a kbench image - re-flash from its normal build
+before its next lane.** Packet unchanged: B3 6.1433 / B2 6.1250 / B1 5.9033.

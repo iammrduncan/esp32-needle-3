@@ -1,26 +1,34 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 15:13 UTC**; pass began 15:00. Researcher owns implementation and
+Mentor refresh **2026-09-26 15:22 UTC**; pass began 15:00. Researcher owns implementation and
 measurement. Preserve dirty artifacts, locks, anti-repeat history, quality gates,
 frozen goldens, assertions and supported 240/80 MHz. Read at lane turnover.
 
 ## Current direction and evidence
 
-At arrival all three boards were idle and pi had reached its 200-turn auto-resume
-cap. Direct input resumed it; the cap has recurred each turn. This is a scheduler
-stop, not research exhaustion. B2/B3 now have real bench children and growing
-logs; B1 fusion has built RC=0 and is launching; keep three independent lanes occupied. No controller changes.
+At arrival all three boards were idle at pi's 200-turn auto-resume cap. Direct
+mentor input restarted work repeatedly. Three distinct experiments have now
+completed. Their latest results change the queue: do not keep scalar residual
+fusion or spend 3 KB on neutral residency merely because they remove operations.
+Use the next three lanes below; no repeated controls and no controller edits.
 
 **Owner accepted 5.3033 tok/s; research pin 6.1550 on all boards**, engine
 `d6b8014fd2fb`. The frozen #647 pair still blocks adoption. B1x/B3bf diverge only
 on `heldout_interval_one` and `heldout_long_tools_note_only`, delta 52. Device 22/24
 is not a full pass, even with host 23/23 and fidelity 5.341e-05/top1=10/10.
 
-| Board | Latest evidence / local comparison base | Now / next |
+| Board | Latest completed measurement | Next distinct lane |
 |---|---|---|
-| B1 | `B1x.log`, engine `bb214031c523`: **6.1683**, ext 6.1018, think 4.72, heap 10351, 99 tokens; device 22/24 delta 52; host RC=0 | Three hoists composed; free. **Launch final block-difference fusion**, preserving this artifact. |
-| B2 | Old `B2qk.log`: startup timeout, host prefix_isolation SEGFAULT; no speed result. Researcher restored source to verified pin`d6b8014fd2fb`, **6.1550** | Corrected owned residency now live as `B2res.log`; freeze through its chained host gate. Its base is NOT the lost 6.1617 mHC+gate candidate. |
-| B3 | `B3bf.log`, engine `bbb3de755e6c`: **6.1650**, ext 6.0994, heap 11491, 99 tokens; device 22/24 delta 52; host RC=0 | `B3hf.log` head-scale fold, engine `2cb9407f9613`,app `831cf4a1225c`, now live. FINISHED 6.1683 / 99, ext 6.1018, think 4.72, heap 11491; host RC=0, device 22/24 delta 52. Compare increment to 6.1650; ready for turnover. |
+| B1 | `B1fus.log`, engine `91cf398ec14c`: **6.1650 vs B1x 6.1683**, ext 6.1000, think 4.71, heap 10351, 99 tokens; device 22/24 delta 52; host RC=0 | Preserve the small regression; restore the saved B1x constituent at `/tmp/B1x_engine_snapshot_1512`. **Dynamic snapshot dual-store** in lanepre. |
+| B2 | `B2res.log`, engine `18d25dac6a1a`: **6.1550 vs pin 6.1550**, ext 6.0876, heap 8415, 99 tokens; QKRES 8 layers / 3072 B; device 22/24 delta 52; host RC=0 | **Preserved PMU draft blocked**; the second edit failed compilation. Use a ready fusion while its bounded repairs wait. Prefer lean pin for later performance work; preserve residency artifact. |
+| B3 | `B3hf.log`, engine `2cb9407f9613`,app `831cf4a1225c`: **6.1683 vs head-fold base 6.1650**, ext 6.1018,think 4.72,heap 11491, 99 tokens; device 22/24 delta 52; host RC=0 | Preserve the small candidate. **Norm emit/RoPE fusion**, distinct from previous dispatch-only fusion. |
+
+All three host gates finished (B3 ~15:13, B2 ~15:16, B1 ~15:19), host 23/23,
+fidelity 5.341e-05/top1=10/10. They retain exactly the two blocked #647 cases.
+These are candidate results, not owner acceptance. B1x was three independent
+constant hoists, engine `bb214031c523`, ext 6.1018/think 4.72/heap 10351 at 6.1683.
+Two unrelated candidates printing 6.1683 do not establish a mechanism; compare
+each against its own base. Researcher acknowledged that correction in #926.
 
 **Correction to #924's proposed B1 edit: KEEP the snapshot memcpy.** Only the
 later subtraction pass is removed. Snapshot removal belongs to a separate
@@ -31,7 +39,7 @@ speed into B1x; correct by appending only. B3fold 6.1600 was valid but -0.081%
 against its own 6.1650 pre-fold base. B3bf recovered that loss and was neutral
 versus that same base; neither justifies a blanket claim that add-hoisting wins.
 
-## Active B1: final block difference in the residual emit
+## B1 completed: final block difference in the residual emit
 
 Only block()'s caller snapshots u to ublk, runs block, then subtracts the snapshot.
 In its final d4 loop (`nd_model.c`~2817 on B1x), form the SAME rounded residual
@@ -46,7 +54,7 @@ Mentor linked-body check 15:15: residual `madd.s` at 0x420130b1, separate
 `sub.s` at 0x420130ba, then one store; source keeps the snapshot memcpy.
 This confirms the contraction sequence, not a substitute for quality gates.
 
-## Active B2: initialized, owned Q/K-scale residency
+## B2 completed: initialized, owned Q/K-scale residency
 
 Hypothesis: slots 7/8 reused across 12 Q + 2 K heads/layer may benefit from 3072 B of
 immutable internal-RAM scales. The existing model-owned fp16_pool is writable
@@ -57,9 +65,8 @@ The failed version copied immediately after slots were memset NULL, BEFORE the
 pool fill. A second unlaunched edit landed inside the fill loop with broken braces.
 Those failures do not measure residency. Current B2res has its owned
 `qk_resident` field, copy at the end of open after scratch/selftests, and one free in
-close; build RC=0. It is already measuring: leave it frozen. QKRES reports
-all 8 layers / 3072 B; preliminary decode 6.1550/99 is neutral against its 6.1550 base.
-Full device/host gates and post-prime headroom are still owed.
+close; build RC=0. It finished valid and neutral. QKRES reports
+all 8 layers / 3072 B, heap 8415 after priming. Preserve its artifact before turnover.
 At any follow-up use bound q_norm/k_norm sizes and validate slot presence/lengths;
 preserve original pointers on allocation failure and never free interior pointers.
 Do not reintroduce a static shared allocation. Its pre-hoist pin needs no cache
@@ -70,7 +77,7 @@ B2's earlier 6.1617 mHC+gate source was overwritten by the researcher without a
 snapshot. The measurement survives in its logs; the queue is a recipe, not a full
 recovery patch. B1x still carries that implementation. Preserve remaining images.
 
-## Active B3: Q/K head factors
+## B3 completed: Q/K head factors
 
 Fold rounded float32 `1+s` into norm-only slots 7/8 at open AND remove `1+` from
 `zcrms_head_rows` in the same change (done in B3hf). Sum order, epsilon and both
@@ -78,9 +85,18 @@ multiply roundings stay unchanged. No new storage or per-element predicate.
 Slots 0/11/13 and final scale_f were already factors; all other staged slots,
 especially 14-18/25/26 and cond_v's transpose, remain raw. Unlike full-width norm
 rows, each head-scale row is reused by many heads. This is independent of B2's
-raw-scale placement experiment. Finish ordinary gates, then turnover immediately.
+raw-scale placement experiment. Its gates finished; turnover immediately.
 
-## Next free lane: bounded CQ2 counters, moved UP from indefinite reserve
+## B2 bounded CQ2 counters: valuable, but PARK the broken draft at this turnover
+
+15:23 disposition: no PMU device run exists. First draft had a shared-counter
+race; second failed `/tmp/b2_pmu2_build.log` with unterminated#if at line3. It
+also still latches s_pmu_ptr in workers, prints from workers, never selects the
+576-row Q in the caller, leaves global rows/ngroup zero, and does not record
+init failures. Preserve this work; do not treat it as counter evidence or an
+unsupported-hardware finding. With all boards idle, ready performance fusions
+now take precedence. A later bounded repair can measure cycles + ONE specific
+event first, then extend events only after that record is interpretable.
 
 Use one board while the other two screen candidates. Dominant proj2bit was 79.7 ms
 (#786), but #849/#852/#854 mixed total work with two-core wall time; #745's
@@ -98,6 +114,14 @@ D_STALL_CACHE_MISS, then D_STALL_BUSY|BANK_CONFLICT, then
 BUBBLES_R_HOLD_REG_DEP. Record core, rows, bytes, init status,overflow; defer printing
 until join. Never sum overlapping event classes. Check event sanity before
 interpreting zeros. No cache disable/lock, interrupt masking or whole-suite loop.
+Preflight of first B2 draft: shared `s_pmu_cnt++` races between cores; alternating
+(cycles, insns) with (other bubbles, dependency bubbles) also loses the matched
+cycle denominator and mixes Q/K/V shapes. Replace with a sample index and four
+records PER CORE, counter 0 always cycles, specific event in counter 1. Select
+one 576-row Q packed pointer on the caller before dispatch; target that pointer
+only. Printing belongs after the existing join, never inside one worker while
+the other is still counted. Read init/overflow status. Do not interpret the draft.
+
 If setup stalls, substitute either ready fusion below.
 
 **#926's claimed PMU blocker is withdrawn by source evidence, not a hardware
@@ -115,18 +139,18 @@ Its single-core fixture is a starting example, not evidence about our two-core
 production path. [Espressif's speed guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
 also explains why binary layout can move tiny timings; do not overclaim causes.
 
-## Ready reserve: emit the dynamic snapshot with lanepre
+## Next B1 (or free B2 substitute): emit the dynamic snapshot with lanepre
 
 Add ublk as a second destination in the existing wide `nd_lanepre4w` emit while
 f0..f3 hold the rounded result; keep its first store and all madds. This snapshots
 EACH block's newly computed u, never boot state. Update context, prototype, caller,
 alignment guard and scalar dual-store. Do not use a7 as the new pointer without
-moving its existing per-tile zero temporary. Check both outputs and multi-tile
+moving its existing per-tile zero temporary to unused a12 (check the current body). Check both outputs and multi-tile
 canaries, then remove only the caller memcpy. Editing only the C fallback leaves
 ublk stale when the wide path runs. No extra scratch; saves 24,576 loaded B/token.
 Test separately from the residual-difference fusion and against that board's base.
 
-## Ready reserve: norm emit fused with RoPE
+## Next B3: norm emit fused with RoPE
 
 Retain ascending sum-of-squares and exact inv. For each half-split pair i/i+half,
 compute BOTH fully rounded normalized values as locals using the current raw-scale
@@ -156,14 +180,10 @@ Freeze workers through their chained host gate INSIDE needle-board run N.
 No repeated controls or anti-repeat overrides. Main source is a stale engine
 lineage: never copy it over workers as a reset. Launch ready work while another
 lane builds/measures; avoid long sleeps when other boards are idle. The next
-mentor should inspect B1's kept snapshot/FP sequence, B2res allocation and full
-gate, B3hf's incremental result, then whether counters or distinct fusions really
-launched. The 200-turn cap requires direct continuation; finish prose is not work.
+mentor should inspect whether the next three lanes really launched, the corrected
+PMU's per-core denominators/rows/errors, and new fusion outputs. The prior batch
+is finished; do not re-read it as live. The 200-turn cap requires direct continuation; finish prose is not work.
 
-15:17 update: B2res FINISHED6.1550, device22/24 delta52,99tokens,heap8415,
-host RC0/23of23/fidelity unchanged. Residency is valid and neutral, using3072B.
-Keep its artifact, favor the lean pin for subsequent B2 work; no repeat needed.
-B1fus is measuring6.1650 versus B1x6.1683 (gate still pending).
-B3 is free after its small head-factor increment. Equal6.1683 readings from
-different candidates do not prove either mechanism; the researcher corrected
-that overclaim in#926. Launch its next independent job rather than reciting reserves.
+At15:23 the mentor confirmed no build/flash/bench was alive, interrupted pi's
+stalled turn, and redirected to B3 norm-emit/RoPE plus B1 snapshot fusion. This
+pass has six minutes left; consolidate queued work, do not expand instrumentation.

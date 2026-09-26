@@ -83,14 +83,37 @@ def missing_golden(results, golden):
 
 
 
-def save_golden(path, results):
+def save_golden(path, results, overwrite=False):
+    """Save goldens, ADDING missing cases and PRESERVING existing ones by default.
+
+    Run #844 paid for this. A capture run with AUTO_SAVE=1 used to replace the whole
+    file, which silently RE-BASELINED two frozen entries (the #647 demo-timer pair,
+    which the ledger forbids re-capturing) and made a genuinely failing test pass. The
+    capture-only mode added the same run stopped an anti-repeat allowance being spent
+    but not this. So the default is now additive: entries already present are kept
+    verbatim, only missing ids are added, and any entry whose measured value would have
+    changed is reported loudly as GOLDEN_PRESERVED so the difference is visible rather
+    than absorbed. Replacing an existing entry requires the explicit overwrite flag
+    (AUTO_REBASELINE=1 -> --overwrite-goldens), which is a deliberate re-baseline act.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    old = {}
+    if path.exists():
+        try:
+            old = json.loads(path.read_text()).get('cases', {}) or {}
+        except Exception:
+            old = {}
+    new = {k: {m: v[m] for m in ('raw', 'tokens', 'calls')} for k, v in results.items()}
+    added = [k for k in new if k not in old]
+    changed = [k for k in new if k in old and old[k] != new[k]]
+    cases = dict(old)
+    cases.update(new if overwrite else {k: new[k] for k in added})
     path.write_text(json.dumps(
-        {'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S'),
-         'cases': {k: {m: v[m] for m in ('raw', 'tokens', 'calls')}
-                   for k, v in results.items()}}, indent=1) + '\n')
-    print(f'golden saved: {path} ({len(results)} cases)')
+        {'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S'), 'cases': cases}, indent=1) + '\n')
+    print(f'golden saved: {path} ({len(cases)} cases, added={len(added)}, preserved={len(cases)-len(added)})')
+    if changed and not overwrite:
+        print(f'GOLDEN_PRESERVED existing entries kept (measurement differed, NOT re-baselined): {sorted(changed)}')
 
 
 def switch_think(dev, want):
@@ -266,7 +289,7 @@ def device_mode(args):
         print('REFUSING to save a partial golden; run all groups')
         args.save_golden = False
     if args.save_golden or not golden:
-        save_golden(path, results)
+        save_golden(path, results, overwrite=os.environ.get('AUTO_REBASELINE') == '1')
         golden = results
     exact, delta = compare(results, golden, 'device')
     metric('device_output_exact', exact)
@@ -332,7 +355,7 @@ def host_mode(args):
     path = GOLDEN['host']
     golden = json.loads(path.read_text())['cases'] if path.is_file() else {}
     if args.save_golden or not golden:
-        save_golden(path, results)
+        save_golden(path, results, overwrite=os.environ.get('AUTO_REBASELINE') == '1')
         golden = results
     exact, delta = compare(results, golden, 'host')
     metric('host_output_exact', exact)

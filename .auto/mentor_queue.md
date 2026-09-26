@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 00:18 UTC**. This replaces the stale chronological
+Mentor refresh **2026-09-26 00:19 UTC**. This replaces the stale chronological
 appendices; experiment history and assets remain in `.auto/log.jsonl` and
 `.auto/exp88`–`exp94`. Preserve dirty workers, locks, the anti-repeat guard,
 frozen quality gates and 240/80 MHz. Researcher implements and measures.
@@ -46,7 +46,7 @@ full window: **B1's compact-prefix change was never ported to seed**. Even one
 | Board | Next work | Own comparison / availability |
 |---|---|---|
 | **B2 now** | **Amortize CQ2 long-loop setup across rows** (below). | 6.1083 composed pin. Usable and idle at inspection; saved firmware is sufficient as a reference. |
-| **B3 now** | **Compact prefixes + exactly one EG2 copy**, then the first valid staging screen. | 6.1117 composed pin. Diagnostic finished; source was restored/rebuilt, but flash still held diagnostic firmware at 00:04. |
+| **B3 next** | **FP32 norm-sidecar probe on one real CQ2 tensor.** | EG2+compact-prefix screen completed at 6.1217; post-prime 517,028 B free. Preserve this tree; measure a distinct change. |
 | **B1 NOW — recovered** | **Port only CQ2 group LOOP to the 5.8633 wide-phi/compact-prefix tree.** | Existing B1 source pin 5.8633; do not import seed NF16V (lost 1.11% here). Flash was replaced by the known-good B2 image during recovery. |
 
 **B1 recovered at 00:16 by the corrected attach. All three boards are usable.**
@@ -59,50 +59,31 @@ after-open discipline succeeded. Actual API: `Device(port,115200,180,20,False)`
 and `state()`. Use locked per-board ports, not invented keyword arguments.
 [Espressif boot-mode reference](https://docs.espressif.com/projects/esptool/en/latest/esp32s3/advanced-topics/boot-mode-selection.html).
 
-**B3 corrected tree is now measuring:** `R-eg2cp-b3.log`, engine `33f133d26421`,
-app `4386510750ec`, real locked bench process at 00:17. Its prior host checks
-passed: prefix isolation, 19/19 exact, missing=0, token_delta=0, fidelity
-5.341e-05, top1 10/10. Duplicate removal alone still failed prefix allocation;
-this image adds compact prefixes. Let the normal screen establish its speed.
-No further diagnostic boot capture is needed while that measurement is live.
+**Newest real performance result, B3:** completed `R-eg2cp-b3.log`, engine
+`33f133d26421`, app `4386510750ec`: **decode 6.1217**, prefill 6.4633,
+min 5.90, 6/6 exact, delta 0. Actual post-prime STATE free PSRAM **517,028 B**;
+open-time metric 1,743,000 is not the spendable budget. Compact prefixes + one
+EG2 copy fix the allocation failure. Host prefix isolation and 19/19 exact,
+delta=0, missing=0, fidelity 5.341e-05 / top1 10/10 passed on this tree.
+Compare to **B3's** composed 6.1117 breadth (+0.164%) / 6.1100 screen (+0.191%),
+not B2's 6.1083 (+0.22% would be a misleading cross-board keep claim).
+This is modest/sub-0.2%, not an accepted runtime; preserve as a possible bundle
+component/capacity enabler. No automatic breadth or cross-board repeat for it.
+**B3 next: representative FP32 norm-sidecar probe below**, now capacity exists.
 
-**B2 is idle after a concrete build failure**, not blocked on hardware:
-`R-amort2-b2.log` says FIRMWARE_BUILD_FAILED, undefined `.Ltn_row`. Its first
-wrong-LBEG draft was terminated by the researcher without metrics; the second
-repair changed the head but missed the tail. Finish the small correction and
-actual CQ2 differential below. Saved firmware is enough as a reference; no idle
-reference board. Verify processes/log growth and fill all three distinct lanes.
+**B2 correction built at 00:18, unmeasured:** mentor independently checked ELF:
+LBEG 0x4037dc6c is `l16ui a8,a6,0`; epilogue checks last row before rearm,
+then WSR.LCOUNT/ISYNC and jumps exactly to 0x4037dc6c. The failed first screen
+and the `.Ltn_row` link failure provide no speed evidence. Run the actual CQ2
+differential then primary; B1/B3 need independent work concurrently. No board
+hardware blocker remains, and saved images suffice as references.
 
 ## B2: reuse LBEG/LEND, reload only the count between rows
 
-**00:16:38 stop on failed edit/build:** the next repair printed `head fixed`,
-`tail: 0`, `.Ltn_row refs left: 1`. The tail still has the old pre-exit rearm
-and `j .Ltn_row`, whose label the head edit removed. This draft is NOT corrected.
-Inspect the current `.Ltn_gend`..`.Ltn_ret` block, replace that complete small
-block with the already specified epilogue, then require a successful build and
-actual CQ2 differential. Do not launch on zero matched anchors or use `;` to
-continue into a screen after a failed build. B3's independent valid tree can run
-while B2 is repaired.
-
-**00:14:40 correction: B2 job has exited; wrong draft remains on disk/flash.**
-`R-amort-b2.log` (engine `6468ef18c2d4`, app `6ebc87c0b939`) stopped at attach,
-7,702 bytes, no metrics. The researcher's broad kill attempt terminated that
-lane and its own editing command: no bench/measure/lock process remains, while
-`.Ltn_row` and the wrong endpoints remain in source. Do not carry the prior
-"live, leave it alone" state forward. Verify ownership, then apply the corrected
-candidate below; run its actual CQ2 differential before the primary screen.
-This is an implementation/launcher failure, not a speed result.
-The draft just built moved `loop`
-BEFORE `.Ltn_row: l32i a4,a1,16`. That makes LBEG point at the table-base reload,
-so EVERY GROUP restarts the LUT instead of advancing to its own table. Keep the
-first-row `l32i a4,a1,16` BEFORE `loop`; `.Ltn_group` must remain the first
-instruction after the long-loop expansion. At the row epilogue, decrement/check
-remaining rows FIRST; return with LCOUNT=0 on the last row. Only if another row
-exists, reload a4, set LCOUNT=ngroup-1 + ISYNC, and jump directly to `.Ltn_group`.
-Never jump through the one-time setup. No duplicated gather body needed. The
-draft also rearms LCOUNT before deciding to exit; move it after the exit check.
-Do not flash the wrong-endpoint draft or replace the actual CQ2 check with a
-six-prompt hope. Inspect final LBEG target and candidate's actual row differential.
+The initial wrong-LBEG draft reset the LUT every group; the first attempted
+repair left a stale `.Ltn_row` jump and failed to link. Both are now fixed in
+source and the ELF (see current state above). Neither is a negative mechanism
+result. Do not repeat them or preserve their abandoned launchers as live work.
 
 New premise: #756 measured a real +0.44% from group control flow, overturning the
 claimed CQ2 floor. Its long-loop setup now costs **nine emitted instructions
@@ -164,8 +145,8 @@ with speculative norms corruption. No new general-purpose crash harness.
 
 ## Ready follow-on: FP32 group-norm sidecar
 
-Retain as a distinct fallback after the small loop change; lowered until capacity
-is fixed. #452's five-to-three-instruction NF16V hoist was null, so removing the
+Move up for B3 now that compact-prefix capacity is proven; use a small
+representative tensor before considering full integration. #452's five-to-three-instruction NF16V hoist was null, so removing the
 conversion may be off the critical path. Test rather than assume. Keep packed
 2-bit indices and preconvert immutable norms using existing `nd_f16`; an FP32
 load replaces the halfword load plus conversion, with identical norm bits and

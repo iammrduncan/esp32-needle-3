@@ -266,3 +266,44 @@ would need a pipeline over the six 8-column chunks that the four attempts conspi
 produce - and the one place a hand-written pipeline *did* win in this campaign was the two-deep
 codebook load in the wide phi (#806), whose payoff was +0.028 %, i.e. sub-bar. Do not re-open the QK
 dot without a concrete schedule that differs from all four.
+
+## NEW CANDIDATE (ready to build): head-blocked QK traverse - reuse kf across all heads
+
+**Where it comes from.** The quantified model says the QK dot costs a *measured* 139 cycles for 48
+MACs = 2.90 cycles/MAC against a ~1 MAC/cycle FPU, i.e. 1.9 cycles of exposed latency per MAC, and
+that the compiler's interleaving is the best schedule measured for it (four schedules and a wide-load
+variant all lost, #853). What those attempts had in common is that they attacked the *body*; none
+changed *which operands are resident while the body runs*.
+
+**The observation.** The dot is called per (head, position), and in the shipping traverse the loop is
+*position-outer, head-inner*: for each position the two staged `kf0`/`kf1` rows (384 B) are loaded and
+then used for **one** head's 48 MACs, and the same two rows are re-loaded for each of the twelve heads
+that share that kv position. Twelve re-reads of an operand that changes once.
+
+**The change.** Invert the block: for each kv position, stage `kf0`/`kf1` once and compute **all
+twelve heads'** dots against them, i.e. 12 x 48 = 576 MACs per 384 B of loads instead of 48 MACs per
+384 B. The `qh` rows for twelve heads are 12 x 192 B = 2.3 KB, which fits internal RAM comfortably.
+
+**Why it should pay:** the dot is latency-bound on exactly those loads (#853), and this changes the
+load-to-work ratio by 8x while leaving every head's accumulation sequence, operands and order
+identical. It is the same shape as the two blocking changes that did win in this campaign, the wide
+phi rows and `kron1`, both of which paid because the compiler was re-reading an operand it could not
+keep.
+
+**Bit-exactness argument:** each head's dot still sums its own 48 products in the same ascending order
+into the same accumulator, and the softmax/max/denom/rescale per head still runs in the same order
+afterwards - only the *order in which different heads are visited* changes, and heads are independent.
+So the values are identical by construction, and the per-tree device goldens plus the fidelity probe
+verify it.
+
+**Risks to price, in order:** (1) register pressure - the blocked inner loop wants the 12 q rows and
+the 2 kf rows live at once, which is far more than the register file holds, so the rows must be walked
+from internal RAM rather than registers and the win depends on L1 hits rather than values; (2) the
+parallel split - heads are already split across cores, so a head-blocked traverse has to be applied
+*within* each core's head range, not across it; (3) the staging helper's current shape assumes
+position-outer.
+
+**Prize, priced from measured numbers:** if the blocked traverse lifts the dot from 2.90 to about
+1.3 cycles/MAC, the QK portion of attention falls from 8.3 ms to ~3.7 ms, i.e. **+2.8 % of the token**.
+That is the largest unbuilt candidate this campaign has had since the amortised loop, and the first
+that attacks operand residency rather than the body.

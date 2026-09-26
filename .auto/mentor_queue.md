@@ -272,3 +272,29 @@ handling, then differential it against the previous implementation on real rows 
 
 **Lanes now:** B1 5.8833 free; B2 **6.1250 fully gated** (best packet); B3 6.1217 free with the
 norm-sidecar probe outstanding.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~19:30Z (run #781: amortisation CONFIRMED on a second tree - new campaign best 6.1433)
+
+| tree | decode | vs own pin | amortisation delta |
+|---|---|---|---|
+| B2: seed + loop + `qk_dot8` | 6.1250 | gated | **+0.27 %** (from 6.1083) |
+| **B3: composed + EG2 + compact + amortised loop** | **6.1433** | +0.35 % (from 6.1217) | **+0.35 %** |
+
+prefill **6.4833** and min_case **5.92** are both campaign bests; 6/6 exact, delta 0, internal_free
+12,003. **Two-tree confirmation of the lever (avg ~+0.31 %)**, and it composes with EG2 + compact
+prefix rather than fighting them.
+
+**Structure (ELF-verified on both trees):** setup once per call (ngroup loaded once, first row's LUT
+base before LBEG, `loop a2, .Ltn_gend` with LBEG at `.Ltn_group`); rows decrement and exit FIRST;
+remaining rows reload the LUT base, `wsr.lcount = ngroup-1`, `isync`, `j .Ltn_group`. B3 shows
+`loop a2, 0x4037dc70` with the epilogue jump landing exactly on LBEG. Correctness comes from the
+green CQ2 differential (#776: `tie1n exact=96/96 bitexact=1`, all shapes, both operand placements).
+
+**Transfer lesson (fixed properly this time):** B3's file has a comment block between the two per-row
+loads and `loop`, so anchor-based edits fail there; slicing between the real `.Ltn_row:`/`.Ltn_group:`
+markers and moving only the loads works. Asset: `.auto/exp96/lut2_tie728.S.amortised.b3`.
+
+**Owed:** breadth + host gates on B3's 6.1433 tree. **Outstanding:** B3's FP32 norm-sidecar probe;
+B1 free at 5.8833; B2 free at 6.1250 gated.

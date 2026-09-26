@@ -1,184 +1,180 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-26 20:23 UTC**. Researcher owns implementation/measurement.
-Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine d 6b 8014fd 2fb.
-Nothing promoted: the frozen #647 cases heldout_interval_one and
-heldout_long_tools_note_only still fail (22/24, delta 52). This pattern is
-lineage evidence, NOT full correctness or permission to replace goldens.
+Updated **2026-09-26 22:39 UTC**. Researcher owns implementation and measurement.
+Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
+Best completed candidate **B3comp 6.1750**; nothing promoted. Device 22/24 with
+delta 52 still fails the frozen #647 pair (`heldout_interval_one`,
+`heldout_long_tools_note_only`). Same failure pattern is lineage evidence,
+not full correctness and not permission to replace goldens.
 
-At arrival pi was idle at its 200-turn cap; all three boards were idle. Mentor
-resumed it. Current order: **B 1 norm/RoPE composition; B 2 corrected P 1 gather/SiLU fusion;
-B 3 integer permutation metadata on repaired composition.** Wide taps moves down
-because it remained unstarted across passes; it is unmeasured, not disproven.
+At arrival all boards were idle and pi was at the 200-turn auto-resume cap.
+Mentor resumed it. **The newly harvested P1 fusion is the useful new evidence:**
+B2p1fix finished at 20:29 UTC, decode **6.1683 vs its own B2tap 6.1550** (+0.216%),
+ext 6.1018, prefill 6.5117, 99 tokens, heap 8415, device 22/24 delta 52.
+Both preflash and post-device host logs have RC=0, 23/23, fidelity 5.341e-05,
+top1 10/10. Engine `fedbef245643`, app `5bf7fcd2c424`. Preserve this tree.
+The old B2p1 run was aborted/invalid; P1 is FP32, and its erroneous uint16 cast
+is now corrected on disk. No rerun is needed to harvest the finished result.
 
-**B 2 INVALID RUN:** the 20:16 draft mistakenly declared perm as uint 16_t*
-and cast p 1. Despite the queued warning it flashed before consuming that message.
-P 1 is FP 32; that cast COMPILES and gives wrong/out-of-range indices. Pi then
-killed B 2p 1 despite the no-kill directive; its 162-byte log has no result.
-Its next repair did NOT write: it replaced old strings in memory, then tested
-for those now-absent strings before writing. #932's claim of corrected on-disk
-source is false as of 20:22. Mentor verified all jobs/builds ended, interrupted
-the stuck turn at 20:21 and directed an unconditional write and saved-file read.
-Use const float *perm and pass p 1 without any cast. Integer metadata on B 3
-requires actual numeric conversion at open; never reinterpret FP 32 storage.
+**Priority change:** keep B1's norm/RoPE composition and B3's independent numeric
+metadata lane. Move **P2 producer-emit fusion** ahead of wide taps on B2 if taps
+has not started building. P1's positive reading motivates removing another
+materialized permutation pass; this is a new mechanism, not a gather-unroll
+repeat. Wide taps remains the ready reserve, unmeasured rather than disproven.
 
-| Board | Own completed base / current work | Next action |
+| Board | Completed own base | Next independent experiment |
 |---|---|---|
-| B 1 | B 1out DONE 6.1717 (neutral vs B 1gate); ext 6.1047, heap 9591 (+256), host 23/23 RC=0; app dc 13d 8bb 3cab. | Preserve it; next RoPE composition below, no outline repeat. |
-| B 2 | B 2tap 6.1550 neutral; ext 6.0906, heap 8415, host RC=0; engine 2ddd 553cdd 03. B 2p 1 aborted/invalid; type repair is first priority. | Verify saved FP 32 pointer, host-gate, launch uniquely named B 2p 1fix. |
-| B 3 | B 3comp DONE 6.1750 vs B 3rope 6.1717; ext 6.1100, prefill 6.52, think 4.72, heap 10351, 99 tokens, device 22/24 delta 52; host 23/23, fidelity 5.341e-05/top 1 10/10, RC=0. Engine 5091d 6b 9d 115, app 23ab 6a 0002d 7. | Preserve it; repair cache lifetime/bounds and try integer permutation metadata. |
+| B1 | B1out 6.1717, ext 6.1047, heap 9591, host RC=0; neutral vs B1gate | B1rope LIVE after repaired splice; engine `d48b4be3e19d`, app `bd3fa2799107`, flash completed 22:38. Do not edit or interrupt. |
+| B2 | B2p1fix 6.1683, both host gates RC=0 | P2 inverse-permutation/scaled emit on this preserved P1 tree. |
+| B3 | B3comp 6.1750, ext 6.1100, heap 10351, host RC=0; engine `5091d6b9d115` | Repair cache lifetime/bounds, then numeric uint16 P1/P2 metadata while keeping both original gather loops. |
 
-B 1gate and B 3rope happen to read 6.1717 on different trees: not a confirmation
-pair. Increments of 0.0033 are small; retain evidence without claiming proven
-significance. B 3rope's old host launcher wrote literal HOSTGATE_RC=$?;
-its metrics exist, but no captured RC may be invented or old log rewritten.
-New script launchers capture the actual exit code.
+All normal gates remain required. Keep workers frozen through their gates inside
+`needle-board run N`. Each finished lane should turn over independently; prepare
+other workers while a lane builds or measures. Do not use fixed 80-second sleeps
+or the agent's recurring "last calls" narration as a reason to leave boards idle.
+Small 0.0033 increments are observations, not established significance; matching
+numbers on different trees are not a confirmation pair.
 
-## B 1: outlined final attention gate emit
+## B1: norm/RoPE emit composition (base 6.1717)
 
-Source-derived hypothesis: B 1gate fused the final head normalization and dynamic
-sigmoid gate, removing an intermediate pass and split, but enlarged attn_heads
-to 0x 1bd 7. The pair loop repeatedly materialized frame offsets 0x 488/48c/490/494
-around __divsf 3. Outline ONLY that even-head loop into:
-static ND_HOT __attribute__((noinline)) void attn_gate_emit(float *oh,
-const float *gp, float inv, uint 32_t n).
-Same sigmoidf_pair, z 0=oh[i]*inv, z 1=oh[i+1]*inv, then z 0*g 0 and z 1*g 1.
-One call/head, caller computes inv once; KV reduction and odd-head fallback
-unchanged; later agate dispatch remains skipped for even heads.
+B1out outlined the even-head final attention sigmoid/normalization emit; it was
+neutral versus B1gate and recovered 256 B heap. Preserve it and add ONLY the
+norm/RoPE emit fusion from `/tmp/B3rope_engine_preserved/src/nd_model.c`.
+B1's norm slots are RAW: form `(1.0f+s[i])*v[i]*inv` and the corresponding second
+half local, then the original two RoPE expressions. Retain the raw scale add in
+the odd tail too. Keep the ascending ss reduction and exact inv. Thread
+rope_cos/rope_sin through zcrms_head_ctx and remove only the matching later Q/K
+apply_rope calls. Do not transplant B3's prescaled pool representation.
 
-**Linked B 1out verified:** helper 0x 35e bytes, frame 64; caller 0x 1783. Spill loads
-are now direct offsets 0/4/8/16, and four mul.s preserve the normalization-then-
-gate graph. This is the intended mechanism; device speed decides call overhead.
-Compare with its B 1gate 6.1717, not B 1x or another board. B 1gate model source:
- /tmp/B 1gate_nd_model_preserved.c. Keep full engine snapshots at turnover.
+**Resolved integration blocker, caught by source review:** the first patch
+asserted a prescaled emit that B1 does not have. The second searched `s[i:j]`
+then applied relative `m.start()/end()` to the WHOLE file, inserting the new loop
+into ND_NOW_US at line 23 and leaving the old emit. Build `/tmp/b1_r2_build.log`
+is rc=2. The researcher preserved the draft and reconstructed the candidate from
+`/tmp/B1out_nd_model_preserved.c` using `s[:i] + block + s[j:]`; r3 built rc=0.
+Saved context, initializer, signature, callers and removal now agree. Mentor's
+linked-image read confirms both raw-scale adds, four separate scale/inv mul.s,
+then the original rotation msub/madd orientation. B1rope is live with chained
+host gate; do not infer that gate's result before its actual log appears.
 
-**Next B 1: compose the norm/RoPE emit fusion onto B 1out.** This is an unmeasured
-combination with the dynamic gate/outlined emit, not another run of B 3rope.
-Reference ONLY the zcrms_head_ctx/rows/heads fusion in
-/tmp/B 3rope_engine_preserved/src/nd_model.c. B 1's scale slots are RAW: retain
-the (1.0f+s[i]) addition in BOTH normalized half-pair locals and the odd tail;
-blindly copying B 3's prescaled s[i] formula would be wrong. Keep ascending ss
-and exact inv; form both normalized locals, then the original RoPE expressions.
-Pass rope_cos/rope_sin through the head context and remove only corresponding
-later Q/K apply_rope calls. Do not port the norm-pool representation in this
-lane. Verify the same separate scale/inv multiplies and rotation contraction
-orientation in the ELF, full head vectors, and normal gates. Own base 6.1717.
-Do not reopen #615's sequential tap/norm/RoPE callback: that was already measured;
-this composition specifically removes the normalized intermediate emit.
+Check linked separate scale/inv multiplies and original rotation contraction
+orientation, full head vectors, then normal gates. #615's sequential tap/norm/
+RoPE callback is closed; this removes the intermediate normalized emit instead.
 
-## B 2: P 1 gather inside the existing SiLU callback
+## B2: P2 inverse-permutation emit after W2 (new; base 6.1683)
 
-Preserve B 2tap first (model copy /tmp/B 2tap_nd_model_preserved.c).
-hadamard_mlp_unscaled writes kron_apply's output into hada_b, serially copies
-hada_a[i]=hada_b[(uint 32_t)p 1[i]], then silu_rows reads/overwrites hada_a.
+Current source does W2 `kron_apply(...hada_a, hada_b...)`, then serially writes
+`hada_a[i] = hada_b[(uint32_t)p2[i]] * d3[i]`, then W3 consumes hada_a.
+The second half of W2 already has each completed FP32 s0..s7 in registers.
+Keep its EXACT eight-accumulator reduction and both existing Kron dispatches.
+For source index q, compute `i = invp2[q]`, then emit `hada_a[i] = s * d3[i]`.
+This eliminates W2's hada_b materialization and the later whole P2/d3 sweep.
 
-Append **const float *src, *perm** to silu_ctx; initialize src=m->hada_b,
-perm=p 1, retaining a=m->hada_a. In the existing pair loop load BOTH
-x 0=src[(uint 32_t)perm[i]], x 1=src[(uint 32_t)perm[i+1]] before output writes.
-Use those locals in the SAME d 2*sc*x+b 2 expressions, sigmoidf_pair and z*sigmoid.
-Remove ONLY the first serial P 1 copy. Keep scale-row construction, P 2/d 3 pass
-and all Kron reductions. The two arrays stay distinct until the callback joins.
+Use a separate specialized `kron2_p2_rows`/W2 wrapper so W1/W3 keep their current
+callback and inner loop. Clone the current body faithfully and change only its
+final stores, including the scalar output tail. `kron2_rows` is only 0x1b8 bytes
+in B2's linked image, so a specialized copy is a reasonable first shape; check
+actual IRAM/heap and spills rather than assuming duplication is free. Do NOT
+pull D3 into the reduction or the W3 input loop (that would change rounding or
+repeat the multiply). Finish the same sum first, then one separate mul.s.
 
-Saves one intermediate write/read (65, 536 B/token for 1024*8), while putting the
-gather in an existing two-core split. Extra live pointers/gathers may lose.
-Check full emitted vectors against saved producer+consumer and linked FMA
-operand order, then normal gates. No new allocation/assembly. #369's four-way
-gather unroll lost 0.133%; it did not fuse the consumer or remove this temporary.
-No prior measured P 1-consumer fusion found through #931.
+Metadata: one optional model-owned uint16 inverse table, **2048 B** on this blob,
+allocated with ND_ALLOC at END of open after bindings/scratch/selftests, freed
+at close. Validate FP32 dtype, length, finite integral in-range values, and
+**uniqueness** before enabling. A narrow `hada_n==1024`/W2 32x32 specialization
+with the untouched generic fallback is enough for this first experiment. Build
+`invp2[(uint32_t)p2[i]] = i` by numeric conversion, never reinterpret the FP32
+archive. Reject duplicates/unsupported shape/allocation failure to old path.
 
-## B 3: cache repairs, then immutable integer permutation metadata
+Aliasing proof: W2 first half reads all of hada_a into hada_c and JOINS before
+its second half starts; that half only reads hada_c and factors, so it may safely
+write back into hada_a. Inverse bijection gives disjoint output elements across
+cores. Keep the join before W3. Do not attempt the gather before W2's join.
 
-B 3comp added B 1x's mHC constant and per-layer attn_gate hoists to B 3rope.
-The graft omitted BOTH invalidation calls. Mentor warning was queued before
-launch but consumed after flash; its run was left untouched and is now done.
-Preserve this measured tree before repairs. Add mhc_cache_invalidate() and
-attn_gate_cache_invalidate() after nd_model_open's memset.
+Mentor re-read archive record 227: FP32[1024], unique integers 0..1023; inverse
+order is effectively random (only 1 of 1023 adjacent destinations is consecutive).
+It removes **65,536 B/token of internal scratch traffic**, not external bus
+traffic: hada_a/b are ND_ALLOC_FAST. Random D3 accesses, inverse-table reads and
+extra live state may outweigh it. Compare full vectors on real/random inputs,
+nonzero row starts and canaries; verify separate final multiply and then gates.
+No P2 producer scatter found in history through #933; #369 was P1 gather unroll
+(-0.133%), #664 joined Kron halves (neutral), neither removed this intermediate.
 
-Pi's assertion that fixed arrays provide bounds fallback is false. Current
-mhc_const_fill copies fixed 32/128/8 counts without shape gating; attn_gate_of
-caps filling at 64 but returns s_agate[li] unguarded. The 8-layer/4-lane blob fits.
-Require actual layer/lane/tensor consumer bounds and original fp 16_get fallback
-outside them; copy only valid elements. Host goldens did not prove reopen or
-general-shape correctness. Neither this defect nor the frozen pair is waived.
+The transfer from [Fusing Gathers](https://arxiv.org/html/2407.13585v1) and
+[MLIR indexing maps](https://mlir.llvm.org/docs/Dialects/Linalg/) is to reason
+about traversal order and ownership before fusion. This specific inverse emit
+is a source-derived proposal, not a performance claim from those sources.
 
-**Distinct next candidate:** decode P 1/P 2 indices numerically ONCE at open.
-Mentor read archive records 226/227: each FP 32[1024], all integral unique 0..1023.
-The linked serial loops load FP 32 then utrunc.s for every index, every layer.
-Use ONE zeroed model-owned uint 16_t *perm 16 for two adjacent tables (4096 B on
-this blob). Guard hada_n<=65536 and both tables' finite/integral/in-range values.
-Allocate optional PSRAM metadata at the END of nd_model_open, after tensor
-binding and hot scratch/selftests, before open's own final return. Allocation
-failure or unsupported input leaves the original FP 32 paths. Free at close.
-Do not allocate at initial memset, before tensor pointers exist.
+## B3: numeric permutation metadata (base 6.1750)
 
-Branch outside the two gather loops. Keep BOTH original gather loops on B 3;
-do not copy B 2's fusion. This removes 16, 384 float-to-index conversions/token,
-not any floating arithmetic. Compare against B 3comp 6.1750 and disclose the
-accompanying cache repairs. Do not promise a large gain from instruction count.
-No prior metadata-cache measurement found. CQ 2 expanded-offset streams are a
-different representation with a different bandwidth cost.
+Preserve B3comp first. Its graft omitted both mhc_cache_invalidate() and
+attn_gate_cache_invalidate() after open's memset. Add them. Fixed arrays are NOT
+bounds checks: mhc_const_fill currently copies 32/128/8 unconditionally, and
+attn_gate_of caps filling at 64 but reads s_agate[li] unguarded. Fill valid counts
+only when actual layer/lane/tensor bounds fit; consumers must use original
+FP16 conversions outside those bounds. The 8-layer/4-lane blob fits, but reopen
+and other shapes must not reuse stale or out-of-range values. Avoid a forward
+call to fp16_get before its declaration; use a declaration or the equivalent
+original conversion. Disclose these accompanying repairs with the candidate.
 
-[T-MAC](https://arxiv.org/html/2407.00088v 1) motivates immutable index-layout
-preprocessing, but its SIMD byte tables/quantization are not an exact transfer.
-This blob's CQ 2 centroids (-.13317214,-.03990209,.04003528,.13346045) are NOT
-sign mirrors; mirror-table compression therefore lacks an exact premise.
+One zeroed model-owned uint16 buffer for adjacent P1/P2 tables: **4096 B** here.
+Guard hada_n<=65536, FP32 dtype/length, finite integral in-range indices. Allocate
+optional PSRAM storage at END of nd_model_open after binding and hot scratch/
+selftests; free at close; null/unsupported/allocation failure uses FP32 loops.
+Mentor verified records 226/227 are each true FP32[1024] permutations.
 
-## Reserve: wide three-tap delivery (still unmeasured)
+Branch outside the loops. KEEP BOTH original gather loops in this lane; do not
+copy B2's P1 fusion or inverse P2 emit. It isolates removal of 16,384 float-to-
+index conversions/token and halves permutation metadata bytes. No floating
+arithmetic changes. Compare with B3comp's 6.1750, with repairs disclosed.
 
-On preserved B 2tap, specialize nt==3 with four independent +0 accumulators,
-each keeping j=0/1/2 madd order. Six 128-bit loads and wide output stores replace
-scalar delivery; retain B 2tap's raw projection snapshot before overwriting it.
-Guard all pointers, row strides, tile count and alignment; startup/tails retain C.
+## Next turnover and ready reserve
 
-Append one function to existing gemv 4_tie 728.S; no new build plumbing.
-One context pointer,32-bit fields: proj,hcur,w 0, w 1, w 2, h 1, h 2, n 4 at offsets
-0/4/8/12/16/20/24/28. Candidate map: a 3 raw source, a 4 output (same initial
-projection), a 5 hcur, a 6/a 7/a 8 weights, a 9/a 10 histories, a 11 tiles, a 12 zero;
-f 0..f 3 sums, f 4..f 7 values, f 8..f 11 weights. Per tile load/store raw to hcur,
-load w 0/madd, h 1+w 1/madd, h 2+w 2/madd, store output; pointers advance 16.
-Remember high-to-low TIE register lists. Compare complete projection/history,
-multi-tile canaries, startup/wrap/odd sizes/nonzero split starts; current slot
-must start stale in the oracle (old exp 57 pre-copied it and masked this class).
+- After B1 or B3 has a positive completed result, compose **the measured P1
+  gather/SiLU fusion** onto that same board's preserved winning tree. P1's
+  +0.216% is currently stronger evidence than another 0.0033-tick microchange.
+  Keep `const float *src,*perm` for FP32; if numeric metadata won, explicitly
+  select its uint16 table. Both pair inputs load before writes to separate
+  hada_a; same d2*sc*x+b2 order and sigmoidf_pair. No reinterpret casts.
+- **Wide three-tap delivery** remains distinct and unmeasured. On B2p1fix (or
+  separately preserved B2tap at 6.1550), specialize nt==3 with four independent
+  +0 accumulators, each keeping j=0/1/2 madd order. Raw projection is snapshotted
+  before overwrite. Guard alignment/strides/count; startup/tails retain C.
+  One appended assembly function in gemv4_tie728.S; context fields
+  proj,hcur,w0,w1,w2,h1,h2,n4 at byte offsets 0/4/8/12/16/20/24/28.
+  Candidate map a3 source,a4 output,a5 hcur,a6..a8 weights,a9/a10 histories,
+  a11 tiles,a12 zero; f0..f3 sums,f4..f7 values,f8..f11 weights. Load/store raw
+  history, then three ordered taps, then output; pointers advance 16. Remember
+  high-to-low TIE register lists. Check multi-tile/full-history canaries,
+  startup/wrap/nonzero splits with stale current history in the oracle.
+  [Espressif FIR](https://github.com/espressif/esp-dsp/blob/master/modules/fir/float/dsps_fir_f32_aes3.S)
+  supports the wide delivery pattern; its horizontal reduction is not ours.
 
-Transfer [Espressif's float FIR delivery](https://github.com/espressif/esp-dsp/blob/master/modules/fir/float/dsps_fir_f 32_aes 3.S),
-not its horizontal reduction, which changes our rounding. Do not let this
-integration monopolize a board if the ready C candidates remain unmeasured.
+## Retained negatives and deferred work
 
-## Retained negative evidence and parked work
+Residual-difference fusion lost 6.1683->6.1650. Raw Q/K norm residency and raw
+tap-history snapshot were neutral. Correct phi staging #911 lost 0.378%; earlier
+missing-prepare results were invalid. #915 phi dispatch and RMS pairing were
+neutral. Keep scale-fold #744, Kron width/renames, four-pass Sinkhorn exit,
+four-output wide QK,36-byte records, LUT de-split, private codebook, expanded CQ2
+uint16 offsets and row-owned Kron-half fusion closed unless the premise changes.
 
-- Residual-difference fusion lost 6.1683->6.1650. Raw Q/K norm residency and raw
-  tap-history snapshot were neutral 6.1550. The snapshot saves source reads,
-  not history stores or a PSRAM write sweep.
-- Correct phi staging #911 lost 0.378%; missing-prepare staging readings were
-  invalid and withdrawn. #915 dispatch/RMS pairing was neutral.
-- Keep kron 2 renames, four-pass Sinkhorn exit, four-output wide QK,36-byte
-  records, LUT de-split, private codebook, expanded CQ 2 uint 16 offsets and
-  row-owned Kron fusion closed unless the premise changes.
-- Dual-store remains unmeasured/parked after ABI/selftest integration failures.
-  Later recipe: scope nd_lanepre 4w through its own .size; sixth destination a 7,
-  move tile-zero to a 12, second wide store; update context, initializer, BOTH
-  callers, C prototype, scalar path and both-output alignment. Independent
-  aligned selftest buffer/canaries, never a model pointer in selftest. Remove
-  only snapshot memcpy after both paths work. Saved B 1x:
-  /tmp/B 1x_engine_snapshot_1512. Keep later block-difference subtraction.
-- CQ 2 PMU stays below runnable work. Two-wide issue-floor claims mixed two-core
-  work with wall time; #745 measured 34 cycles/word. Installed core-isa.h has
-  FLIX 3=0, one load/store unit,4-byte fetch; do not infer per-core IPC from
-  phase totals. API is real/per-core ERI, two counters/core:
-  [perfmon](https://docs.espressif.com/projects/esp-idf/en/v 4.4.2/esp 32s 3/api-reference/system/perfmon.html).
-  Future bounded screen: caller-select one 576-row Q pointer, per-core cycles+
-  one event around real row callbacks, row/byte/init/overflow fields, print
-  after join. Draft /tmp/nd_quant.c.pmu-draft-1525 is not evidence.
+Dual-store remains unmeasured after ABI/selftest integration failures. Preserve
+`/tmp/B1x_engine_snapshot_1512`. Later recipe: bound edits by nd_lanepre4w .size;
+sixth destination a7, move tile-zero to a12, second wide store; update prototype,
+context, both callers, scalar path and alignment; independent aligned selftest
+buffer, no model pointer in selftest. Remove only snapshot memcpy once proven.
 
-## Execution and next mentor check
+CQ2 PMU stays below runnable work. API exists in installed IDF/per-core ERI,
+two counters/core; old absence/shared-debug claims were wrong. Future bounded
+screen: select one 576-row Q call, count cycles+one event on EACH real worker,
+include rows/bytes/init/overflow, print after join. `/tmp/nd_quant.c.pmu-draft-1525`
+is not evidence. Do not infer per-core IPC from two-core phase wall time.
 
-Preserve every dirty artifact; main has an older lineage, never reset workers
-from main. Keep each worker frozen through its host gate INSIDE needle-board
-run N. Preserve goldens, anti-repeat history, locks, assertions and 240/80MHz.
-Inspect live child processes AND growing non-empty logs. Never interrupt real
-build/flash/bench work. A model's repeated “1-2 calls left” narration is not a
-reason to guess types, leave ready boards idle, or log another finish.
-
-Next mentor: B 1out's own 6.1717 comparison; B 2's FP 32 pointer correction and
-real P 1 measurement; B 3's actual cache repairs and metadata lane. Monitor the
-200-turn cap. A small speed increase with 22/24 is still not owner acceptance.
+Preserve every dirty artifact and all goldens/anti-repeat history/locks/240/80MHz.
+Main has older implementation lineage; never reset workers from main. B3rope's
+old literal `HOSTGATE_RC=$?` was not an exit code; never rewrite its log.
+Next mentor: actual B1 saved-source repair and composition, B2 P2 ownership/
+rounding and whether it launched, B3 real cache guards/metadata, then strongest
+P1 composition. Watch the 200-turn cap and live processes plus nonempty growing
+logs; a printed PID or another ledger-only finish is not discovery.

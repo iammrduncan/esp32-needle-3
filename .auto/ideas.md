@@ -143,3 +143,28 @@ directions. They are mechanisms now, not advice:
 `token_delta 52`** (was 18/20 with the same delta) and the host gate prints **23/23** (was 19/19). The
 metric group is untouched. The four added cases are a fresh out-of-suite sample and landed in band
 (6.09 / 5.92 / 6.23 / 6.11 against a 6.1450 primary mean).
+
+## CLOSED BY PRINCIPLE: the dominant 2-bit phase's instruction budget is minimal (2026-09-28)
+
+proj2bit is 79.7 ms = **49.7 %** of the token, so this is the one phase where a few percent would
+change the campaign's headline. It is closed, and the closure is arithmetic rather than a list of
+nulls. Per 32-bit index word (16 weights):
+
+| category | count | why it cannot go |
+|---|---|---|
+| `add.s` | 8 | the accumulation itself - one per two weights, and the four-partial split is what hides the rest of the latency |
+| `extui` | 8 | the ISA has no scaled-index load from a register; loading bytes instead of words gives two nibbles per load that still need shift+and, so extraction can only be moved, not removed |
+| `addx4` | 8 | `lsi` takes base+immediate only, so the 4-byte scaling of the nibble must be materialised in a register |
+| `lsi` | 8 | the table lookups, one per pair |
+| `l32i` | 1 | the packed word itself |
+
+That is 24 ALU ops, which at the S3's 2-wide issue is **12 cycles**, against ~16 measured - the extra
+~4 being load-use and dependency slack. Which is exactly the campaign's measured IPC of 1.33:
+32 instructions / 16 cycles / 2 wide. So the phase is issue-bound at a budget every instruction of
+which is forced by the ISA's addressing model, and the single escape - a predecoded offset stream so
+the lookup needs no scaling - costs **4x the bytes** and was measured dead against a bus already at
+69 % utilisation (#749: 14.36 MB/token, 2.8x slower even at an unattainable 100 % bus).
+
+**Consequence: no scheduling, unrolling, register, layout or load-width idea can move this phase, and
+that is now a statement about the instruction set rather than about the ~20 nulls measured here.** The
+only lever left would change what is stored, which the byte-exact and fidelity gates refuse.

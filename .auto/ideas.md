@@ -487,3 +487,22 @@ before any bench of mine runs (#865/#866), so the differential went into an engi
 prints on the normal console - and it landed only when the edits were applied **one at a time with a
 build after each**; the earlier failures were all placement and anchor errors in a large hand-written
 file, each of which the build catches for the price of a compile.
+
+## RETIRED UNBUILT (price says sub-bar): row-paired ZCRMS reduction
+
+Idea: `zcrms` reduces one activation row with a **single dependent accumulator**
+(`for (i...) ss += x[i]*x[i];`), so with ~3 cycles of FP add latency the chain is latency-bound;
+pairing two independent rows in one loop would hide that latency without reassociating either sum -
+bit-exact by construction, the same form that just paid twice on the QK body and the Sinkhorn detector.
+
+**Why it is not being built:** the arithmetic prices it at **+0.157 %** at best (768 elements x 40
+calls per token x 2 cycles saved per element = 0.26 ms of a 163 ms token), which is under the 0.2 % bar
+even before the assumption is questioned - and the assumption is the weak part: the 3-cycle figure is
+mine, not measured, and the symbol is inlined away in the ELF, so confirming it needs a map-file lookup
+and a caller-level disassembly for a prize that is already sub-bar. Per this campaign's own rule (price
+before building; if the price says sub-bar, do not build), the idea is retired here rather than
+half-explored on a board.
+
+**Reopens if:** a future profile shows the zcrms family above ~1 ms/token (it is ~0.3 ms now), or the
+reduction is ever widened to a shape where the chain is longer per call - the price scales linearly
+with n x calls, so 768 x 200 would be +0.8 % and worth a build.

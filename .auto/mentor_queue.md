@@ -34,7 +34,7 @@ Main checkout is a stale engine lineage; preserve worker candidates and do not
 copy main source into a worker as a reset. The 200-turn cap is a scheduler stop,
 not evidence of research exhaustion. Direct input resumes it; no controller edits.
 
-## Corrected premises that matter
+## Corrected premises retained
 
 - **Norm scales ARE model-owned float storage.** Arrival B1 `nd_model.c:701`
   allocates fp16_pool; :705 sets p=fp16_pool; :712 sets h=archive data; :714
@@ -114,23 +114,41 @@ This trades the current wide subtraction for no extra u read/write pass:
 #25 fused d4 with residual addition; #705/#707 widened the later subtraction.
 Neither removed this pass. Compare with B1's own new composition if it succeeds.
 
-Lower reserve: emit the ublk snapshot alongside u in the existing wide lanepre
-producer, eliminating memcpy's **24,576 loaded B/token**. Preserve the wide path
-and its scalar fallback. Test separately from final-difference fusion.
+Next B1 / ready B2 substitute: emit the ublk snapshot alongside u in the
+existing wide lanepre producer, eliminating memcpy's **24,576 loaded B/token**.
+The production path is `nd_lanepre4w` (gemv4_tie728.S), NOT just the scalar
+fallback. Add a second destination to the wide emit while f0..f3 still hold the
+rounded result; keep the first store and all madds. Do not use a7 as a pointer
+without moving its existing per-tile zero temporary. Update prototype/caller,
+context, alignment guard and scalar dual-store; selftest checks both outputs
+plus multi-tile canaries. Only then remove the caller memcpy. Extending only C
+would silently leave the snapshot uninitialized when the wide path runs.
+Test separately from final-difference fusion; no new scratch needed.
 
-## Larger-phase reserve: one bounded CQ2 stall-counter screen
+## Next turnover: one bounded CQ2 stall-counter screen (B2 after residency)
 
-Use only when the next dominant-phase hypothesis needs discrimination, with
-other boards screening candidates. #849/#852/#854 inferred IPC from total work
+Move this UP from indefinite reserve after the current runnable batch, while
+B1/B3 screen fusions. The dominant phase still needs discrimination. #849/#852/#854 inferred IPC from total work
 and wall time without two-core accounting; #745 measured 34 cycles/packed word
 on a small fixture, not the later asserted 16. A universal instruction floor is
 not established. No matching hardware-counter screen was found in the ledger.
 
 Installed IDF has `perfmon`, two counters/core, and `xt_perf_consts.h` masks.
+Its S3 `core-isa.h` says one load/store unit, four-byte fetch width, FLIX3=0;
+none supports #849's assumed two-wide issue arithmetic. Do not infer an IPC
+floor from total tensor work divided by wall time across two active cores.
 Around one real row-walker invocation per core, retain production PSRAM weights,
 internal LUT and row split. Bounded passes: instructions/cycles, D-cache-miss
 stalls, then bank/dependency stalls. Record core, rows, bytes and overflow;
 never sum overlapping stall events or call instrumented tok/s a speed result.
+Implement around the actual row callback (inside each pinned core), not around
+`nd_parallel_rows` on only its caller. Counter0=cycles; counter1 successively
+`INSN_ALL`, `D_STALL_CACHE_MISS`, `D_STALL_BUSY|BANK_CONFLICT`,
+`BUBBLES_R_HOLD_REG_DEP`. Same Q tensor/row range on successive bounded
+invocations; keep normal two-core production traffic. Save per-core records and
+print after join, outside measured bodies; check init errors/overflow. Core-local
+PMU setup exists in [MimiModel main.c](https://github.com/memovai/mimimodel/blob/main/needle-esp32s3/main/main.c#L24),
+but its single-core fixture is a starting example, not the production answer.
 No cache disable/locking, interrupt masking or whole-suite profiling loop.
 If setup blocks, substitute the ready edits above. Memory stalls would motivate
 placement/delivery; dependency stalls would motivate a specific schedule.
@@ -138,6 +156,28 @@ Sources: [Espressif perfmon API](https://docs.espressif.com/projects/esp-idf/en/
 [event masks](https://github.com/espressif/esp-idf/blob/master/components/xtensa/include/xtensa/xt_perf_consts.h);
 verified against installed IDF 5.5.2. The [speed guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
 also cautions that binary layout can move small timings; do not overclaim causes.
+
+## B3 follow-up: fuse norm EMIT with RoPE, not just their dispatch
+
+Source-specific new candidate after head-factor result: retain the ascending
+sum-of-squares and exact inv computation. For each half-split pair i/i+half,
+compute BOTH fully rounded normalized values in local floats using the receiving
+tree's raw-scale/factor contract, then the same two RoPE expressions and store
+only the rotated outputs. Original normalized rows are never used elsewhere
+between these two calls. Use the same head split, immutable per-token cos/sin,
+and a generic fallback; remove only the corresponding later apply_rope calls.
+Full Q+K coverage would avoid **43,008 B/token** of intermediate write/read at
+8 layers x14 heads x48 floats, a traffic count rather than a speed promise.
+
+#607/#608 and #615 tested sequential norm+RoPE helpers in one callback (and Q
+taps ownership), NOT removal of the intermediate norm emit/reload. Check their
+preserved patches before implementation if needed, but do not call their -0.029%
+a proof against this distinct fused emit. The compiler-contraction trap from
+#608 still applies: keep both normalized operands rounded BEFORE RoPE, inspect
+mul/madd/sub order, and compare complete Q/K vectors including zero/signed-zero
+and ordinary decode inputs. No approximate rsqrt or changed reduction order.
+If preserving the arithmetic becomes a blocker, use snapshot fusion instead of
+leaving the lane idle.
 
 ## Retained results and next mentor check
 

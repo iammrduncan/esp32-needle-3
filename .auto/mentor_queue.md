@@ -437,3 +437,26 @@ pricing it from an old entry - this session it caught two stale premises (this o
 LUT build" that is really ~135.8 us).
 
 **Pool unchanged:** B3 6.1450, B2 6.1283, B1 5.9283; accepted 5.3033 until 20/20; best gated 6.1433.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~14:00Z (runs #817/#818: B2's breadth gate lands - ALL THREE TREES now carry identical evidence)
+
+| tree | decode | device | host | kernel differential |
+|---|---|---|---|---|
+| **B3** | **6.1450** | 18/20, delta 52 | 19/19, fid 5.341e-05 | its own (6 shapes, bitexact) |
+| **B2** | **6.1250** | 18/20, delta 52 (new) | 19/19, fid 5.341e-05 (new) | its own (6 shapes, bitexact) |
+| **B1** | **5.9283** | 18/20, delta 52 | 19/19, fid 5.341e-05 | its own (6 shapes, bitexact) |
+
+B2's promotion used the explicit `AUTO_ALLOW_REPEAT` allowance (a restricted screen consumes a tree's
+one repeat budget) and reproduced its 6.1250 screen exactly on breadth, with ext 6.0577 / think 4.69 /
+min 5.9 in line with its class. **The evidence asymmetry between the three candidate trees is now
+gone** - whichever one the owner adopts, the evidence is the same shape and strength.
+
+**Best fully-gated packet: 6.1433 = +15.8 % over the owner's 5.3033 pin** (arc 2.44 -> 6.1433, +151.6 %),
+plus a behavioural capture (9/9 flags), an out-of-suite host-vs-device cross-check, a 10-request
+repeat-determinism soak, and each tree's own CQ2 differential.
+
+**Pool:** all three boards flashed with their measured trees, consoles free, no stray processes.
+**Accepted stays 5.3033 until a tree passes 20/20** - the only thing between the best tree and that
+gate is the owner's disposition of the two frozen #647 heldout cases.

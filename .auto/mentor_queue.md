@@ -543,3 +543,27 @@ also present (`KB DELTA`/`KSUM kernel=tie1n`, e.g. med_pct=+42.22 internal vs +3
 `nd_qk8w4`, so it needs a stub for that unrelated bench (or its removal) in the throwaway copy: a small
 known task, not a research question. **B3's flash holds a kbench image - re-flash from its normal build
 before its next lane.** Packet unchanged: B3 6.1433 / B2 6.1250 / B1 5.9033.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~03:00Z (run #791: B1's own CQ2 differential GREEN - ALL THREE TREES now carry their own kernel-level bitwise proof)
+
+Method (the one that works, per tree): hoist the shape sweep in **that tree's own** `kbench.c`
+(anchor = the line before `#if ND_KB_EXP<n>` ending in `;`/`}`/`)`), build a throwaway `build_kbasm`
+with `-DNEEDLE_KBENCH=ON -DNEEDLE_KBENCH_ASM=1`, filter the boot capture.
+
+**B1 (shippable + loop + EG2 + amortised, engine `1ece8792b190`-family) - six shapes, all bitexact:**
+768x768 (768/768), 576x768 (576/576), 128x768 (128/128), 128x768/blob_int (128/128), 96x768 (96/96),
+96x768/blob_int (96/96) - every one `bitexact=1 maxabs=0.000e+00`.
+
+**Correction to #789:** B1's OWN kbench.c has **zero** `nd_qk8w4` references - the link failure came
+from the file transplanted from B2, not from B1's tree. Lesson stands: hoist per tree, never transplant
+another tree's bench.
+
+**Evidence per tree is now complete on every axis this campaign gates:** device breadth 18/20 (only the
+two frozen #647 cases), host 19/19 with fidelity 5.341e-05, the device byte-exact gate, a behavioural
+host-vs-device cross-check (#788), and an **own-tree CQ2 bitwise differential** (B2 #776, B3 #790,
+B1 #791).
+
+**Housekeeping:** B1's and B3's flash currently hold kbench images - re-flash from the normal build
+before their next lane. **Packet unchanged: B3 6.1433 / B2 6.1250 / B1 5.9033.**

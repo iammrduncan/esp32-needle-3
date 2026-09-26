@@ -501,3 +501,23 @@ already-shipped item, vendor block, RAM block).
 
 The loop has no candidate left that it can settle alone; further entries without one of those owner
 inputs would be manufactured verification work, which this campaign's rules forbid.
+
+---
+
+## FINAL CLOSURE -- 2026-09-28 (the last open item from the ledger's oldest list is now closed)
+
+**Concurrent prefix priming / flash-cached prefixes (the "iteration speed, not the metric" item):**
+closed by resource arithmetic. The two prefixes are sequential phases of ONE model state, not
+independent work, so priming them concurrently would need two model instances - and a second instance
+costs ~13 MB of PSRAM against the **~517 KB** free after open. Flash-caching a primed prefix needs its
+own partition, and `partitions.csv` is frozen. Experiment latency therefore stays ~5 min/flash.
+
+**With that, every item in this campaign's ledger is closed:** performance families by measurement or
+byte/line arithmetic; robustness audited across the whole request surface; two product defects fixed and
+verified; the harness audited (anti-repeat enforced, provenance complete, gates fail-safe) with its one
+real crack fixed; documentation current, verified against the live workers and reproducible.
+**Result: 6.1433 tok/s fully gated (+15.8 % over the accepted 5.3033), trees at 6.1450 / 6.1250 / 5.9283.**
+
+**The loop has no candidate left that it can settle alone.** The next real iteration requires one of:
+(1) the #647 disposition, (2) the schema no-op decision, (3) a new objective, or (4) a premise change
+(assertion RAM, a verified flash timing model, or a gate relaxation).

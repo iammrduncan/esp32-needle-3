@@ -320,3 +320,26 @@ tree; the amortisation is two-tree confirmed (+0.27 % B2, +0.35 % B3) with the C
 
 **Carried forward:** B3's real-tensor FP32 norm-sidecar probe; B1 free at 5.8833 (QK outline correctly
 reverted); the amortisation idea on any remaining dispatched kernel. **Assets:** `.auto/exp90`-`96`.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~21:00Z (run #783: amortised group loop now THREE-TREE confirmed - a portable ~+0.32 % control-flow lever)
+
+| tree | before | after | delta |
+|---|---|---|---|
+| B2 (seed + loop + `qk_dot8`) | 6.1083 | **6.1250** | **+0.27 %** |
+| B3 (composed + EG2 + compact + loop) | 6.1217 | **6.1433** | **+0.35 %** |
+| B1 (shippable + loop + EG2) | 5.8833 | **5.9033** | **+0.34 %** |
+
+Three trees, three baselines, average **~+0.32 %** - the strongest transfer record of the campaign. Every
+instance is ELF-verified to the same shape (`loop a2, <LBEG>`, isync after the expansion, epilogue
+`wsr.lcount` ngroup-1 + isync + jump landing on LBEG; rows decrement and exit first so the last row
+leaves LCOUNT at 0) and correctness rests on the green CQ2 differential (#776) plus the device gate.
+
+**Transfer method that works (learned in #780, used for B1 and B3):** slice between the real
+`.Ltn_row:`/`.Ltn_group:` markers, keep each tree's comment block verbatim, move only the two per-row
+loads above LBEG. Anchor-based edits fail because the comment text differs per tree.
+
+**Assets:** `.auto/exp96/` now holds `lut2_tie728.S.amortised` (B2), `.b3` and `.b1`.
+**Owed:** breadth + host gates on B1's 5.9033 tree. **Outstanding:** B3's FP32 norm-sidecar probe.
+**Pool:** B1 5.9033 (LOOP+EG2+amortised), B2 6.1250 gated, B3 **6.1433 gated** (campaign best).

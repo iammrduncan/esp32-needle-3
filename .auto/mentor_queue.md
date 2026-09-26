@@ -18,20 +18,22 @@ At mentor arrival B1/B2 were idle; B3 had a real, growing `B3ctl.log` with
 wait for B3 or spend another turn on finish/disposition prose. Three distinct
 experiments are the normal topology, compared with pinned per-board baselines.
 
-**10:14 update:** B1 final-norm candidate is measuring (PID 370562,
-`B1fn.log`, engine `c59669b4d143`, app `028e30f044a2`). Primary screen is
-**6.1617 / 99 tokens / min 5.94**, +0.109% versus its 6.1550 pin; full device
-and host gates remain pending (extended so far 6.0965 versus pin 6.0876).
-B2 is now measuring the RMS pair: `B2rp.log`, PID 372444, engine `1bccf206ac09`,
-app `ea5d3630333c`; boot and primary logs are growing. Its host checks are chained
-inside its board wrapper. B3 original corrupt control is still live. These are
-TWO novel discovery candidates plus one inherited diagnostic, not three valid
-new candidates. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
-`needle-board` command, so it will run from `/root/board-pool` and fail to find
-the script. Do not relaunch/interrupt the measurement. At turnover run host
-checks through `needle-board run 1 -- bash .auto/checks.sh` on this same worker;
-this does not require another device run. Future chains must stay inside the
-wrapper's worker cwd/lock. Check the real return code, not the launcher's claim.
+**10:15 turnover update:** B1 final-norm measurement has finished:
+`B1fn.log`, engine `c59669b4d143`, app `028e30f044a2`, **6.1617 / 99 tokens /
+min 5.94**, +0.109% versus its 6.1550 pin; extended 6.0965 versus 6.0876.
+Full device result is **22/24, delta52**, matching the reference's known failures,
+not owner admission. The host gate is still owed: its launcher ran checks OUTSIDE
+`needle-board` from `/root/board-pool`. Run `needle-board run 1 -- bash
+.auto/checks.sh` on this same worker, without another device run; then use B1
+for the phi-dispatch reserve (or the scale-factor reserve if batching is blocked).
+Keep the hoist artifact/measurement separate; do not silently stack a new change.
+
+B2 is measuring the RMS pair: `B2rp.log`, PID 372444, engine `1bccf206ac09`,
+app `ea5d3630333c`; primary is **6.1550 / 99 tokens**, neutral so far. Its host
+checks are chained inside its board wrapper; full gate is pending. B3 original
+corrupt control remains live (PID 367952), with 4.0767 / 1271 primary tokens.
+That inherited diagnostic is not a valid discovery candidate. Corrected staging
+is its next turnover; no more copy-disabled controls. Freeze both live workers.
 
 ## Critical correction: the staging runs omitted a transform
 
@@ -65,7 +67,7 @@ errors and rc=127, not the host gate successes claimed in their descriptions.
 
 | Board | Next experiment | Why now |
 |---|---|---|
-| B1, measuring | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
+| B1, measured; host owed | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
 | B2, measuring | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
 | B3, after current job | **Corrected four-row phi staging** | The claimed -33.9% rejection never tested a correct device program. One valid experiment can finally price it. |
 
@@ -167,7 +169,7 @@ remains the more structurally distinct reserve; do not stack both before pricing
   dependency or replacement memcpy is requested for this batch.
 
 Next mentor: inspect actual lane utilization, B3's restored device preparation
-and raw output counts, then harvest B1/B2's actual full gates. Check that the
+and raw output counts, then B1's owed host gate / replacement lane and B2's full result. Check that the
 staging correction was appended honestly and old pin metrics stopped being
 reported as candidate gates. Then choose among phi batching and measured winners;
 do not let a correctness postmortem occupy all three lanes.

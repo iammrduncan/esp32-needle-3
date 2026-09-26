@@ -35,7 +35,7 @@ The numbers that are easiest to misquote are:
 | Original device baseline, run #1 | 1.2217 tok/s | Unmodified eight-layer port before the first large staging win. |
 | Later campaign baseline, run #2 | 2.4417 tok/s | FP32-staged MLP-factor tree; the `2.44` baseline used by later campaign summaries. |
 | Accepted pin, commit `2c79104` | 5.3033 tok/s | 20/20 device exact, 19/19 host exact, fidelity and top-1 gates green. |
-| Best candidate tree A, board 3 | 6.1433 tok/s | +15.8% over the accepted pin; 18/20 device exact because of the two frozen transport/state-sensitive cases, with all other gates green. |
+| Best candidate tree A, board 3 | 6.1433 tok/s | +15.8% over the accepted pin; 18/20 device exact on the disputed pair, plus host/numeric/top-1, own-tree CQ2, 9/9 capture, and repeat-soak evidence. |
 | Conservative candidate tree C, board 1 | 5.9033 tok/s | +11.3% over the pin; same two-case owner decision. |
 
 After the durable handoff, run #805 repaired a double-applied-scale bug in a
@@ -48,10 +48,11 @@ codebook-residency screen was still running and has no verdict in this edition.
 The final campaign recommendation was to adopt tree A, or tree C when the more
 conservative lineage is preferred, after deciding how to treat
 `heldout_interval_one` and `heldout_long_tools_note_only`. A pure transport
-change flips exactly those cases with the engine bytes unchanged; the host and
-device otherwise agree, and ordinary prompts were repeat-deterministic in the
-run #797 soak. This is an **oracle/re-baseline decision**, not permission to
-weaken the gate silently. See
+change flips exactly those cases with the engine bytes unchanged. Run #718
+reproduced the exact `interval_one` answer on the host and the same repeated-tool
+tendency—not byte-identical output—on the long-tools prompt; ordinary B3 prompts
+were repeat-deterministic in the run #797 soak. This is an
+**oracle/re-baseline decision**, not permission to weaken the gate silently. See
 [performance history](esp32/performance-history.md) and
 [transport](esp32/serial-transport.md).
 

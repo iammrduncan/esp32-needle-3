@@ -119,10 +119,10 @@ next lever, and the final sweep found no unmeasured above-bar target.
 
 All final trees fail the same two device fixtures with total token delta 52:
 `heldout_interval_one` and `heldout_long_tools_note_only`. Every other device
-case has token delta zero; host is 19/19; fidelity equals the accepted pin;
-top-1 is 10/10; each tree has its own bit-exact CQ2 differential; behavioral
-capture is green; and B3 completed 10/10 soak requests with 5/5 repeated calls
-byte-identical.
+case has token delta zero; all three have host 19/19, fidelity/top-1 matching the
+accepted pin, and their own bit-exact CQ2 differential. B1 alone has the
+unseen-prompt cross-check; B1 and B3 have green 9/9 behavioral captures; and B3
+completed 10/10 soak requests with 5/5 repeated calls byte-identical.
 
 A transport-only RX-ring change flips exactly the two fixtures. The correct
 next step is an owner definition of the oracle/product behavior, not another

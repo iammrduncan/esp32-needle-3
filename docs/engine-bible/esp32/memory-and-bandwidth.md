@@ -38,7 +38,9 @@ the PSRAM tier.
 The `.cact` directory and immutable tensor data are consumed directly from a
 mapped model partition. This avoids a second 16 MiB copy and lets each tensor
 remain a view into the archive. Bounds, alignment, dtype, and shape validation
-must precede use.
+must precede use in a hardened loader. The current binder relies on the
+manifest-hashed canonical archive and is not a complete untrusted-input
+validator; see [the format chapter](../general/cact-format.md).
 
 ### Selective PSRAM residency
 
@@ -121,4 +123,3 @@ For each candidate buffer, record:
 
 Only stage when the measured reuse and removed traffic exceed construction,
 copy, eviction, and synchronization costs on the integrated tree.
-

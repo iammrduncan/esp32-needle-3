@@ -69,9 +69,11 @@ flipped exactly:
 - `heldout_long_tools_note_only`.
 
 The final trees are consequently 18/20 device exact. Evidence against a numeric
-kernel bug is substantial: host output agrees with device, each image is
-deterministic and order-independent, passing cases have token delta zero, and a
-10-request soak completed with five repeated tool calls byte-identical. But the
+kernel bug is substantial: the host exactly reproduced the device's
+`interval_one` answer and showed the same repeated-tool tendency (not identical
+bytes) for long-tools; each image is deterministic and order-independent;
+passing cases have token delta zero; and a 10-request B3 soak completed with
+five repeated tool calls byte-identical. But the
 old oracle cannot be rewritten automatically. Owner choices are to retain the
 ring and re-baseline/replace the two fixtures, remove it and lose correct long
 request support/the 20-case suite, or keep both as release blockers.
@@ -132,4 +134,3 @@ firmware budget permits. Until then:
 - define fixture reset/order/state policy;
 - validate long requests above the hardware FIFO size;
 - keep board identity stable across both serial legs.
-

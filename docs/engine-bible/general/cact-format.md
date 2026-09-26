@@ -63,6 +63,13 @@ one versioned contract.
 the real model length from the last record before mapping. The current target
 rejects archives whose final offset/length need nonzero high 32 bits.
 
+These helpers provide checks; the current `nd_model_open()` binder assumes the
+hash-pinned canonical tensor order and does not consistently check every helper
+return or validate every dtype, rank, shape, alignment, overlap, and fixed-cap
+constraint before dereferencing. Thus the manifest/download hash is part of the
+trust boundary. Treating arbitrary `.cact` input as safe requires a stricter
+validation pass.
+
 The loader does not checksum the blob at runtime. Integrity is established by
 the build/download path and manifest; production designs that need fault or
 adversarial resistance should add signed/hash-verified storage or secure boot.
@@ -135,7 +142,7 @@ the reproduction input.
 ## What worked
 
 - mapping immutable tensor bytes directly from a dedicated flash partition;
-- positional binding with strict geometry validation;
+- cheap positional binding for the pinned canonical geometry;
 - copying only selected hot spans into PSRAM while retaining original offsets;
 - reusing packed CQ bytes across C and assembly paths;
 - independent host utilities for header/directory/row/GEMV inspection;
@@ -143,7 +150,10 @@ the reproduction input.
 
 ## Failure modes and rules
 
-- A valid tag does not prove every record is in bounds: validate each pointer.
+- A valid tag/directory does not prove every record is usable: validate every
+  decoded tensor, payload pointer, dtype/rank/shape, alignment, overlap, and
+  target cap before binding. The current binder needs hardening for untrusted
+  archives.
 - Tensor slot mistakes can yield plausible shapes and even small logit deltas;
   bind by named slot tables in code and gate full behavior.
 - Slicing layer blocks without remapping mHC rows and engram sites produces a
@@ -154,4 +164,3 @@ the reproduction input.
   allocation is unavailable.
 - Expanded or alternate layouts need an explicit memory and byte-stream budget;
   the archive's compactness is part of the runtime design.
-

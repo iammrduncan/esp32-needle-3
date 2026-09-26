@@ -117,12 +117,19 @@ bandwidth and compute.
 
 ## Error handling and boundedness
 
-The implementation rejects unsupported archive geometry, out-of-bounds tensor
-records, missing model partitions, oversized schemas, prompts that cannot fit
-the context, illegal grammar states, and truncated generation. Fixed caps exist
-for lanes, engram sites, heads per KV group, tokenizer vocabulary, grammar
-properties, and output buffers. A port must revisit every cap when changing the
-model; silently clipping a new geometry is not acceptable.
+The implementation rejects several header-geometry inconsistencies, a missing
+model partition, oversized schemas/prompts, illegal grammar states, and
+truncated generation. The low-level reader can reject an out-of-range tensor
+payload when `nd_cact_data()` is checked. The current model binder, however,
+trusts the manifest-pinned canonical archive and does **not** systematically
+verify every tensor decode, payload bound, dtype, rank, shape, alignment,
+overlap, or all fixed target caps before dereference. In particular, a valid
+tag/directory is not an adversarial archive boundary.
+
+That is a present validation gap, not a recommended design. A port or product
+that accepts untrusted/replaceable archives must validate every bound and
+semantic tensor contract—including head-dimension/replication caps—before
+allocation or use. Silently clipping a new geometry is not acceptable.
 
 The firmware's generation cap is a backstop, further clamped to remaining model
 context. Reaching the token or output-text cap emits an explicit truncation

@@ -77,10 +77,11 @@ An exact-output fixture is a tuple, not just a prompt:
  grammar/schema, transport, reset/order policy)`.
 
 The two disputed held-out cases are instructive. A pure UART RX-ring change,
-with engine bytes unchanged, flips exactly those cases; host and device agree
-on the resulting output; the result is deterministic and order-independent
-within an image. The evidence weakens an arithmetic-bug theory, but it does not
-authorize rewriting the golden. The owner must decide whether the old fixture
+with engine bytes unchanged, flips exactly those cases. Run #718 reproduced the
+exact device `interval_one` answer on the host; on the long-tools prompt it
+reproduced the same repeated-tool tendency but not byte-identical output. Each
+device image was deterministic and order-independent. The evidence weakens an
+arithmetic-bug theory, but it does not authorize rewriting the golden. The owner must decide whether the old fixture
 encoded an unintended request-state behavior, the new transport changes the
 product contract, or the cases remain release blockers.
 
@@ -116,4 +117,3 @@ For each candidate record:
 - every failure, even when unrelated to the optimized arithmetic.
 
 This turns “quality is unchanged” from a narrative into a reproducible claim.
-

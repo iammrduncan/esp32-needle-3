@@ -18,14 +18,16 @@ comparative inspiration and project-local evidence.
 | [`esp32/partitions.csv`](../../esp32/partitions.csv) | Flash layout | 2 MiB app and model partition beginning at `0x210000`; requires 32 MiB flash for this model. |
 | [`esp32/main/main.c`](../../esp32/main/main.c) | Firmware behavior | Model mapping, dual-core worker, prefix priming/caches, generation, serial protocol. |
 | [`tools/serial_api.py`](../../tools/serial_api.py) | Host transport/API behavior | Serial attach discipline, framing, retries, HTTP routes, and two-pass orchestration. |
-| [`.auto/log.jsonl`](../../.auto/log.jsonl) | Run ledger | 797 numbered records in the inspected working tree: 665 keep, 115 discard, 17 crash. Descriptions include metrics and causal findings. |
-| [`.auto/ideas.md`](../../.auto/ideas.md) | Curated research narrative | Rich thematic record with corrections; chronological sections are not all current. |
-| [`.auto/OWNER_ACCEPTANCE_PACKET.md`](../../.auto/OWNER_ACCEPTANCE_PACKET.md) | Acceptance/candidate summary | Best concise record of pins, gates, candidate trees, and the outstanding owner decision. |
+| [`.auto/log.jsonl`](../../.auto/log.jsonl) | Run ledger | At the bible cutoff: 805 numbered runs plus two configuration records; 673 keep, 115 discard, 17 crash. This ignored working file was live during the audit, so later readers must recalculate rather than treating these as permanent totals. |
+| [`.auto/ideas.md`](../../.auto/ideas.md) | Current research backlog | Pruned after run #801 to premise-gated, banked, and method-rule items; live and deliberately not the full history. |
+| [`.auto/ideas.md.pre-2026-09-28.bak`](../../.auto/ideas.md.pre-2026-09-28.bak) | Historical research narrative | Preserved 3,396-line pre-prune notebook with experiments, corrections, retractions, and closed paths; its headline state is stale, so search by mechanism/run. |
+| [`.auto/HANDOFF-2026-09-28.md`](../../.auto/HANDOFF-2026-09-28.md) | Durable final-tree synthesis | Best short record through run #800 of the three preserved trees, gates, reproduction, closures, and owner decision; later ledger entries such as #805 are addenda. |
+| [`.auto/OWNER_ACCEPTANCE_PACKET.md`](../../.auto/OWNER_ACCEPTANCE_PACKET.md) | Acceptance/candidate history | Append-only synthesis of the accepted pin and successive candidates; sections from different dates coexist and must be read with the newer handoff/ledger. |
 | [`.auto/mimimodel-experiments.md`](../../.auto/mimimodel-experiments.md) | External-transfer audit | Pins the MimiModel audit commit, corrects incomparable speed claims, and records experiment dispositions. |
 | [`.auto/prompt.md`](../../.auto/prompt.md) | Campaign contract | Objective, metric, frozen inputs, scope, and changing operator directives. Historical queues inside it are superseded. |
 | [`.auto/golden/`](../../.auto/golden/) and [`.auto/prompts.json`](../../.auto/prompts.json) | Quality oracle | Frozen device/host outputs, logit probe, and benchmark cases. Treat edits as owner-level re-baselines. |
 | [`demo/recording.json`](../../demo/recording.json) | Product capture | Saved route/tool/state/timing evidence for the seven demo scenarios. |
-| Git history on `autoresearch/decode-tps-2026-09-18` | Diff-level provenance | 524 reachable commits at the snapshot; commit messages often contain the full measurement packet. |
+| Git history on `autoresearch/decode-tps-2026-09-18` | Diff-level provenance | 411 commits were reachable from snapshot `82a3cf1`; commit messages often contain the full measurement packet. History was rewritten during the campaign, so author metadata and older counts are not stable attribution evidence. |
 
 ## Model, format, and upstream implementation
 
@@ -103,11 +105,41 @@ comparative inspiration and project-local evidence.
   reconfiguration.
 - [GNU binutils Xtensa long-loop discussion](https://sourceware.org/legacy-ml/binutils/2019-04/msg00014.html)
   explains assembler expansion/setup costs that motivated amortizing loop setup.
+- [ESP-IDF asynchronous memcpy documentation](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-reference/peripherals/async_memcpy.html)
+  defined the supported GDMA copy surface used to bound the experiment. The
+  local direct-versus-bounce measurement, not the API's existence, closed it.
+- [Espressif ESP-DSP](https://github.com/espressif/esp-dsp) supplied audited
+  Xtensa FIR/dot/matrix assembly schedules and byte-offset conventions. Those
+  examples were instruction references, not drop-in kernels for CQ gathers.
+- [Espressif ESP-NN](https://github.com/espressif/esp-nn) was inspected for
+  target-specific neural kernels and toolchain patterns. No ESP-NN headline
+  result is used as evidence for this model.
 
 The exact installed ESP-IDF source and Xtensa toolchain used to build an image
 are also primary sources. Generated `compile_commands.json`, the linked ELF,
 and `objdump` output are stronger than generic manuals for what that image
 actually contains.
+
+## Algorithm and research leads
+
+- [FlashAttention](https://arxiv.org/abs/2205.14135) and
+  [FlashAttention-2](https://arxiv.org/abs/2307.08691) were conceptual references
+  for IO-aware/online attention and work partitioning. Needle's small, ordered,
+  quantized GQA implementation was derived and tested locally; the papers do
+  not establish an ESP32 speed result.
+- [DFlash](https://arxiv.org/abs/2602.06036) appeared in the session research as
+  a flash-resident inference lead. It did not supply a promoted local mechanism
+  in this edition and is retained only so future work can distinguish an
+  inspiration from measured evidence.
+
+## Agent and operational provenance
+
+The exact Pi and Codex JSONL stores, database cross-checks, snapshot counts,
+provider/model identities, and audit limitations are recorded in
+[session inventory](appendices/session-inventory.md). No local Claude transcript,
+Anthropic endpoint trace, or Claude response was available; `Claude Opus` is a
+configured selection-only route label. Session narration is a discovery index,
+not a substitute for run artifacts, hashes, and source.
 
 ## Tooling and media
 
@@ -124,4 +156,3 @@ specific claim it supports, and whether it is primary, comparative, or merely
 inspirational. Never cite a headline speed without model size, dense work per
 token, precision, context/workload, decoder, clock/memory configuration, and
 quality protocol.
-

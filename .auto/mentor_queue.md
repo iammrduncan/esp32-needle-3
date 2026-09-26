@@ -1,11 +1,43 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 02:39 UTC** (actual clock, not future-dated handoff).
+Mentor refresh **2026-09-26 02:48 UTC** (actual clock, not future-dated handoff).
 Supersedes the old chronological appendices and self-declared finish. Preserve
 all dirty workers, board locks, anti-repeat history, frozen quality gates and
 240/80 MHz. Researcher implements and measures; mentor only directs.
 
 ## Evidence that changes the order
+
+**B3 build blocker caught at 02:49, BEFORE flash:** the first reorder generator
+appended all 32 codebook/FMA instructions AFTER `retw`; the second `ee.ldf`
+falls straight into `.Lwwend`, so the loop computes no dot. Move the already
+pipelined block back before `.Lwwend` (after the second wide activation load),
+remove the unreachable tail, rebuild and inspect all eight `madd.s` inside
+LBEG/LEND. Preserve the surrounding row/group epilogue. This is a generator
+error, not a failed scheduling experiment. Do not flash that malformed image. If it was already launched before this
+message arrived, let the gate fail; never kill the live job or broadly signal
+measure.sh processes. Repair only after the worker becomes idle.
+
+**B3 renaming screen completed: 6.1433, exactly flat, 6/6 exact.**
+**ELF correction:** `R-wide2d-b3` is
+REGISTER RENAMING, not load-ahead. At 0x4037fb18 `lsi f12` is immediately
+consumed by `madd.s` at 0x4037fb1b; the next `lsi f14` is only at 0x4037fb24.
+The source does the same on all eight nibbles. This completed timing cannot close the
+schedule hypothesis. At turnover, actually move the second nibble's
+extui/addx4/lsi BEFORE the first madd; both loads must precede either consumer
+in each pair. Inspect the linked body before the new screen. Do not edit or
+interrupt any future live build/flash/benchmark.
+
+**B2 result:** `R-cb4res-b2.log`, app `ed15dd4c29ea`, **6.1283** vs 6.1250
+(**+0.054%**), 6/6 exact, delta 0, prefill 6.4683. Sub-bar, bank as a small
+prototype; no breadth/repeat justified by this reading alone. Linked cb4 is
+internal `.bss` at 0x3fcc60f4; the draft still has unkeyed static init. One
+useful next discriminator is a real-phi dual-core microbench of one shared
+versus two immutable worker-private 64 B copies, with the single-core version
+as an IN-IMAGE diagnostic. Keep values/FMA order identical, and compare actual
+wide-kernel call ranges. If there is no split-specific benefit, retire tiny
+codebook placement and prepare the one-Q layout probe. Do not leave B2 idle
+while a shell sleeps to harvest other boards.
+
 
 **Accepted remains 5.3033 tok/s**, bundle5, device 20/20, host 19/19.
 Best measured proposal: **B3 6.1433** (#781/#782), B2 **6.1250** (#777/#778),
@@ -21,7 +53,12 @@ The mentor found the current retry's transcription error at old lines
 then multiplied AGAIN by the four retained scale statements. Researcher fixed
 raw assignments; host check and the new device screen now pass. #779's tail/i
 explanation was wrong; do not infer ABI or compiler defects from this retry.
-Keep helper body + remainder verbatim, scale exactly once. Breadth is pending.
+Keep helper body + remainder verbatim, scale exactly once.
+**Breadth now finished** in `R-qkout-gate-b1.log`: 5.9233, host already
+19/19, device 18/20/delta 52 (same frozen pair), think 4.57. No new admission.
+At 02:47 all board jobs were gone; only a 275-second harvest sleep remained.
+Mentor sent Ctrl-C to the idle researcher turn and redirected the next batch;
+no board job was killed.
 
 Amortised CQ2 LOOP is real and already tested on all three trees: +0.27% B2,
 +0.35% B3, +0.34% B1; own-tree asm=1/tie1n differentials are green
@@ -40,9 +77,38 @@ number, not another board's, and confirm a process plus nonempty growing log.
 
 | Lane | Next action | Own comparison |
 |---|---|---|
-| **B1** | Preserve/export the corrected QK helper; promote its new 5.9233 screen once. Then next performance candidate. | 5.9033 before outline; new 5.9233 screen |
-| **B2** | **Tiny exact codebook delivery experiment**: 64-byte CQ4 codebook in aligned internal RAM. | 6.1250; current wide phi kernel |
-| **B3** | **Ready substitute: two-deep codebook loads in WIDE phi** (details below); prepare the one-Q-tensor 36-byte record next if its kernel needs more time. | 6.1433; current wide phi/current amortised CQ2 |
+| **B1** | Ready small candidate: specialize the new outlined QK helper for guarded qk_hd=48; then one-Q record layout. | 5.9233 new proposal; 499,104 B post-suite PSRAM |
+| **B2** | Ready small candidate: callback-local aligned 64 B codebook copy in wide-phi wrapper; charge its timed copy. | 6.1250 original; 6.1283 shared-copy prototype |
+| **B3** | Renaming screen flat; run ACTUAL two-deep WIDE-phi codebook loads, with emitted order checked. | 6.1433 original wide-phi tree |
+
+### B1 ready substitute: constant shape at the NEW helper boundary
+
+The archive's qk_head_dim is **48**. Current B1 linked `qk_dot8` at 0x4037b688
+still computes a dynamic trip count, emits the long LOOP setup, and carries the
+generic remainder. That helper boundary only became valid this pass; old
+DOT8W/QKTILE width tests inside attn_heads did not price this version.
+Keep the exact four chains and tail semantics; a separate noinline helper with
+compile-time qk_hd=48 can remove count/remainder work. Dispatch only under
+`qk_hd == 48`, retaining the original helper as fallback for every other shape.
+Do not change contraction/FP flags, scale placement or reduction order. Inspect
+emitted code: if it is identical, skip the flash. Otherwise host check then one
+primary screen vs 5.9233. Modest candidate, not a promised win; easier to make
+ready than the next lossless-layout kernel. No forced full unroll/code-size sweep.
+
+### B2 ready substitute: private copy WITHOUT a new harness
+
+A small direct candidate can price the private-copy hypothesis with existing
+measurement: inside `gemv_rows_offset_asmW`, copy `c->cb` into a 16-float aligned
+LOCAL array, set that call's `a.cb` to it, and call the existing wide walker.
+The array stays alive through the synchronous call and each worker owns its
+stack; no mutable global sharing or archive-cache lifetime is introduced.
+Copy 64 B per callback, timed honestly; the two-core total is only a few KB/token.
+This is an upper-overhead test of private delivery, compared with B2's measured
+shared-copy 6.1283. Inspect internal stack placement and preserve multi-row
+bounds/bit equality. Do not build a large harness just to ask this question.
+If kbench is used, its old ROWRANGE hook calls PLAIN tie1 and allocates xh in
+PSRAM; it is NOT the current wide-phi production geometry. Use tie1W and the
+real aligned internal activation, plus an actually running split worker.
 
 ### B2: pay attention to the other operand
 
@@ -73,7 +139,7 @@ serialization, documented by [Espressif IDF 5.5 SMP](https://docs.espressif.com/
 Pointer separation is not proof of independent banks; measure before claiming.
 No broad memory-placement sweep.
 
-### B3: test whether stream layout repays conversion removal
+### B1 next: test whether stream layout repays conversion removal
 
 #785 is an ANALYTICAL rejection of an unbuilt FP32 sidecar, not a device result.
 It adds marginal bytes at the *observed* 44 MB/s and adds that time to an
@@ -91,8 +157,11 @@ never reuse a 16-byte-wide load that this stride would misalign.
 
 First use the existing CQ2 kbench with actual asm=1 and real PSRAM, a full cold
 tensor plus production split, differential against current tie1n. The whole
-staged Q is **124,416 B**, feasible inside B3's last post-prime **517,028 B**
+staged Q is **124,416 B**, feasible inside B1's last post-suite **499,104 B**
 free even while preserving the original tier (verify actual allocation).
+Clone B1's CURRENT amortised walker; do not transplant B3's seed file. B1 still
+uses the older ten-instruction NF16V after #754's rejected port, so this receiving
+tree has a different conversion-removal prize from B3's five-instruction form.
 This is ONE bounded layout experiment, not full 522,240 B sidecars, quantisation,
 expanded indices, or a tiny SRAM offset microbench. Charge record bytes, copy
 capacity and real call boundaries; if it loses cold, retire the representation.
@@ -118,6 +187,9 @@ own effect before composing the pair. Keep the old scalar fallback intact.
 
 ## Closures and constraints to retain
 
+- #680 already tested kron2 with eight accumulators, four-float factor chunks
+  and one j walk: -0.18%. This is distinct from #674's four-accumulator failure;
+  the apparently new 14-register schedule is already measured. Keep it closed.
 - m->lut is ALREADY 24,576 B of internal RAM (#330); do not propose moving it
   into SRAM. FP16 weights are converted/staged; cond_v is already transposed.
 - Phi weight residency with a per-token copy must charge arrival; #407 already
@@ -139,5 +211,6 @@ own effect before composing the pair. Keep the old scalar fallback intact.
   repeated behavioural captures, all-board controls or finished-state prose.
 
 Next mentor: verify B2/B3 have REAL distinct work; read the corrected B1 QK
-breadth and the codebook/layout timings. Accepted cannot advance past 5.3033
+actual load-ahead, private-codebook and one-tensor layout timings. Accepted cannot advance past 5.3033
 until the frozen full gate passes. Distinguish screens, proposals and accepted.
+

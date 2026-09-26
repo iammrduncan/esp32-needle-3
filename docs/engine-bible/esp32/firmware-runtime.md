@@ -12,33 +12,40 @@ Authoritative implementations are
 
 ## Boot sequence
 
-1. Initialize platform state and the second-core worker.
+1. Start the second-core worker and compact both generated JSON schemas.
 2. Locate the data partition named `model`, subtype `0x40`.
-3. Read enough header/directory data to determine the archive extent.
-4. Memory-map exactly that extent with `ESP_PARTITION_MMAP_DATA`.
-5. Open and validate the model; allocate mutable inference state and scratch.
-6. Compact the generated JSON schemas to the form expected by training.
-7. Prime the local-tool and route-selection prefixes independently.
-8. Save a complete prefix snapshot for each phase and announce readiness.
+3. Read enough header/directory data to determine the archive extent and map it
+   with `ESP_PARTITION_MMAP_DATA`.
+4. Open the model, allocate state/scratch, and compile both grammars.
+5. Print an early `EVT ready model=...` model/configuration line.
+6. Prime and save the local-tool and route-selection prefixes independently.
+7. Initialize the router, run the startup benchmark, and print the final
+   interactive `EVT READY` banner.
 
 The two fixed prefixes are approximately 143 local-tool tokens and 213 route
 tokens. A cold boot has historically taken minutes because both are evaluated
-before readiness. The bridge therefore allows a ten-minute boot timeout. Do not
-interpret silence during priming as a hang without checking progress lines and
-process/log growth.
+before **interactive** readiness. The earlier lower-case `EVT ready model=` line
+does not mean requests can be sent; attachment must wait for the final banner or
+prove state through the bridge handshake. The bridge therefore allows a
+ten-minute boot timeout. Do not interpret silence during priming as a hang
+without checking progress lines and process/log growth.
 
 ## Prefix snapshots
 
 Each phase shares immutable weights and scratch but owns a saved inference
-state. A snapshot must include every item influencing continuation: token
-position, KV window and sink bookkeeping, QKV convolution history, recurrent
-mHC/engram state, and any model-specific cache cursor. The host prefix-isolation
+state. A snapshot must include every persistent item influencing continuation:
+token position, KV vectors/scales and sink bookkeeping, QKV convolution history,
+engram token/value history, optional confidence pooling, and their cursors. mHC
+lanes are per-token scratch and are not saved. The host prefix-isolation
 test exists because a cache that restores only KV can look fast and still leak
 schema/request state.
 
 On each request the firmware restores the phase's fixed prefix and evaluates
-only the original request plus assistant header. It must reject a schema whose
-prefix plus generation reserve exceeds the 384-token window.
+only the original request plus assistant header. At boot it requires at least
+64 slots beyond the schema prefix. Per request it requires eight slots beyond
+the encoded suffix; generation is then capped at 256 new tokens and clamped to
+the remaining 384-token context. This is a bounded policy, not proof that a full
+maximum-length generation reserve fits at request admission.
 
 ## Generation path
 
@@ -47,11 +54,13 @@ The request path is:
 `restore prefix -> tokenize query -> prefill query -> constrained decode ->
  validate complete JSON calls -> execute permitted local tools -> emit END`.
 
-Generation stops at the structured-call boundary, context limit, or error.
-Tool arguments are validated as a set before any action runs so a malformed
-second call cannot leave half of a batch applied. Device operations in this
-demo are deliberately small: heap/uptime status, sampling interval, and a
-countdown timer.
+When the grammar reaches a complete call array, the sampler forces the
+`</tool_call>` token and disengages the grammar. Generation then continues
+unconstrained until EOS/IM-END, the context/token/text cap, or error; the router
+extracts the delimited call array afterward. Tool arguments are validated as a
+set before any action runs so a malformed second call cannot leave half of a
+batch applied. Device operations in this demo are deliberately small:
+heap/uptime status, sampling interval, and a countdown timer.
 
 The firmware emits explicit records such as token fragments, parsed JSON,
 results, prefill timing, decode timing, state, errors, and a final `END`. The
@@ -134,4 +143,3 @@ README table historical; neither number is Claude inference time.
   control loop.
 - There are no real sensors, watch display, cloud providers, or actuators in the
   demo beyond heap/uptime sampling and software timers.
-

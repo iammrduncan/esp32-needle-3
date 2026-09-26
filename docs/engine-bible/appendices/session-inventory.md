@@ -24,7 +24,8 @@ unmounted account exports cannot be inferred from their absence here.
 ## Snapshot boundary
 
 The repository evidence is the edition identified in the bible index: Git
-`HEAD` `28bd4b4`, with the run ledger read through run #797. The mutable agent
+`HEAD` `82a3cf1`, with the run ledger read through run #805 at 2026-09-25
+21:42 CDT. The mutable agent
 stores needed separate cutoffs:
 
 | Corpus | Audit boundary | Material visible at that boundary |

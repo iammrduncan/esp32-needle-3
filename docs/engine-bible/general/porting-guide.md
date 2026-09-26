@@ -24,10 +24,12 @@ Create a port manifest with these fields:
 | Evidence | reference implementation, frozen prompts, numeric probes, performance workload, keep bar and noise floor |
 
 Do not inherit Needle's constants accidentally. The original artifact uses an
-8-layer slice, width 768, 12 query heads, 2 KV heads, context length 384, KV
-window 256, vocabulary 8,192, and CQ group geometry described in
+8-layer slice, width 768, 12 query heads, 2 KV heads, context length 384, an
+archive `kv_window` field of 256, vocabulary 8,192, and CQ group geometry described in
 [the model pipeline](model-pipeline.md). A port must derive or validate every
-dimension from its own artifact.
+dimension from its own artifact. This implementation sets `m->window` from
+`max_seq_len` and allocates 384 K/V slots per layer, so the header's 256 field
+must not be restated as the runtime cache allocation.
 
 ## 2. Freeze a trustworthy scalar reference
 
@@ -361,4 +363,3 @@ Use [quantization and kernels](quantization-and-kernels.md) for the detailed CQ
 mechanics, [numerical correctness](numerical-correctness.md) for equivalence
 rules, [optimization method](optimization-method.md) for experiment design, and
 [the evidence policy](../evidence-policy.md) for promotion standards.
-

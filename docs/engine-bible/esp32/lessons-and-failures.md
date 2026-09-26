@@ -74,7 +74,8 @@ on three different trees.
 The reusable ESP32 rules are:
 
 - derive the `call8` frame from the ABI's input/output register requirements;
-  the early 64-byte frame was too small and corrupted return state;
+  the early 32-byte frame was too small and corrupted return state, while the
+  64-byte frame left the required spill area clear;
 - assert C/assembly structure offsets and argument layout;
 - check actual alignment before selecting wide loads;
 - preserve nibble identity with position-sensitive probes;
@@ -308,4 +309,3 @@ The full evidence trail is in
 [`OWNER_ACCEPTANCE_PACKET.md`](../../../.auto/OWNER_ACCEPTANCE_PACKET.md), and
 the [experiment ledger](../appendices/experiment-ledger.md). Hardware and SDK
 facts are sourced in [the source catalog](../sources.md).
-

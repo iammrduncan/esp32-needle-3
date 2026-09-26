@@ -111,7 +111,7 @@ does not replace host/device goldens; it isolates the kernel claim.
 | More FP SIMD | Requested optional instructions absent on this core |
 | Hoisted FP16 rebias constant | Exactly null; conversion off critical path |
 | Norm FP32 sidecar | Instruction saving smaller than added memory traffic |
-| QK outline on all trees | +0.22% on seed tree but diverged on shippable lineage; reverted there |
+| QK outline transplant | +0.22% on seed; first shippable ports double-applied scales and diverged. Run #805 fixed the transcription and reached +0.339% on a restricted 6/6 B1 screen; full breadth remained due. |
 | New object/flag only | Link GC or stale build can leave production path unchanged |
 
 ## Porting recipe

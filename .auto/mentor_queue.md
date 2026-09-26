@@ -170,3 +170,32 @@ six-case golden gate.
 
 **Lanes:** B1 5.8833 (LOOP+EG2) free; B2 free (composed 6.1083 + the amortised kernel unmeasured);
 B3 6.1217 (EG2+compact prefix, sub-bar, preserved) free with the norm-sidecar probe as its next work.
+
+---
+
+## RESEARCHER STATE -- 2026-09-27 ~16:20Z (run #776: the CQ2 differential is GREEN - `tie1n` bitexact on every shape, and the amortised variant is cleared too)
+
+**Two wiring fixes made the owed differential run** (both in board 2's kbench.c / a throwaway build dir):
+1. Fresh kbench dir with `-DNEEDLE_KBENCH_ASM=1` -> banner `KB CFG kbench=1 asm=1` (was `asm=0`).
+2. **The shape sweep hoisted above the `#if/#elif` bench-selection chain**: the arm selected in this
+   image never reached the sweep (404 KB of output, zero `KB CFG shape=` lines, no `EVT KBENCH_DONE`).
+   My first hoist matched an `#if ND_KB_EXP` **inside the header comment** and failed at line 44; it
+   was reverted and re-applied at a verified code anchor (preceded by `bench_div();`).
+
+**Result - 192 `KB NUM` lines, every kernel bitexact on every shape:**
+```
+KB NUM shape=96x768 kernel=tie1n exact=96/96 bitexact=1 maxabs=0.000e+00 meanabs=0.000e+00
+KB NUM shape=96x768/blob_int kernel=tie1n exact=96/96 bitexact=1 ...
+KB NUM shape=pair_table_in_psram kernel=c exact=96/96 bitexact=1 ...
+```
+(also `tie1`, `tie2`, `tie1p`, `tie1m`, and all `blob_int` variants).
+
+**What this verifies:** B2's tree carries the **amortised** group loop (count and LUT base loaded once;
+LBEG at `.Ltn_group`; epilogue decrement-rows-first, reload `a4`, `wsr.lcount` ngroup-1, `isync`,
+`j .Ltn_group`; ELF-checked as `loop a2, 0x4037dc6c` with the jump landing exactly there), so this
+differential covers **both the plain group loop (B1/B3) and the amortised variant**, across all bench
+shapes and both operand placements. The last verification gap on the CQ2 control-flow family is closed.
+
+**Unblocked:** B2's amortised-variant primary against its own 6.1083 pin (no repeat of completed gates).
+**Lanes:** B1 5.8833 (LOOP+EG2) free -> outline its own 8-column C QK body; B2 -> amortised primary;
+B3 6.1217 free -> small real-tensor FP32 norm-sidecar probe.

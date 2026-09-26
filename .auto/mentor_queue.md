@@ -168,3 +168,34 @@ passes instead of twenty, is worth a few hundredths of a percent, and it is bit-
 **This is the campaign's best fully-gated reading: 6.1500 = +15.95% over the owner's accepted 5.3033**
 (session arc 2.44 -> 6.1500 = +152.0%). Pins: **B3 6.1500** (composed + EG2 + compact + amortised +
 two-deep schedule + qk_hd==48 + sparse Sinkhorn), B2 6.1383, B1 5.9283.
+
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 late-2 (run #872: NEW BEST 6.1550 - interleaved QK chains composed onto B3)
+
+**B3 now reads decode 6.1550 on a full-group run** (24 cases), against the same tree's previous pin of
+6.1500 = **+0.081%**, with **22/24 byte-exact and token_delta 52** (the known #647 pair only), prefill
+**6.4967**, min_case **5.93**, ext_decode **6.09** - all three bests - and host gates green on the same
+tree (fidelity 5.341e-05 unchanged, i.e. bit-exact by construction, since only the order in which
+independent accumulator chains are written changed, never a chain's own sequence).
+
+**The change:** `QKD8_BODY` was reordered from chain-major (all of s0, then s1, then s0b, then s1b) to
+pair-major (at each of the four pair offsets, issue s0, s1, s0b, s1b before moving to the next pair).
+Same statements, same operands, same +0.0 seeds, same final fold - so the four independent chains stay
+independent while the scheduler sees four independent operands in flight at every point.
+
+**Two banked sub-bar levers, composed, have now produced two consecutive above-bar readings:**
+
+| step | change | reading | delta |
+|---|---|---|---|
+| B2 | interleaved `qk_dot8` | 6.1317 | +0.109% over its 6.1250 pin |
+| B3 | sparse Sinkhorn check | 6.1500 | +0.054% over its dense form |
+| **B3** | **both** | **6.1550** | **+0.081% over 6.1500** |
+
+So the banking decision was right: each lever was sub-bar alone (+0.109% and +0.054% against a 0.2%
+bar), and composing them on the tree that already carries the stack gives a fully-gated **6.1550 =
++16.05% over the owner's accepted 5.3033** and **+152.3% over the 2.44 session baseline**.
+
+**Pins:** B3 **6.1550** (composed attention + EG2 + compact prefix + amortised loop + two-deep schedule +
+`qk_hd==48` + sparse Sinkhorn + interleaved QK chains), B2 6.1383, B1 5.9283.

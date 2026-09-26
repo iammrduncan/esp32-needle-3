@@ -1,189 +1,158 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 15:22 UTC**; pass began 15:00. Researcher owns implementation and
-measurement. Preserve dirty artifacts, locks, anti-repeat history, quality gates,
-frozen goldens, assertions and supported 240/80 MHz. Read at lane turnover.
+Updated **2026-09-26 17:52 UTC**. Researcher owns implementation and measurement.
+At arrival, all boards were idle at pi's 200-turn cap. Two new candidates have
+now completed; the dual-store integration consumed B1 without a device run.
+**New order: B1 C-only attention emit/gate fusion; B2 wide taps; B3 composition.**
+All prior jobs ended by 17:50. Mentor confirmed no build/flash/bench was alive,
+interrupted the closeout turn at 17:51 and directed these three lanes. Do not
+let the stale “1-2 calls left” narration or another control rebuild replace work.
 
-## Current direction and evidence
+**Owner accepted 5.3033 tok/s; research pin 6.1550** (`d6b8014fd2fb`). Nothing
+promoted. Device 22/24, delta 52 is not a full pass: the frozen #647 cases
+`heldout_interval_one` and `heldout_long_tools_note_only` still block adoption.
 
-At arrival all three boards were idle at pi's 200-turn auto-resume cap. Direct
-mentor input restarted work repeatedly. Three distinct experiments have now
-completed. Their latest results change the queue: do not keep scalar residual
-fusion or spend 3 KB on neutral residency merely because they remove operations.
-Use the next three lanes below; no repeated controls and no controller edits.
-
-**Owner accepted 5.3033 tok/s; research pin 6.1550 on all boards**, engine
-`d6b8014fd2fb`. The frozen #647 pair still blocks adoption. B1x/B3bf diverge only
-on `heldout_interval_one` and `heldout_long_tools_note_only`, delta 52. Device 22/24
-is not a full pass, even with host 23/23 and fidelity 5.341e-05/top1=10/10.
-
-| Board | Latest completed measurement | Next distinct lane |
+| Board | Completed evidence / source now | Next distinct lane |
 |---|---|---|
-| B1 | `B1fus.log`, engine `91cf398ec14c`: **6.1650 vs B1x 6.1683**, ext 6.1000, think 4.71, heap 10351, 99 tokens; device 22/24 delta 52; host RC=0 | Preserve the small regression; restore the saved B1x constituent at `/tmp/B1x_engine_snapshot_1512`. **Dynamic snapshot dual-store** in lanepre. |
-| B2 | `B2res.log`, engine `18d25dac6a1a`: **6.1550 vs pin 6.1550**, ext 6.0876, heap 8415, 99 tokens; QKRES 8 layers / 3072 B; device 22/24 delta 52; host RC=0 | **Preserved PMU draft blocked**; the second edit failed compilation. Use a ready fusion while its bounded repairs wait. Prefer lean pin for later performance work; preserve residency artifact. |
-| B3 | `B3hf.log`, engine `2cb9407f9613`,app `831cf4a1225c`: **6.1683 vs head-fold base 6.1650**, ext 6.1018,think 4.72,heap 11491, 99 tokens; device 22/24 delta 52; host RC=0 | Preserve the small candidate. **Norm emit/RoPE fusion**, distinct from previous dispatch-only fusion. |
+| B1 | Restored exactly to saved B1x, `bb214031c523`, recorded **6.1683**. Build RC=0; 5-arg C and asm agree. No new device reading. | Attention normalization/dynamic-gate fusion below. |
+| B2 | B2tap **6.1550**, neutral vs B2res; ext 6.0906, think 4.71, heap 8415, 99 tokens, device22/24 delta52, host RC=0. Engine `2ddd553cdd03`, app `d072e07f5c8c`. | Wide three-tap delivery on preserved B2tap. |
+| B3 | B3rope **6.1717 vs own 6.1683 base** (+0.055%); ext 6.1035, heap11491, 99 tokens, device22/24 delta52; host23/23, fidelity5.341e-05/top1 10/10. Engine `566329736742`, app `9797c4f001a7`. | Compose B1x's two constant hoists onto preserved B3rope. |
 
-All three host gates finished (B3 ~15:13, B2 ~15:16, B1 ~15:19), host 23/23,
-fidelity 5.341e-05/top1=10/10. They retain exactly the two blocked #647 cases.
-These are candidate results, not owner acceptance. B1x was three independent
-constant hoists, engine `bb214031c523`, ext 6.1018/think 4.72/heap 10351 at 6.1683.
-Two unrelated candidates printing 6.1683 do not establish a mechanism; compare
-each against its own base. Researcher acknowledged that correction in #926.
+B3's launcher printed literal `HOSTGATE_RC=$?`; do not invent a captured RC=0.
+The host metrics above are present. Fix exit-status capture in the next normal
+candidate launcher, not by rewriting the old log or running another device control.
+A 0.0034 tok/s increment is small; keep the candidate without asserting a proven
+mechanism or owner acceptance. Full-vector local equivalence tests were requested
+but not evidenced; linked arithmetic and suite results are the evidence in hand.
 
-**Correction to #924's proposed B1 edit: KEEP the snapshot memcpy.** Only the
-later subtraction pass is removed. Snapshot removal belongs to a separate
-producer-fusion experiment and is never a boot-only cache of dynamic u.
+## B1 NOW: final attention normalization + dynamic gate (C-only substitute)
 
-Read each run's own metrics. #922 carried B1comp's heap and B3fold's extended
-speed into B1x; correct by appending only. B3fold 6.1600 was valid but -0.081%
-against its own 6.1650 pre-fold base. B3bf recovered that loss and was neutral
-versus that same base; neither justifies a blanket claim that add-hoisting wins.
+New source-derived candidate, distinct from #608's inner softmax rescale/P.V
+fusion and from the constant per-layer attn_gate hoist. In attn_heads' FINAL
+`t < nhg` loop, each output is currently multiplied by `inv=1/denom[t]`; later
+agate_rows traverses the whole attn vector and multiplies by paired sigmoids.
+Both operands are ready at the final head emit. For EVEN v_hd only (64 here),
+use gate row `m->gate + (size_t)(hstart+t)*v_hd`, call the SAME sigmoidf_pair on
+adjacent elements, compute normalized locals `z0=oh[i]*inv`, `z1=oh[i+1]*inv`,
+then store `z0*g0`, `z1*g1`. Keep that multiply ordering. Remove the later agate
+dispatch ONLY under the same even-v_hd predicate; odd dimensions retain both old
+passes so pairing never changes across a head boundary. Avoid growing the KV
+inner loop: this is after its complete reduction, not inside it. A small noinline
+emit helper is available if inlining bloats/spills attn_heads. No nested splitter.
 
-## B1 completed: final block difference in the residual emit
+Compare full emitted attn vectors and linked operand flow, then usual gates.
+This removes one intermediate read/write pass (49,152 B/token) and one split per
+layer, but moves no sigmoid out of the computation. It may lose through code size
+or live-register pressure. Search through #928 found no measured version of this
+specific final-normalization/dynamic-gate fusion. Use restored B1x as the base (6.1683); preserve it first. This replaces the
+stalled dual-store lane. No assembly, new buffers or build-system changes.
 
-Only block()'s caller snapshots u to ublk, runs block, then subtracts the snapshot.
-In its final d4 loop (`nd_model.c`~2817 on B1x), form the SAME rounded residual
-`r = u[i] + hada_b[i]*d4[i]`, then store `r - ublk[i]`. KEEP
-`memcpy(m->ublk,m->u,sizeof(float)*dm)` and the block call. Delete ONLY the later
-wide/scalar subtraction (~2944-2953). No algebraic cancellation or different FMA
-contraction. Check the actual linked multiply/add/subtract sequence and complete
-difference vector, then normal gates. This removes 49,152 B/token of intermediate
-u read/write at 8 x 768 floats, not a guaranteed speedup. #25 fused d4 with residual;
-#705/#707 widened the later subtract. Neither removed this pass. Base 6.1683.
-Mentor linked-body check 15:15: residual `madd.s` at 0x420130b1, separate
-`sub.s` at 0x420130ba, then one store; source keeps the snapshot memcpy.
-This confirms the contraction sequence, not a substitute for quality gates.
+## Performance reserve: wide delivery for three-tap convolution
 
-## B2 completed: initialized, owned Q/K-scale residency
+**Next B2, now its gates are done:** a distinct runnable follow-up is a guarded
+4-column TIE float-load/store body for nt==3. B2res ELF at 0x4037f818..866 uses
+12 scalar lsi, six madds and two stores per TWO columns plus cursor increments;
+no wide loads. Four independent output accumulators preserve their own +0 seed
+and j=0/1/2 chain; six 128-bit input loads, twelve madds, and wide output stores
+replace scalar delivery. Keep the now-measured B2tap raw-value store for this comparison: its neutral
+6.1550 result supplies a direct base while wide delivery is the only new lever.
+Preserve B2tap before changing it. Inputs, both destinations and row strides need alignment
+checks; arbitrary dimensions/early positions retain C. Verify linked operand
+order, whole histories, tails and multi-tile canaries before device work.
 
-Hypothesis: slots 7/8 reused across 12 Q + 2 K heads/layer may benefit from 3072 B of
-immutable internal-RAM scales. The existing model-owned fp16_pool is writable
-FLOAT storage but ND_ALLOC16 puts it in PSRAM. Copy the existing float bytes
-ONCE at open, preserving the receiving tree's raw-scale/factor representation.
+Bounded implementation: append ONE function to existing gemv4_tie728.S, no new
+build plumbing. Pass one context pointer with 32-bit fields:
+`proj, hcur, w0, w1, w2, h1, h2, n4` at offsets 0/4/8/12/16/20/24/28.
+A viable register map is a3 source-proj, a4 output-proj (same initial pointer),
+a5 hcur, a6/a7/a8 weights, a9/a10 old histories, a11 tiles, a12 zero. f0..f3 are
+four +0 accumulators; f4..f7 operands, f8..f11 weights. Each tile: load raw proj,
+store raw to hcur; load w0, four madds; load h1 and w1, four madds; load h2 and w2,
+four madds; store outputs. Every wide pointer increments 16. Keep the exact
+per-column madd graph, and remember high-to-low register list order. Guard ALL
+pointers/row strides and n4>0; otherwise existing C. Extend a bounded boot selftest
+at the existing wide-kernel selftest hook, using independent aligned buffers and
+multi-tile canaries, before enabling the path. No model-pointer use in selftests.
 
-The failed version copied immediately after slots were memset NULL, BEFORE the
-pool fill. A second unlaunched edit landed inside the fill loop with broken braces.
-Those failures do not measure residency. Current B2res has its owned
-`qk_resident` field, copy at the end of open after scratch/selftests, and one free in
-close; build RC=0. It finished valid and neutral. QKRES reports
-all 8 layers / 3072 B, heap 8415 after priming. Preserve its artifact before turnover.
-At any follow-up use bound q_norm/k_norm sizes and validate slot presence/lengths;
-preserve original pointers on allocation failure and never free interior pointers.
-Do not reintroduce a static shared allocation. Its pre-hoist pin needs no cache
-lifetime repair; when later composing B1x caches, retain reset at every open,
-actual bounds and fallback. mHC reads 27 constants/layer, 216/token, not 736.
+Transfer source: [Espressif S3 float FIR](https://github.com/espressif/esp-dsp/blob/master/modules/fir/float/dsps_fir_f32_aes3.S)
+uses ee.ldf.128.ip with scalar madd.s. Borrow delivery, NOT its horizontal
+four-partial reduction, which would change our rounding. No prior wide QKV-tap
+measurement was found through #928; old fp16 taps/tap partition/C two-column
+experiments do not test this body. Queue it ahead of another open-ended PMU edit.
 
-B2's earlier 6.1617 mHC+gate source was overwritten by the researcher without a
-snapshot. The measurement survives in its logs; the queue is a recipe, not a full
-recovery patch. B1x still carries that implementation. Preserve remaining images.
+## B3 NOW: compose proven constant hoists with norm/RoPE
 
-## B3 completed: Q/K head factors
+Take the complete measured B3rope tree (6.1717), not main, and port only B1x's
+mHC fp16-constant cache plus constant per-layer attn_gate cache. Their existing
+implementation is in `/tmp/B1x_engine_snapshot_1512/src/nd_model.c`. Compare with
+`/tmp/B3hf_nd_model_preserved.c` to isolate those hunks. Copy the helper/cache
+region beginning ND_MHC_PRE_MAX through attn_gate_of; add BOTH invalidations at
+every model open; port only the mHC constant consumers and scalar block attn_gate
+lookup. Keep B3's s_fnorm_pre, prescaled norm consumers/pool slots, final_norm and
+new fused head emit untouched. Do not copy B1x's entire model file or revert B3's
+factor representation. No dynamic activation is cached. Keep supported bounds
+and fallback behavior; mHC has 216 constants/token, not the old asserted 736.
 
-Fold rounded float32 `1+s` into norm-only slots 7/8 at open AND remove `1+` from
-`zcrms_head_rows` in the same change (done in B3hf). Sum order, epsilon and both
-multiply roundings stay unchanged. No new storage or per-element predicate.
-Slots 0/11/13 and final scale_f were already factors; all other staged slots,
-especially 14-18/25/26 and cond_v's transpose, remain raw. Unlike full-width norm
-rows, each head-scale row is reused by many heads. This is independent of B2's
-raw-scale placement experiment. Its gates finished; turnover immediately.
+This is a new composition on a recorded B3 base, not a cross-board control. It
+asks whether the two independently positive constant mechanisms add to the new
+fusion despite placement/cache effects. Record its own full gates and heap;
+keep the constituents even if the composition regresses. No promotion until the
+frozen pair is resolved by the owner.
 
-## B2 bounded CQ2 counters: valuable, but PARK the broken draft at this turnover
+## Completed mechanisms and parked work
 
-15:23 disposition: no PMU device run exists. First draft had a shared-counter
-race; second failed `/tmp/b2_pmu2_build.log` with unterminated#if at line3. It
-also still latches s_pmu_ptr in workers, prints from workers, never selects the
-576-row Q in the caller, leaves global rows/ngroup zero, and does not record
-init failures. Preserve this work; do not treat it as counter evidence or an
-unsupported-hardware finding. With all boards idle, ready performance fusions
-now take precedence. A later bounded repair can measure cycles + ONE specific
-event first, then extend events only after that record is interpretable.
+B2tap removed the separate raw Q/K/V history memcpy: its consumer now snapshots
+raw values before overwriting projection. Same arithmetic, neutral primary.
+The common loop has no new inner-loop spills in the linked image. It saves
+25,600 source bytes/token (Q/K/V 576/96/128, 8 layers); projection reads were
+internal scratch and history stores remain. Do not claim a removed PSRAM write
+sweep. Exp57's old guard precopies BOTH histories; a future snapshot guard must
+start candidate's current slot stale, compare complete history/projection, and
+cover startup, wrap, odd sizes and nonzero split starts.
 
-Use one board while the other two screen candidates. Dominant proj2bit was 79.7 ms
-(#786), but #849/#852/#854 mixed total work with two-core wall time; #745's
-actual small-fixture cost was 34 cycles/packed word, not the later asserted 16.
-Installed S3 core-isa.h has one load/store unit, 4-byte fetch and FLIX3=0; it does
-not establish the claimed two-wide issue floor. No prior hardware-counter screen
-was found. This is a diagnostic to select a concrete schedule/placement lever,
-not another baseline or an instrumented tok/s claim.
+B3rope removes the normalized intermediate store/reload, distinct from old
+#607/#608/#615's sequential helpers. Linked new emit has separate scale/inv
+multiplies then `r0=RN(c*x1); r1=RN(s*x1); msub(r0,s,x2); madd(r1,c,x2)`, matching
+old apply_rope's contraction orientation. Odd final element retains old norm.
+[GCC contraction rules](https://gcc.gnu.org/onlinedocs/gcc-14.1.0/gcc/Optimize-Options.html)
+explain why matching C expressions alone is insufficient. Baseline source is
+`/tmp/B3hf_nd_model_preserved.c`; preserve the entire B3rope tree at turnover.
 
-Use installed perfmon's TWO counters/core around the real row callback on each
-pinned core, not just around nd_parallel_rows on its caller. Keep production
-PSRAM weights, internal LUT and normal two-core traffic. Same Q tensor/range on
-bounded successive invocations: counter 0 cycles; counter 1 instructions, then
-D_STALL_CACHE_MISS, then D_STALL_BUSY|BANK_CONFLICT, then
-BUBBLES_R_HOLD_REG_DEP. Record core, rows, bytes, init status,overflow; defer printing
-until join. Never sum overlapping event classes. Check event sanity before
-interpreting zeros. No cache disable/lock, interrupt masking or whole-suite loop.
-Preflight of first B2 draft: shared `s_pmu_cnt++` races between cores; alternating
-(cycles, insns) with (other bubbles, dependency bubbles) also loses the matched
-cycle denominator and mixes Q/K/V shapes. Replace with a sample index and four
-records PER CORE, counter 0 always cycles, specific event in counter 1. Select
-one 576-row Q packed pointer on the caller before dispatch; target that pointer
-only. Printing belongs after the existing join, never inside one worker while
-the other is still counted. Read init/overflow status. Do not interpret the draft.
+**Dual-store is parked, not measured or disproven.** Draft1 put m->ublk inside
+selftest (no m there); draft2 asserted before updating the 5-arg C prototype/calls
+while asm already used sixth a7. RC=0 hid that ABI mismatch. No board run occurred;
+original asm and C are now restored, exact B1x. Any later retry must add a real
+second selftest buffer/canaries, context snap field/initializer, sixth args at BOTH
+calls, scalar dual-store and alignment of both outputs. Scope assembly changes to
+nd_lanepre4w through its own .size in gemv4_tie728.S: move zero a7 to a12, second
+wide store to a7. Remove ONLY caller snapshot memcpy after both paths work. Never
+use the same buffer for both destinations in the test. Base snapshot remains
+`/tmp/B1x_engine_snapshot_1512`; keep later block-difference subtraction unchanged.
 
-If setup stalls, substitute either ready fusion below.
+The earlier residual-difference fusion lost 6.1683 -> 6.1650; raw Q/K norm-scale
+residency was neutral at 6.1550. Correct phi staging #911 lost 0.378%; #915 dispatch/
+RMS pairing was neutral. Broken missing-prepare staging readings were withdrawn.
+Keep kron2 renames, four-pass Sinkhorn exit, four-output wide QK, 36-byte records,
+LUT de-split, private codebook, uint16 offsets and row-owned Kron fusion closed
+unless a concrete changed premise is identified.
 
-**#926's claimed PMU blocker is withdrawn by source evidence, not a hardware
-restriction.** Installed `/opt/esp/idf/components/perfmon/include/xtensa_perfmon_access.h`
-and `components/perfmon/xtensa_perfmon_access.c` implement init/start/stop/value/
-overflow. Add `perfmon` to the needle component REQUIRES. The installed
-`components/xtensa/include/eri.h` explicitly describes ERI as internal to EACH
-Xtensa core; this is not a shared MMIO window. No new raw-XDM driver is needed.
+**CQ2 PMU stays below runnable performance work.** The asserted two-wide issue
+floor is unproved: #745 measured 34 cycles/packed word; later arithmetic mixed
+two-core totals with wall time. API exists, per-core ERI, TWO counters/core.
+Future repair must caller-select one 576-row Q pointer, record per-core cycles+
+one event around real row callbacks, rows/bytes/init/overflow, print AFTER join.
+Draft `/tmp/nd_quant.c.pmu-draft-1525` is not evidence. Its removal deleted the
+start of B2's quant source; repaired source md5 `ef9357f6de2b25a459eadf324a9e462f`.
+[Perfmon API](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32s3/api-reference/system/perfmon.html).
 
+## Execution and next mentor check
 
-Implementation references: [Espressif perfmon](https://docs.espressif.com/projects/esp-idf/en/v4.4.2/esp32s3/api-reference/system/perfmon.html),
-[installed-version core configuration](https://github.com/espressif/esp-idf/blob/v5.5.2/components/xtensa/esp32s3/include/xtensa/config/core-isa.h),
-[MimiModel core-local PMU example](https://github.com/memovai/mimimodel/blob/main/needle-esp32s3/main/main.c#L24).
-Its single-core fixture is a starting example, not evidence about our two-core
-production path. [Espressif's speed guide](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/performance/speed.html)
-also explains why binary layout can move tiny timings; do not overclaim causes.
-
-## Next B1 (or free B2 substitute): emit the dynamic snapshot with lanepre
-
-Add ublk as a second destination in the existing wide `nd_lanepre4w` emit while
-f0..f3 hold the rounded result; keep its first store and all madds. This snapshots
-EACH block's newly computed u, never boot state. Update context, prototype, caller,
-alignment guard and scalar dual-store. Do not use a7 as the new pointer without
-moving its existing per-tile zero temporary to unused a12 (check the current body). Check both outputs and multi-tile
-canaries, then remove only the caller memcpy. Editing only the C fallback leaves
-ublk stale when the wide path runs. No extra scratch; saves 24,576 loaded B/token.
-Test separately from the residual-difference fusion and against that board's base.
-
-## Next B3: norm emit fused with RoPE
-
-Retain ascending sum-of-squares and exact inv. For each half-split pair i/i+half,
-compute BOTH fully rounded normalized values as locals using the current raw-scale
-or factor contract, then the SAME two RoPE expressions and store only rotated
-outputs. No consumer reads the intermediate normalized row. Keep head splitting,
-immutable per-token cos/sin and generic fallback; remove corresponding later
-apply_rope calls. Q+K removes 43,008 B/token of intermediate read/write (8 layers x
-14 heads x 48 floats), a traffic count, not a speed promise.
-
-#607/#608 and #615 combined sequential norm/RoPE helpers in one callback (or Q tap
-ownership); they did NOT remove the intermediate norm emit/reload. Their tiny
-negative does not close this distinct fusion. Preserve normalized-value rounding
-before RoPE: inspect mul/madd/sub operands and compare complete Q/K vectors,
-including zeros and ordinary decode inputs. No approximate rsqrt or reassociation.
-If exact arithmetic is a blocker, use snapshot fusion rather than an idle lane.
-
-## Retained exclusions and next mentor check
-
-#911 correct phi staging 6.1417 vs 6.1650 lost 0.378%; #915 phi dispatch and RMS pair
-were neutral. Earlier #897/#901/#903/#904 staging timings were withdrawn missing-
-prepare correctness failures, not memory evidence. Keep measured kron2 register
-rename, four-pass Sinkhorn exit, four-output wide QK, 36-byte records #868, LUT
-de-split, private codebook, uint16 offsets and row-owned Kron fusion closed.
-Do not revive unsupported 120 MHz or assertion-level RAM changes.
-
-Freeze workers through their chained host gate INSIDE needle-board run N.
-No repeated controls or anti-repeat overrides. Main source is a stale engine
-lineage: never copy it over workers as a reset. Launch ready work while another
-lane builds/measures; avoid long sleeps when other boards are idle. The next
-mentor should inspect whether the next three lanes really launched, the corrected
-PMU's per-core denominators/rows/errors, and new fusion outputs. The prior batch
-is finished; do not re-read it as live. The 200-turn cap requires direct continuation; finish prose is not work.
-
-At15:23 the mentor confirmed no build/flash/bench was alive, interrupted pi's
-stalled turn, and redirected to B3 norm-emit/RoPE plus B1 snapshot fusion. This
-pass has six minutes left; consolidate queued work, do not expand instrumentation.
+Preserve every dirty artifact before turnover. Main has an older engine lineage;
+never reset workers from main. Freeze each worker through its chained host gate
+INSIDE needle-board run N. Keep goldens, anti-repeat guard, locks, assertions and
+supported 240/80 MHz. No repeated controls or quality-gate overrides. Inspect
+actual child processes and growing logs, not pgrep counts that include the shell
+or a printed PID. Never interrupt a real build/flash/bench. Use finished/free lanes
+for their next candidate while another builds/measures; no long sleeps or repeated
+ledger-only closeouts. Next mentor: verify B1 finally gets a real novel run, whether
+B2 wide/B3 composition launch, and their own base comparisons/quality/heap. Watch
+pi's 200-turn cap and preserve the 6.1717 constituent even if composition regresses.

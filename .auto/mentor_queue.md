@@ -224,3 +224,25 @@ measuring only the *balance* gain and not reusing the retired 54.5/45.5 estimate
 its own tree pin with the per-tree differential. The B1/B3 bank-conflict result above should be carried
 into this: a staged copy that makes one core's rows *contiguous* may help or hurt depending on bank
 mapping, so measure, do not infer.
+
+
+## RESERVE MEASURED (2026-09-26): bounded phi staging is a trap, not a sub-bar idea
+
+The reserve was built and run rather than predicted, exactly as the queue demanded: `mhc_phi_pre`'s
+4-row tile (6,144 B packed + 192 B norms) is copied into caller-owned internal buffers every call and
+the SAME `gemv4_pick` walker is dispatched over the copy with `base = 0`, arithmetic untouched, with a
+hard 7,168 B size guard and a fail-safe fall back to the PSRAM path.
+
+**Device result: 4.0667 decode against the 6.1550 pin = -33.9 %.** The staging announcement proves the
+tile was real and the allocation succeeded: `EVT PHISTAGE need_p=6144 need_n=192 largest=3200 state=1`.
+
+**Mechanism (the useful part).** A 6 KB memcpy per lane per layer cannot cost 34 %, so the loss is not
+the copy: `gemv4_pick(&ctx, blob, nrows)` chooses the walker variant from the *blob pointer* it is
+given, so re-pointing the context at an internal copy silently downgrades the dispatch away from the
+asm fast path - the arithmetic stays correct, the kernel changes. **Rule: a "change only the address"
+idea must re-run the same dispatch decision the original pointer produced, not just the same arithmetic;
+check which walker the staged pointer selects before pricing any staging scheme.** This also retires the
+reserve's premise: staged bytes do not get the fast path for free, and the queue's own demand that the
+copy be charged was the right instinct - the real cost is larger than the copy.
+
+Pool state: board 3 reverted and verified hashing `d6b8014fd2fb`; all three boards idle on the pin.

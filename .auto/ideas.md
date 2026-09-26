@@ -506,3 +506,30 @@ half-explored on a board.
 **Reopens if:** a future profile shows the zcrms family above ~1 ms/token (it is ~0.3 ms now), or the
 reduction is ever widened to a shape where the chain is longer per call - the price scales linearly
 with n x calls, so 768 x 200 would be +0.8 % and worth a build.
+
+## RETIRED: the two-deep codebook port to B1's wide phi (three guarded attempts, +0.028% prize)
+
+The lever is real and small: B2 and B3 carry a two-deep codebook load schedule in the wide phi worth
+about +0.028%, and B1 (the shippable line) still has the original immediate load-use order. Three
+attempts to port it were stopped by their own guards, none reached a board, and none damaged the file:
+
+1. **Block-count assert**: B1's wide-phi body unrolls TWO index words per iteration (16 nibble blocks)
+   where B2/B3 unroll one (8), so the generator that worked on B3 refused immediately.
+2. **Placement error, caught by objdump**: rebuilding the body as `other[:-1] + piped + [other[-1]]`
+   put the pipelined region outside the hardware loop; the tell is that the kernel's first body
+   instruction becomes `madd.s` instead of a load. Reverted from the verified snapshot.
+3. **Region-span error, caught by assert**: slicing from "the nearest preceding `.section`" spans
+   several functions (138 blocks, not 16), because that kernel shares its section with its neighbours.
+
+**Disposition: retired rather than attempted a fourth time.** The reliable method is now fully known -
+anchor the splice on the kernel's OWN labels (`nd_gemv4_rows_tie1W:` through its `.Lwwend`), replace
+only the contiguous block region between them, leave every other line in place, and verify with
+objdump that the first body instruction is a load - but the prize is +0.028%, which is an eighth of
+the keep bar, and three attempts have shown that this file's structure punishes structural slicing.
+Retiring is the cheap, correct call: the lever stays documented, the method stays written down, and no
+kernel was risked for a sub-bar gain. If a future window wants stack parity across all three boards it
+should do this with the label anchors and a fresh snapshot, not by porting from another tree.
+
+**Where the campaign stands after this stretch:** B3 = B2 = **6.1550** on the identical tree
+`d6b8014fd2fb` (cross-board confirmed to the digit, 22/24 with only the known #647 pair, host gates
+green); B1 = **5.9383** (shippable line + interleaved QK chains + sparse Sinkhorn check).

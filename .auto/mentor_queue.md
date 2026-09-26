@@ -1,132 +1,143 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 05:04 UTC** (actual clock). This replaces the
-chronological finish notes; their history remains in git and `.auto/log.jsonl`.
-Researcher implements/measures. Preserve all dirty trees, frozen quality gates,
-board locks, anti-repeat history, assertions, and supported 240/80 MHz clocks.
+Mentor refresh **2026-09-26 05:23 UTC** (actual clock). Researcher implements
+and measures; mentor directs. Preserve dirty trees, frozen goldens, locks,
+anti-repeat history, assertions and supported 240/80 MHz. Continue discovery;
+self-declared exhaustion and reused metrics are not experiment results.
 
-## Direction now: three distinct candidates, not further closure essays
+## Current evidence and next three lanes
 
-At inspection all three boards were idle: no build/flash/benchmark processes,
-no held board locks; newest board log ended at 04:32. Runs #849 onward mostly
-reuse old metrics for reasoning. Start the lanes below. A failed candidate is
-useful evidence; an untested analytical prediction is not a measured closure.
-Prepare sequentially if necessary, launch each ready lane promptly, and continue
-preparing the others while it runs. No all-board controls or waiting for one lane
-before preparing another. Use the existing harness, not a new harness project.
+**Owner-accepted stays 5.3033 tok/s.** Candidate pins before this pass:
+B1 5.9283, B2 6.1250, B3 6.1450. Best earlier breadth packet was 6.1433,
+still blocked by `heldout_interval_one` and `heldout_long_tools_note_only`.
+The suite is now 24 device / 23 host cases. The twenty original device entries
+independently match `e3e5574^`; four missing cases were added. #844's printed
+24/24 used accidentally replaced goldens, subsequently restored: no admission.
 
-**Pins:** owner-accepted **5.3033 tok/s** (bundle5). Candidate references are
-B1 **5.9283**, B2 **6.1250**, B3 **6.1450**; the strongest prior breadth packet
-is B3 **6.1433**, still blocked by the frozen pair. #844's new B3 specialization
-was FLAT at 6.1450; its printed 24/24 used accidentally replaced goldens and is
-NOT admission evidence. #844/#845 restored the twenty original entries and
-added four previously missing ones. Expected blocked breadth is now **22/24,
-delta 52**, host 23/23; no rebaseline, AUTO_SAVE or capture-only detour.
+New actual measurements (logs in `/root/board-pool/batches/`):
+- **B2 QK interleave:** `R-qki-b2.log`, engine `e84ee03fd973`, app
+  `1bb78e735bb0`: **6.1317 vs 6.1250 (+0.109%)**, prefill 6.4733,
+  extended 6.0665, host 23/23, fidelity 5.341e-05, device **22/24, delta 52**.
+  Sub-bar; no repeat. This prototype remains B2's baseline for its next change.
+- **B3 dense exact Sinkhorn exit:** `R-sinkfix-b3.log`, engine `bc0b329227cb`,
+  app `743aac0ce484`: **6.1467 vs 6.1450 (+0.028%)**, prefill 6.4883,
+  extended 6.0812, host gate unchanged, device **22/24, delta 52**. Completed.
+  Detector nearly cancels useful saved work; no new admission or repeat.
+- **B2 sparse detector LIVE:** `R-sinksparse-b2.log`, engine `36ccbdc32f3e`,
+  app `2a59346c68ef`; host green, flashed, benchmark process under board2 lock.
+  Compare with **6.1317**, not its older 6.1250. Result pending.
 
-## Why the ordering changes
-
-* **#814's 36-byte layout rejection double-counts shared cache lines.** For a
-  contiguous aligned run of 16 records, 16*36 = 576 bytes = NINE distinct 64-B
-  lines, not 18. A boundary line serves adjacent groups; spanning it twice does
-  not imply fetching it twice. Traffic is 36 vs 34 B/group asymptotically
-  (+5.88%), with conflict/capacity effects to MEASURE. There is no 2.12x lower
-  bound. Lossless repacking does not change quantisation or model quality.
-* **#853/#857 do not measure today's four-output `qk_dot8`.** In the actual
-  kbench, `best_c4` divides the cycles of 128 `dot_c4` calls by 128. Thus
-  `c4_pair_cyc=139` is PER SINGLE DOT despite its label, not per pair. The
-  current helper computes four dot results, with pair-expression rounding.
-  Its body is not one madd per term. Do not infer stall cause, IPC saturation,
-  a 70-cycle target, or +2.5% token gain from the old number.
-* #849's aggregate weights / wall cycles do not establish a per-core issue
-  limit for a dual-core row split. Internal SRAM staging is also not an L1
-  cache-hit argument. Keep the measured nulls; drop universal impossibility.
-* #854's logf=350 cycles contradicts the actual **#413: 22.63-23.13 cycles**.
-  Do not start another logf lane from the invented price. Phase timers overlap.
-
-## Next lanes
-
-| Board | Candidate | Own baseline |
+| Board | Next action | Comparison |
 |---|---|---|
-| **B1** | One-Q lossless 36-byte group records, reopened by the corrected line accounting | 5.9283 |
-| **B2** | Interleave the current outlined QK helper's FOUR independent chains at each term pair, retaining 8-column loop | 6.1250 |
-| **B3** | Separate 64-bit-load QK implementation with a register-budgeted schedule and unchanged expression graph | 6.1450 |
+| **B1** | Finish one-Q 36-byte record kbench; generator errors are not a layout verdict | Current B1 walker; field pin 5.9283 |
+| **B2** | Let sparse Sinkhorn finish; classify actual gain and gates, then next independent candidate | 6.1317 |
+| **B3** | Dense Sinkhorn done; prepare the distinct 64-bit QK tile below while B1/B2 work | 6.1467 if retaining dense guard; 6.1450 only after restoring prior body |
 
-**B1: representation, not a new quantiser.** For one real 576x768 Q tensor,
-3,456 records contain the unchanged 32 packed bytes followed by exact
-`nd_f16` FP32 norm: **124,416 B total** vs 117,504 B original. Stage at open,
-retain original/fallback, and charge capacity (last B1 post-suite free 499,104 B)
-and init cost separately. Clone B1's OWN amortised walker and its seeds/folds;
-replace the per-group norm conversion with one float load. Preserve row stride,
-multi-row and odd split handling; 36-B records are word-aligned, not 16-B aligned.
-Use the existing real-CQ2 kbench on the full PSRAM tensor with production split,
-own-tree asm=1 differential, and warm/cold readings. This is not #749's 4x
-expanded index stream. If it wins, integrate this Q tensor for a primary screen;
-if not, record the actual result and retire it. Do not reject it again by summing
-line touches as compulsory misses, or additive compute+bus estimates.
+Launch a lane as soon as ready, then prepare another. A 260-second harvest sleep
+idled B1/B3 through the first run; do not repeat that scheduling pattern.
+Do not interrupt live builds/flashes/benchmarks or edit their worker trees.
+No whole-file transplant between workers. Confirm a real process AND growing,
+nonempty logs. No all-board controls, new capture suite, or anti-repeat bypass.
 
-**B2: cheap C candidate, changed register-allocation boundary.** #628's QKTILE2
-was flat inside the huge `attn_heads`; #634 changed the loop to width two and
-lost to reloads. Today's noinline `qk_dot8` (#757, fixed B1 port #805) is a NEW
-small frame. Keep its outer i+=8 and guard/tail. Within each 8-column block,
-visit pair offsets 0,2,4,6; at each offset issue the existing s0, s1, s0b, s1b
-updates before moving to the next pair. Reuse the eight scalar operands where
-GCC permits. Each accumulator keeps the exact same expression, +0 seed, pair
-order and final caller scaling ONCE. This reduces operand live ranges/reloads
-without adding accumulators or changing the reduction graph. Inspect the actual
-helper for load count, spills and hardware-loop retention, then normal host gate
-and one primary screen. This is not another standalone `dot_pair_c` microbench.
+## B1: lossless representation, reopened on a corrected premise
 
-**B3: wide-load transport, independent from B2.** Keep four result accumulators
-and the exact mul/madd/add graph of the compiled paired expressions. Sketch
-f0-f15 liveness before coding: paired loads of qA/qB/k0/k1 can occupy eight
-registers, four sums plus limited product temporaries fit; a fully doubled
-operand bank does NOT. Stage loads across independent expressions only where
-register lifetimes permit. Require actual loads before their consumers in the
-linked body, not merely renamed registers (#806). Guard the documented load
-alignment and preserve generic fallback and odd dimensions. Device differential
-must compare all FOUR outputs to the current helper, across real-shaped signed
-int8 K and varied Q; host tests cannot execute Xtensa asm. Use existing kbench
-facilities, then a normal screen if the helper improves. Espressif's DSP dot is
-a syntax/alignment reference ONLY: its four partial sums change this model's
-rounding, so do not transplant its arithmetic.
+**#814's rejection counted shared cache lines repeatedly.** Sixteen contiguous
+36-byte records occupy 576 B = NINE aligned 64-B lines, not 18. Adjacent records
+share boundary lines. Asymptotic traffic is 36 vs 34 B/group (+5.88%), not 2.12x.
+Cache conflicts and compute/bus overlap need measurement. Lossless repacking
+changes neither codebooks nor weights; it is not a new quantisation.
 
-## Keep down; reserve and turnover
+For ONE real 576x768 Q, 3,456 records hold unchanged 32 packed bytes + exact
+`nd_f16` FP32 norm: **124,416 B** vs 117,504 B original. Start in existing CQ2
+kbench with real PSRAM, full tensor, internal LUT and production dual-core split.
+Use B1's own amortised walker, +0 seeds and FOLD/W8D order. Differential all rows
+and nonzero/odd row ranges against the current asm=1 path; time warm and cold.
+If positive, integrate one Q and charge its allocation/open cost (last B1
+post-suite PSRAM free 499,104 B). If negative, record the actual result.
 
-No repeat LUT de-split (#446/#813), codebook-copy placement (#808/#809), kron2
-wide (#674/#680), 4x offsets (#749), unsupported 120 MHz, assertion relaxation,
-free-arrival phi staging (#407), or more capture/verification loops. m->lut is
-already 24,576 B internal SRAM. QK=48 specialization is already tested B1/B3.
-Preserve EG2/compact-prefix/amortised assets and use receiving-tree differentials.
+Concrete layout: rowbytes=6*36=216; packed cursor advances 36; norm loads from
+record+32; all eight packed word offsets, LUT progression and arithmetic stay
+unchanged. Records are word-aligned, not 16-B aligned. Validate original tensor
+eligibility, then use a truthful record-layout guard; the old rowbytes=192
+check must not silently send this candidate to the C fallback.
 
-A genuinely unchanged ELF is not a new candidate: explain that once and move to
-the next independent lever without defeating the anti-repeat guard. A scalar-QK
-null does not close the separate wide-load schedule. A failed arithmetic gate
-stops promotion even when primary tps improves. Record new evidence with its own
-log and provenance; do not call reused metrics a new performance result.
+**Current implementation blocker:** two clone generators failed on boundaries /
+duplicate `.Ltn_` labels. Researcher restored its own failed edit from the matching
+snapshot (B1 tree hash `efa82fec3f6a`); no B1 flash or layout measurement occurred.
+Retry by locating substring `.iram1.lut2_tie1n` and taking that WHOLE line through
+the matching `.size` line (the file uses tabs, so a literal space-form anchor
+failed). Rename the new symbol and EVERY `.Ltn_` inside that slice. Prototype
+must preserve **(void *vc, uint32_t r0, uint32_t r1)**; the attempted one-argument
+header replacement matched nothing. An unused clone can be linker-GC'd: wire its
+record builder/context and call into the existing kbench before checking the ELF.
+Do not spend model-open integration work before the kernel result exists.
 
-Useful references (transfer is a hypothesis, not a speed promise):
-- [ESP-DSP S3 float dot: guarded wide loads](https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
-- [ESP-IDF 5.5.2 memory types](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/memory-types.html)
-- Existing `.auto/exp96/`, `.auto/exp91/`, and kbench are the local starting points.
+## Exact Sinkhorn work: interpretation and turnover
 
-Next mentor: check for three distinct live jobs and growing logs, then read the
-actual one-Q layout result and the current-helper QK timings. Keep accepted,
-screened and breadth-blocked numbers distinct. Update this compact queue in
-place; do not append another session-close history.
+The new mechanism keeps ND_SINKHORN=20 and every arithmetic operation. Snapshot
+all matrix bytes immediately before ONE full row+column pass; break only when
+memcmp after THAT pass proves F(A)=A. Every subsequent pass then repeats the same
+bits; final exponentials still execute. No tolerance, float equality, approximate
+convergence, row-only check or fixed smaller iteration budget.
 
+Host census on one real prompt: **1,432 calls, 135 fixed hits, 27,423 executed,
+1,217 saved / 28,640 possible iterations (4.25%)**, fidelity unchanged. This
+includes prefill and decode; it does not price decode-only savings, and host /
+device contraction/libm may differ. Dense device result is nearly flat above.
+Use `ND_MAX_LANES*ND_MAX_LANES` bounded snapshot (max lanes=8), not unguarded
+snap[16]. Diagnostic counter definitions, updates AND prints are excluded on ESP.
 
----
+B2 tests lower detector cost: its actual code checks zero-based it=4,8,12,16,
+therefore **passes 5,9,13,17**, despite comments/spec saying 4,8,12,16. This remains
+exact and is a valid experiment. Label the measured cadence correctly; do not
+interrupt or rerun just to shift one pass. Snapshot only before the checked pass
+and compare immediately after the SAME pass, never across four passes. At most
+four detector executions replace twenty; delayed discovery trades some saved
+iterations for lower overhead. This is a real interpretive reason for the two
+Sinkhorn variants. No further cadence sweep unless this reading justifies it.
 
-## CANDIDATE CLEARED TO BUILD (was held pending a re-price): wide-load QK dot, bounded +1.5 % to +3.6 %
+## B3 / reserve: smaller QK operand tile, not another old dot
 
-The hold in #858 was "do not build until the warm kbench number is re-priced with the field's call
-structure". The bound replaces that measurement: the attention phase measures 23.5 ms and its other
-attributed work (paired exp ~3.5, P.V ~3.7, staging ~1.5) leaves the QK remainder at **<= 14.8 ms**
-against **8.3 ms** from the warm kbench. A 64-bit-load body cutting 30-40 % of the dot's instructions is
-therefore worth **+1.5 % to +3.6 %** - both ends above the bar - and the warm-isolation caveat cuts in
-the candidate's favour, since isolated numbers have understated this field three times.
+B2's completed scalar candidate reordered the four independent chains at each
+term pair while retaining i+=8 in today's noinline helper. #628/#634 tested
+inside the older large frame / a width-two loop; the changed boundary explains
+why that was worth one new screen. It is now measured: keep the +0.109% evidence.
 
-Build order: pipelined 64-bit body with alternating registers (pipeline one row pair, keep the rest
-scalar, as the wide phi does) -> objdump-verify the load lead -> host-gate before flashing -> screen
-against the tree's own pin -> if it lands, re-derive the attention phase to learn which end of the bound
-the field sits at.
+**#684/E60 already rescheduled 128-bit QK:** 56 cycles/chunk vs compiler C 49,
+-0.71% field. The remaining candidate must use a **two-element / 64-bit tile**
+without its extra operand reloads, not repeat that five-load 128-bit schedule.
+Budget f0-f15 before coding: four sums, eight operands, limited product temps;
+a fully doubled operand bank does not fit. Preserve the compiled pair graph:
+ODD-term multiply, EVEN-term madd into that product, then add to running sum.
+Keep ascending pair order, +0 seeds, caller scaling exactly once and generic
+fallback. Guard documented load alignment and prove the field path executes.
+
+Check load-before-consumer order in the linked body, then compare all FOUR
+outputs with the current helper on device (signed int8 K, varied Q, real shape).
+Host checks cannot exercise Xtensa asm. Use existing kbench, then primary only
+if the helper improves. The leftover `qk8w_tie728.S` has sequential madds and
+stale comments: it is NOT the paired-expression reference. [ESP-DSP's S3 dot]
+(https://github.com/espressif/esp-dsp/blob/master/modules/dotprod/float/dsps_dotprod_f32_aes3.S)
+is useful for load syntax/alignment; its reassociated reduction is unsuitable.
+
+## Retain these corrections and closures
+
+- `c4_pair_cyc=139` is PER SINGLE OLD dot_c4: bench divides 128 calls by 128.
+  It is not today's four-output qk_dot8, nor proof of stall cause or +2.5% gain.
+- Aggregate weights / wall cycles of a dual-core split do not prove per-core
+  IPC saturation. Internal SRAM staging is not an L1-cache-hit argument; see
+  [IDF memory types](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/api-guides/memory-types.html).
+- #854's logf=350 cycles contradicts measured **#413: 22.63-23.13**. Keep logf
+  skipping closed; phase timers overlap and cannot be blindly summed.
+- Keep LUT de-split (#446/#813), tiny codebook copies (#808/#809), kron2 wide
+  (#674/#680), 4x offsets (#749), free-arrival phi staging (#407), unsupported
+  120 MHz and assertion relaxation down. LUT already occupies 24,576 B SRAM.
+- QK=48 specialization is already tested. An unchanged ELF is not a candidate.
+  Preserve EG2/compact-prefix/amortised assets and receiving-tree arithmetic.
+
+Next mentor: FIRST verify B1's new kernel is actually called and produces a
+real cold/full-tensor differential, rather than another unused-clone build.
+Read B2 sparse timing and its actual cadence; check whether B3 has a distinct
+next experiment. Three-board concurrency was not achieved this pass yet.
+Keep accepted, screened and breadth-blocked numbers separate. Update this file
+in place; the chronological history belongs in the log, not appended finish notes.

@@ -455,3 +455,35 @@ source. What is missing is a *measurement vehicle*. Three options, best first:
 
 Nothing about the layout is tested or refuted; the clone remains intact. Pins unchanged: B3 6.1467
 (carries the Sinkhorn exit), B2 6.1317 (sparse Sinkhorn lane), B1 5.9283.
+
+## CLOSED ON MEASUREMENT: the 36-byte group record layout (+1.35%, bit-exact)
+
+The layout is now tested on real bytes rather than argued about, and it loses:
+
+```
+RECO rows=768 ng=6 packed_cyc=1577208 reco_cyc=1598440 pct=+1.35 mismatch=0
+```
+
+**Correctness:** `mismatch=0` over all 768 rows of a real CQ2 tensor - the clone
+`nd_lut2_rows_reco` is bit-identical to the shipping walker on the archive's own packed bytes and
+fp16 norms, with the record norm stored as `nd_f16(halfword)`, i.e. exactly the value NF16V computes,
+against a non-zero activation so the pair LUT is non-trivial (an all-zero LUT would have made the two
+walkers agree trivially and the comparison worthless).
+
+**Speed:** +1.35 % more cycles over the same rows. The mechanism matches: sixteen contiguous 36-byte
+records are 576 bytes, which is **nine 64-byte lines** - the same nine lines that 512 bytes of packed
+data plus the amortised norm bytes already occupy - so the layout saves no line traffic while paying
++6.25 % more bytes and an unaligned 36-byte stride. (An earlier note of mine claimed 18 lines by
+treating record starts as uniform random offsets instead of contiguous records; the correct figure is
+nine, and the measured loss is consistent with it.)
+
+**Disposition:** closed. The clone is kept in `engine/src/lut2_tie728.S` as a documented, verified
+walker - it is referenced by nothing, so the linker garbage-collects it and the shipping image is
+byte-unchanged (verified: zero `nd_lut2_rows_reco` symbols in the ELF). The boot-time differential
+selftest that measured it has been removed, since it added ~13 ms to `nd_model_open`.
+
+**How it was measured, after both obvious vehicles failed:** the kbench image on this tree faults
+before any bench of mine runs (#865/#866), so the differential went into an engine boot self-test that
+prints on the normal console - and it landed only when the edits were applied **one at a time with a
+build after each**; the earlier failures were all placement and anchor errors in a large hand-written
+file, each of which the build catches for the price of a compile.

@@ -172,8 +172,8 @@ The phrase is scoped:
 - **behaviorally equivalent**: routes/tools/results match even when the raw
   rendering differs.
 
-Never promote one scope into another. The final candidate trees have kernel,
-host, device, numeric, unseen-prompt, and end-to-end evidence, but the device
-breadth result remains 18/20 until the owner resolves the two transport/state
-cases.
-
+Never promote one scope into another. All three durable candidate trees have
+host, device-breadth, numeric/top-1, and own-tree CQ2 evidence. B1 alone has the
+unseen-prompt host/device cross-check; B1 and B3 have 9/9 behavioral captures;
+and B3 has the ten-request repeat soak. Every tree's device breadth remains
+18/20 until the owner resolves the two transport/state cases.

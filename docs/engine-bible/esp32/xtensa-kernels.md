@@ -62,10 +62,13 @@ function.
 ## Hardware loops
 
 Xtensa zero-overhead loops are not free to configure. Assembler-generated long
-loop setup can erase a small-body win. The retained version pays setup once per
-call and updates loop-count state per row. It uses the instruction-sequencing
-requirements documented by Cadence, including `isync` after loop-register
-reconfiguration.
+loop setup can erase a small-body win. The **final candidate asset**
+[`exp96/lut2_tie728.S.amortised`](../../../.auto/exp96/lut2_tie728.S.amortised)
+pays setup once per call and updates loop-count state per row. It uses the
+instruction-sequencing requirements documented by Cadence, including `isync`
+after loop-register reconfiguration. The linked current-checkout
+[`engine/src/lut2_tie728.S`](../../../engine/src/lut2_tie728.S) is a different,
+pre-amortized research state; do not infer candidate-A code from that link.
 
 Proof for a loop change includes linked disassembly: the loop instruction must
 target the intended `LBEG`, control flow must cover every group and tail, and

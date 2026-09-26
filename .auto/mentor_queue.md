@@ -236,3 +236,56 @@ into instead.
 **Recommended next build order:** the phi 24-row dispatch batching reserve first (it is pure dispatch
 restructuring with no RAM and no copy), then this item re-specified as above with `fp[0]` (single consumer)
 as the first and smallest step.
+
+
+## SPEC (ready to implement): phi 24-row fused dispatch, in `nd_quant.c`, no nested splitter
+
+**Why it is the next build.** The phi block dispatches three separate tensors per lane
+(`mhc_phi_pre` 4 rows, `mhc_phi_post` 4 rows, `mhc_phi_res` 16 rows - verified in nd_model.c), so the two
+cores meet **three** barriers per lane per token instead of one, and the 4-row dispatches balance badly.
+Pure dispatch restructuring: no RAM, no copy, no arithmetic change.
+
+**Where it must live.** `gemv4_pick` and the row functions (`gemv_rows_offset`,
+`gemv_rows_offset_asm`, `gemv_rows_offset_asmW`, `gemv_rows_generic`) are `static` inside
+`engine/src/nd_quant.c`, so the fused runner goes there as `nd_cq_gemv_phi3()` and nd_model.c calls it.
+
+**Shape (the whole thing):**
+
+    typedef struct { const nd_cact *c;
+                     const nd_tensor *t[3]; const void *blob[3];
+                     const uint16_t *norms[3]; uint32_t ngroup[3], g[3], bits[3],
+                              rowbytes[3], nrows[3];     /* 4, 4, 16 */
+                     const float *xh; float *y[3]; } phi3_ctx;
+
+    static void phi3_rows(void *vc, uint32_t i0, uint32_t i1)
+    {
+        const phi3_ctx *c = vc; uint32_t seg, lo = 0;
+        for (seg = 0; seg < 3u; seg++) {
+            uint32_t hi = lo + c->nrows[seg];
+            uint32_t a = i0 > lo ? i0 : lo, b = i1 < hi ? i1 : hi;
+            if (a < b) {
+                gemv_ctx q;                       /* same fields as nd_cq_gemv_rows builds */
+                q.packed = c->blob[seg]; q.norms = c->norms[seg]; q.xh = c->xh;
+                q.cb = nd_cact_codebook(c->c, c->bits[seg]); q.y = c->y[seg];
+                q.ngroup = c->ngroup[seg]; q.g = c->g[seg]; q.bits = c->bits[seg];
+                q.rowbytes = c->rowbytes[seg]; q.base = 0;
+                /* pick ONCE per segment with the segment's own blob as the key, then call the
+                 * row function DIRECTLY over [a-lo, b-lo): never nd_parallel_rows from inside a
+                 * worker - that is the nested splitter this item forbids. */
+                gemv4_pick(&q, c->blob[seg], c->nrows[seg])(&q, a - lo, b - lo);
+            }
+            lo = hi;
+        }
+    }
+
+and the caller does `nd_parallel_rows(phi3_rows, &ctx, 24)` once per lane, with each tensor's row window
+(`li*4` for pre and post, `li*16` for res) folded into the per-segment base the `gemv_ctx` above resolves
+as `base = li*nrows[seg]`, i.e. set `q.base = li * c->nrows[seg]` and pass `a`/`b` as lane-local indices
+so the row functions' own `r0 = base + i0` lands on the right rows.
+
+**Correctness obligations, in order:** (1) the per-segment pick must be the SAME pick the unfused path
+makes for that tensor - the campaign's #897 rule - so key on that segment's blob and its full row count,
+not on the lane-local range; (2) every row's accumulation stays inside one call of one row function, so
+per-row values are bit-identical; (3) the device gate plus `gen_tokens 99` are the pass criteria, and the
+comparison baseline is the receiving tree's own pin (board 2 is at the pin now; boards 1 and 3 carry the
+confirmed final_norm hoist, so use board 2 for a clean pin-versus-candidate comparison).

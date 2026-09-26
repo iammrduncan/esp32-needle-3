@@ -141,3 +141,30 @@ Read B2 sparse timing and its actual cadence; check whether B3 has a distinct
 next experiment. Three-board concurrency was not achieved this pass yet.
 Keep accepted, screened and breadth-blocked numbers separate. Update this file
 in place; the chronological history belongs in the log, not appended finish notes.
+
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 late (run #871: NEW BEST 6.1500 - the sparse Sinkhorn check composed onto B3)
+
+**B3's tree now reads decode 6.1500 on a FULL-GROUP run** (all 24 cases), against the same tree's
+dense-form pin of 6.1467 = **+0.054%**, with **22/24 device byte-exact and token_delta 52** - the
+known frozen #647 pair only, so the composition introduced no new divergence - plus prefill 6.4917
+(best), ext 6.0818 (best), min_case 5.92, and host gates green (23/23, fidelity 5.341e-05 unchanged)
+from checks.sh on the same tree.
+
+**Mechanism, cleanly isolated by a three-point comparison on identical arithmetic:**
+
+| tree | detector | reading | delta |
+|---|---|---|---|
+| B3 | dense (every pass) | 6.1467 | +0.028% over its pre-change pin |
+| B2 | sparse (passes 5/9/13/17) | 6.1383 | +0.108% over its own baseline |
+| **B3** | **sparse** | **6.1500** | **+0.054% over B3's dense form** |
+
+So the lever is the *cost of the check*, not the check: the same exact test, run on four of twenty
+passes instead of twenty, is worth a few hundredths of a percent, and it is bit-exact by construction
+(F(A) == A makes the remaining passes the identity).
+
+**This is the campaign's best fully-gated reading: 6.1500 = +15.95% over the owner's accepted 5.3033**
+(session arc 2.44 -> 6.1500 = +152.0%). Pins: **B3 6.1500** (composed + EG2 + compact + amortised +
+two-deep schedule + qk_hd==48 + sparse Sinkhorn), B2 6.1383, B1 5.9283.

@@ -389,3 +389,36 @@ next step is not to build it but to **re-price it with the field's call structur
 variant that calls the dot once per group immediately followed by its consumer, as the transform screen
 eventually had to do. Only then is the wide-load body worth writing, because its whole justification is
 an instruction-count ratio against a number that may not hold in situ.
+
+## CLEARED TO BUILD: the wide-load QK dot, bounded at +1.5 % to +3.6 % without a board
+
+#858 held this candidate pending a field-structure re-price, because its 139-cycle basis is a warm
+isolated kbench number. The bound can be had without a measurement, by subtracting the attention
+phase's other attributed work from its measured total:
+
+| attention phase (measured) | 23.5 ms |
+|---|---|
+| paired exp (8 500 pairs x 198 cyc / 2 cores) | ~3.5 ms |
+| P.V wide kernel (ledger attribution) | ~3.7 ms |
+| staging + bookkeeping | ~1.5 ms |
+| **QK, as the remainder** | **<= 14.8 ms** |
+
+against **8.3 ms** from the warm kbench (14 400 dots x 139 cycles). So the field QK cost lies between
+8.3 and 14.8 ms, and a 64-bit-load body that cuts 30-40 % of the dot's instructions is worth:
+
+| QK basis | -30 % (wide loads) | -40 % (wide loads + two-deep pipeline) |
+|---|---|---|
+| 8.3 ms (warm kbench) | **+1.53 %** | **+2.04 %** |
+| 14.8 ms (field remainder) | **+2.72 %** | **+3.63 %** |
+
+**Both ends are above the 0.2 % bar, so the candidate is cleared.** More than that: the warm-isolation
+caveat that made me hold it in #858 cuts *in its favour* - this campaign has measured three times that
+isolated numbers understate the field, so the likelier end of the range is the larger one.
+
+**Build order (unchanged, plus one step):** (1) write the 64-bit-load body with the two-deep pipeline
+and alternating registers, budgeting registers the way the wide phi does (its two-deep schedule uses
+two register sets, so pipeline ONE row pair and keep the others scalar); (2) **objdump-verify** that
+every load is issued at least one block ahead of its consumer; (3) **host-gate before flashing** - any
+re-association is a rounding change and the host oracle is where it must be caught; (4) screen against
+the tree's own pin; (5) if it lands, re-derive the attention phase to see which end of the bound the
+field actually sits at, which is itself a useful number for every future attention idea.

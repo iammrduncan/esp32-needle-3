@@ -362,3 +362,36 @@ here a strictly faster memory (internal RAM) made the same kernel 33.9 % slower.
 
 Pool state: board 3 restored from board 1's verified pin sources and re-verified hashing
 `d6b8014fd2fb`; all three boards idle on the pin.
+
+
+## NEXT RUNNABLE PROBE (cheap, one build): why did internal SRAM make the same kernel 33.9 % slower?
+
+#897 and #901 measured the same walker on the same values at **-33.9 % twice**, once with the staged
+pointer as the dispatch key and once with the original blob as the key. The guard in #901 never fired, so
+the kernel was identical; the operands were simply read from a 4-byte-aligned `heap_caps_malloc` buffer in
+internal SRAM instead of from the streamed PSRAM window. **A strictly faster memory made the kernel a third
+slower**, which cannot be explained by the copy (~202 KB/token on a 14.4 MB/token bus) and is the most
+surprising number this campaign has produced.
+
+Three candidate explanations, all separable in ONE build each, cheapest first:
+
+1. **Internal-SRAM bank/port conflict.** ESP32-S3 internal SRAM is banked; a buffer whose base address maps
+   onto the same bank as the walker's other live operands (the LUT, `xh`, the codebook) can serialize the
+   kernel's loads. *Test:* allocate the same tile at several base offsets (e.g. +0, +32, +64, +128, +256,
+   +1024 bytes from a 16-byte-aligned block) in ONE image, run each offset for the same number of tokens,
+   and print per-offset timings. If the cost moves with the offset, this is the mechanism and nothing about
+   phi residency is collectable; if it is flat at -33.9 % for every offset, it is not addresses.
+2. **Cache-path interaction.** The streamed window is read through the data cache with sequential
+   prefetch; a small internal buffer may defeat whatever the walker relies on (e.g. 128-byte line
+   reuse across the two cores that share the cache). *Test:* stage a copy that is *not* used for the GEMV
+   but kept live, to separate "the data lives elsewhere" from "the kernel reads elsewhere".
+3. **Timing artefact of the call itself.** The staged path adds a function call, two `memcpy`s and a
+   throwaway context per lane per layer (32 calls/token). That should be ~0.85 ms, not 54 ms, but it is the
+   one term that is *added work* rather than moved data. *Test:* the same staged call with `nrows = 0`
+   (copies skipped, call kept) or with the tile sized to 1 row.
+
+**Why this is worth one build rather than a shrug:** the answer changes what future memory-placement ideas
+can be priced at all. If (1) is true, every "stage it in fast RAM" idea in this campaign - including the
+ones the ledger still carries as RAM-gated - is invalid on this part, and that is worth recording as a
+hardware fact with a number attached. If (3) is true, the copy path is the problem and a zero-copy variant
+becomes interesting. Either outcome is a mechanism, and the experiment is one image and one lane.

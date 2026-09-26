@@ -620,3 +620,33 @@ cases return to their goldens.
 Cost: one diagnostic build plus one extended-group lane (~8 minutes). Value: it decides between "fix a
 race" and "re-baseline two cases", which is the only remaining decision the campaign cannot make for the
 owner.
+
+## CORRECTION + better diagnostic: the interrupt-disable test cannot run; compare LAYOUT instead
+
+**The prepared diagnostic is not runnable as written, and the reason matters.** Bracketing
+`nd_model_step_hidden` in `portDISABLE_INTERRUPTS()` would stop the two-core `nd_parallel_rows`
+handshake dead - that handshake is built on FreeRTOS tasks, semaphores and cross-core wakeups, all of
+which need interrupts - so the image would either hang or silently run every split serially, and any
+difference in the two cases would then be attributable to the diagnostic itself. Recorded so nobody
+spends a build on it.
+
+**What replaces it is non-invasive, cheaper, and tests the same two families.** The ring's entire
+footprint is `console_rx_ring_enable()` plus one `esp_driver_uart` requirement in main's CMakeLists; it
+changes no model code and no model constant. So the sharpest question is not about interrupts at all but
+about **layout**: does installing the UART driver move where the model's own allocations land?
+
+* If the model's `free_internal_bytes` / `free_psram_bytes` at `EVT READY` differ between the ring and
+  no-ring builds of the *same* tree, then the ring has changed the heap layout, and a
+  layout-dependent result means the firmware is reading something it never wrote - a real defect, not a
+  benchmark artefact, and one this campaign has a name for (the #159/#162 class of shared/uninitialised
+  state).
+* If the free figures are identical, the ring's effect is genuinely elsewhere, and the remaining
+  candidate is driver-owned state the model's own path touches.
+
+**The test, in order:** (1) on the best tree, run the extended group with the ring present and record
+`free_internal_bytes` / `free_psram_bytes` from the `STATE` line plus the two cases' answers; (2) ablate
+the ring (delete the call, drop the CMake requirement, fresh build dir), re-run the same extended group,
+and compare both the free figures and the two answers; (3) also record the *allocation* pointers the
+firmware already prints (`EG2 ...`, `m->xh`/`m->lut` in any diagnostic line) so the comparison is by
+address and not only by size. Two lanes, no engine change, and it either produces a defect to fix or
+rules layout out.

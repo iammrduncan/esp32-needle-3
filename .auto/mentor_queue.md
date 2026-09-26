@@ -225,3 +225,31 @@ Zero spread on the primary between two independent boards - tighter than the cam
 be redone from its **live** tree; the snapshot is a recovery asset, not a mirror. B2's own lane state
 (its sparse+interleave tree, `36ccbdc32f3e`) was snapshotted into `.auto/trees/` before the transplant,
 so nothing was lost.
+
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 late-4 (run #875: both winning forms transfer to the shippable line - third-tree confirmation)
+
+**B1 (shippable line) now reads 5.9383 against its 5.9283 pin = +0.169%** after composing the two levers
+this window isolated: the interleaved `QKD8_BODY` (pair-major statement order, chain sequences
+untouched) and the sparse Sinkhorn fixed-point check (passes 5/9/13/17, cap20 and arithmetic
+unchanged). prefill 6.2483, min_case 5.73, ext 5.8788, **22/24 device byte-exact with token_delta 52**
+- the known #647 pair only, so no new divergence - and host gates green on the tree with fidelity
+5.341e-05 unchanged, which is the bit-exactness evidence for both edits.
+
+**Both forms now have three independent tree confirmations, all positive:**
+
+| form | B2 | B3 | B1 |
+|---|---|---|---|
+| interleaved QK chains | +0.109% over its pin | +0.081% composed | part of +0.169% |
+| sparse Sinkhorn check | +0.108% on top of that | +0.054% over dense | part of +0.169% |
+
+Only one line was under the 0.2% bar and it is the third tree's, which is expected: B1's line carries
+fewer of the levers the others have, so the same pair of forms represents a similar absolute gain on a
+smaller base. The direction never flipped, which is the opposite of what the NF16V and QK-outline ports
+did earlier in the campaign when a signal was tree-specific - so these two forms look mechanism-level
+rather than tree-specific, unlike those two.
+
+**Pins:** B3 = B2 = **6.1550** (identical tree `d6b8014fd2fb`, confirmed cross-board to the digit),
+B1 **5.9383** (shippable line + both forms).

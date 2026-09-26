@@ -650,3 +650,28 @@ and compare both the free figures and the two answers; (3) also record the *allo
 firmware already prints (`EG2 ...`, `m->xh`/`m->lut` in any diagnostic line) so the comparison is by
 address and not only by size. Two lanes, no engine change, and it either produces a defect to fix or
 rules layout out.
+
+## CLOSED by placement: the ring cannot shift the model's layout
+
+The layout hypothesis for #647 is refuted by reading two lines rather than by running two lanes:
+`console_rx_ring_enable()` is called at main.c:560 with its own comment stating the placement - "LATE
+(#495): after model open + prefix allocations, before the timed boot loop". The model's own buffers
+(`m->xh`, `m->lut`, the KV cache, the tier, the engram staging) are therefore all allocated *before* the
+UART driver exists, so the driver's buffers cannot move them. The measured free-heap figures agree:
+internal 10,663 / psram 517,028 bytes at `EVT READY` with the ring, and nothing about the model's
+allocations can differ as a consequence of installing the driver afterwards.
+
+**Where the #647 mechanism stands, stated honestly after six probes.** Ruled out by measurement:
+console or firmware backlog (five-second gaps change nothing, #881), per-request arrival timing (same),
+input differences (byte-identical), nondeterminism (answers identical across repeats), order dependence
+(identical first and last in a session), and now heap layout (placement, above). What is left is
+something the ring's *presence* changes that is not input, not timing of the request, and not layout -
+and I do not have a mechanism for it that survives the evidence, which is the honest position rather
+than a seventh hypothesis.
+
+**Why the decision does not depend on knowing it.** The ring is a genuine fix (it is what stopped the
+>128-byte request wedge and made a 20-case suite completable), and the two cases are demonstrably
+state-sensitive - one pure transport change flips exactly that pair while every other case stays
+byte-exact. The owner's options are the same whichever the mechanism is: keep the ring and
+re-baseline/replace those two cases, drop the ring and lose the fix, or keep them as blockers. Further
+probing would be curiosity, not decision support.

@@ -26,6 +26,27 @@ in the order they would pay best.
   arithmetic; a transport change flips exactly that pair. Owner decision: re-baseline/replace, drop
   the ring, or block. Nothing in the loop can settle it.
 
+
+## NEW IDEA (priced, needs a premise change): phi residency + asymmetric row split
+
+The phi blocker is usually stated as "~18 KB/core against ~12 KB free". But that framing assumes both
+cores get residency. The measured facts: phi's addressable share is **9.3 % of the phase** (0.75 ms,
+~+0.45 % token-wide) and it comes from the *data cache* being shared with the rest of the token.
+
+**Variant nobody has measured:** stage only **one** core's rows in internal RAM - 12 rows x 1,536 B =
+18 KB is too much, but a *half* of them (6 rows, 9 KB) fits in the ~12 KB free - then rebalance the
+split so both cores finish together. With a 9.3 % delivery advantage on the staged half, the
+equal-finish split is roughly 54.5/45.5, and the net gain is the *balance* gain, not the residency
+gain: ~4.5 % of the phase = 0.36 ms = **~+0.22 % token-wide, i.e. right at the bar, not safely over**.
+
+**Why it is not being built now:** it needs a second walker variant that reads the packed stream from
+internal RAM (a new asm entry point plus a split policy change), and the payoff sits exactly on the
+0.2 % bar with no margin. **What would make it pay:** either the assertion-level RAM decision (which
+frees 8,248 B and would allow the full per-core half, ~18 KB, for the full 9.3 % on one side), or a
+measured delivery advantage larger than 9.3 % on this tree. Whoever tries it should price it on B2/B3
+with the per-tree CQ2 differential first, since the walker is the same kernel that carries the
+amortised loop.
+
 ## Banked but sub-bar (kept in trees, not promoted)
 
 - engram[1] narrow staging (EG2) **+0.164 %** on B3 - kept, needs the compact prefix to fit.

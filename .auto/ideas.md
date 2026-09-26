@@ -47,6 +47,17 @@ measured delivery advantage larger than 9.3 % on this tree. Whoever tries it sho
 with the per-tree CQ2 differential first, since the walker is the same kernel that carries the
 amortised loop.
 
+
+## CLOSED TWICE (do not revive): de-splitting the LUT build
+
+The old banked note said "run `lutb_rows` serially for +0.03..0.07%" on the premise of a 13.6 us
+build. **That premise was wrong** - the measured build is ~135.8 us - and the experiment was already
+rejected at #446 (lutserial, **-0.335%**). It was re-run by mistake on the amortised tree (#813) and
+lost **-0.54%**, i.e. the split is now *more* valuable, not less (with the amortised loop the walker's
+own setup is cheaper, so the build holds a larger share of the critical path). Canonical source:
+`R-lutserial-b2.log`. **Before banking a de-split idea, check the measured build/phase size in
+`.auto/log.jsonl` and whether the family is already closed** - the same trap cost this window a lane.
+
 ## Banked but sub-bar (kept in trees, not promoted)
 
 - engram[1] narrow staging (EG2) **+0.164 %** on B3 - kept, needs the compact prefix to fit.
@@ -68,3 +79,13 @@ amortised loop.
 7. Inside `needle-board run N`, `$FLASH_PORT`/`$SERIAL_PORT` are the only correct handles (the
    `/dev/ttyACM*` aliases are board 1's); expand them inside the script, not in single quotes.
 8. Kill `serial_api.py` children by pid (`pkill -f needle-api` misses them and holds the console).
+
+## CLOSED OFF-DEVICE by line arithmetic (do not build): merged 36-byte group records
+
+Idea: merge each group's 32 packed bytes with its fp32 norm into a 36-byte record so the walker touches
+one stream instead of two. **Refuted before any asm**: at 64 B line granularity today's layout costs
+**0.531 lines/group (34 B)** - the packed side already puts two groups per line and the fp16 norms live
+in a dense array that puts **32** norms per line - while a 36-byte record, whose start offset is uniform,
+spans **two** lines 12.5 % of the time and costs **1.125 lines/group (72 B)**, i.e. **2.12x** the bus
+traffic. **Rule: never split a dense sequential stream into fixed-size records unless the record divides
+the cache line.** (Third worked example after the uint16 offset stream and the fp32 norm sidecar.)

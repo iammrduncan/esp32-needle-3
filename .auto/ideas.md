@@ -708,3 +708,38 @@ Two consequences, both useful:
    quoted "11,707-12,087 B free" - that reading belongs to a *different* tree (the seed line's
    11,183/11,931). The best tree's primed free internal is **11,419 B**, so 6 phi rows (9,216 B) still
    fit with 2,203 B to spare and the retirement stands unchanged; only the cited number was wrong.
+
+## THE #647 MYSTERY, RESOLVED FROM THE GOLDENS THEMSELVES (no board time)
+
+Comparing the two golden sets case by case over all 24 cases: **the only two cases where the DEVICE
+golden and the HOST golden disagree with each other are exactly the two frozen #647 cases.**
+
+| case | device golden | host golden |
+|---|---|---|
+| `heldout_interval_one` | 2 calls (`seconds:120` **+ `get_status`**), 27 tokens | 1 call (`seconds:120`), 23 tokens |
+| `heldout_long_tools_note_only` | 1 call (`seconds:300`), 19 tokens | 2 calls (`seconds:45` + `set_timer`), 67 tokens |
+
+Every other case has a device golden byte-identical to its host golden. So these two cases are **the
+campaign's only device/host-divergent expectations** - they sit on a knife-edge of the device-side
+`think`-phase behaviour (the DEMO-timer `!think`/`think` defect the campaign characterised in #647-#650),
+where the host, which has no UART and no console timing, lands on the other side.
+
+**This explains every probe at once**, which no earlier hypothesis did:
+
+* deterministic? yes - the knife-edge is a property of the image, not of a run;
+* input-identical, order-independent? yes - the inputs and the order never moved;
+* gap-insensitive? yes - the state is decided in the `think` phase of that one request, not by arrivals;
+* layout-identical? yes - the shift is a behaviour, not an address;
+* and *why one transport change flips exactly this pair*: because these are precisely the two cases whose
+  expected output is a knife-edge, so the smallest change in console/timing behaviour tips them - while
+  the other twenty-two cases have device and host expectations that agree, so nothing tips them.
+
+**Consequence for the owner's decision - it now has a recommendation rather than only options.** The pair
+is not a "ring regression": the ring (or any transport change) moves the device across a boundary these
+two goldens happen to sit on, and the correct disposition is **(a) re-capture those two device goldens on
+the current tree** (the recipe is additive-save + worker-side capture, already implemented). They are
+device-state-sensitive by construction - the host itself disagrees with them - so freezing them against a
+pre-ring device state tests the transport, not the model, and 24/24 after a scoped capture is the honest
+reading rather than a weakened gate. Dropping the ring (option b) would preserve two goldens that the
+host already contradicts; keeping them as blockers (option c) blocks an otherwise fully-gated +16.05 %
+result on two cases that measure console timing.

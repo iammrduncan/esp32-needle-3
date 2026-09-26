@@ -395,3 +395,40 @@ can be priced at all. If (1) is true, every "stage it in fast RAM" idea in this 
 ones the ledger still carries as RAM-gated - is invalid on this part, and that is worth recording as a
 hardware fact with a number attached. If (3) is true, the copy path is the problem and a zero-copy variant
 becomes interesting. Either outcome is a mechanism, and the experiment is one image and one lane.
+
+
+## MECHANISM FOUND (2026-09-26): the staging collapse is the COPY, not the read - with a cost model
+
+The #902 probe's explanation 3 was run first because it is the cheapest, and it settles the mystery. The
+copy-only variant performs the identical tile copy, keeps the identical call structure and the identical
+bounded allocation, and then dispatches the **ORIGINAL** context - so the staged bytes are never read by
+the kernel at all.
+
+**Result: 4.0667 / min_case 4.03 - the same digits as #897 and #901.** Three independent images, one
+mechanism:
+
+| image | staged bytes read? | decode | vs pin |
+|---|---|---|---|
+| #897 staging, staged dispatch key | yes | 4.0667 | -33.9 % |
+| #901 staging, original dispatch key | yes | 4.0667 | -33.9 % |
+| **#902 copy-only, staged bytes never read** | **no** | **4.0667** | **-33.9 %** |
+
+So the loss is entirely the **copy**: two `memcpy`s per lane per layer (32 per token) of a 6,336 B tile,
+i.e. ~202 KB/token, on the critical path, and it costs ~54 ms of a 163 ms token.
+
+**The cost model, which is the durable part.** That is ~3.7 MB/s of effective copy throughput against the
+walker's streamed reads at ~150 MB/s: **the tier window does not tolerate a memcpy access pattern** (~40x
+worse per byte than the walker's own sequential reads, which is why "share of total bytes" arithmetic -
+202 KB is only 1.4 % of 14.4 MB - predicts 1.4 % and measures 33.9 %). Rule for future pricing: a copying
+idea must be priced at roughly **2.7 ns per copied byte on this part**, not at the walker's streaming rate.
+
+**Consequences.** (1) The phi residency lever - and every "stage/copy it into fast RAM" idea in the ledger,
+including the RAM-gated ones - is **uncollectable by copying**, independently of the RAM question, and that
+is now a hardware measurement rather than a prediction. (2) It retro-justifies the ledger's own #287
+measurement ("copy into a window = -17.9 %, because the copy shares the octal bus with its consumer") and
+explains why the measured 13.9 % delivery tax never converted into a win. (3) If residency is ever to be
+exploited it must come from **placement**, not from copying - i.e. the bytes must be *allocated* there,
+which they are not and cannot be without changing what is stored.
+
+Pool state: board 3 restored from board 1's verified pin sources and re-verified hashing
+`d6b8014fd2fb`; all three boards idle on the pin, no dirty candidate code.

@@ -42,10 +42,12 @@ schema/request state.
 
 On each request the firmware restores the phase's fixed prefix and evaluates
 only the original request plus assistant header. At boot it requires at least
-64 slots beyond the schema prefix. Per request it requires eight slots beyond
-the encoded suffix; generation is then capped at 256 new tokens and clamped to
-the remaining 384-token context. This is a bounded policy, not proof that a full
-maximum-length generation reserve fits at request admission.
+64 slots beyond the schema prefix. Per request it rejects when
+`position + suffix_tokens + 8 >= window`, so an admitted request has more than
+eight slots—at least nine—remaining. Generation is then capped at 256 new
+tokens and clamped to the remaining 384-token context. This is a bounded
+policy, not proof that a full maximum-length generation reserve fits at
+request admission.
 
 ## Generation path
 
@@ -56,15 +58,19 @@ The request path is:
 
 When the grammar reaches a complete call array, the sampler forces the
 `</tool_call>` token and disengages the grammar. Generation then continues
-unconstrained until EOS/IM-END, the context/token/text cap, or error; the router
-extracts the delimited call array afterward. Tool arguments are validated as a
-set before any action runs so a malformed second call cannot leave half of a
-batch applied. Device operations in this demo are deliberately small:
-heap/uptime status, sampling interval, and a countdown timer.
+unconstrained until EOS/IM-END, the context/token cap, or an error. Filling the
+1,024-byte text buffer only sets `out_full`: model stepping continues and the
+firmware reports truncation after generation. The router extracts the delimited
+call array afterward. Tool arguments are validated as a set before any action
+runs so a malformed second call cannot leave half of a batch applied. Device
+operations in this demo are deliberately small: heap/uptime status, sampling
+interval, and a countdown timer.
 
-The firmware emits explicit records such as token fragments, parsed JSON,
+Inference replies emit explicit records such as token fragments, parsed JSON,
 results, prefill timing, decode timing, state, errors, and a final `END`. The
-bridge treats a response lacking the done/calls/results trio as incomplete.
+`!status` and `!think` control commands emit only their state/acknowledgement
+records. The bridge treats an inference response lacking the
+done/calls/results trio as incomplete.
 
 ## Two-pass routing
 
@@ -130,7 +136,8 @@ README table historical; neither number is Claude inference time.
 - A route pass never executes a device tool.
 - An external selection never calls a provider in this implementation.
 - Local calls are all validated before the first side effect.
-- Each serial response terminates with `END`, including errors where possible.
+- Each inference response terminates with `END`, including errors where
+  possible; control-command replies do not.
 - A timeout makes the connection unavailable until synchronization is proven.
 
 ## Known limits

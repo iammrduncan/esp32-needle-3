@@ -28,6 +28,13 @@ Claude/Pi/Codex session stores, and the external sources listed in
 the audit; their exact, earlier census cutoffs are recorded in
 [session inventory](appendices/session-inventory.md).
 
+**Identity warning:** the cutoff checkout `82a3cf1` is a mixed research/evidence
+tree. It is neither accepted commit `2c79104` nor final candidate A, B, or C,
+so a build of it must not be labeled 5.3033 or 6.1433 tok/s. The live branch
+may also advance beyond the frozen cutoff. See the
+[candidate identity manifest](appendices/candidate-manifest.md) for exact
+hashes and the limits of repository-only reconstruction.
+
 The numbers that are easiest to misquote are:
 
 | State | Decode rate | What it means |
@@ -116,6 +123,9 @@ were repeat-deterministic in the run #797 soak. This is an
 - [Experiment ledger](appendices/experiment-ledger.md) indexes the 805-run
   JSONL ledger, major result ranges, preserved `exp*` assets, and closed
   families.
+- [Candidate identity manifest](appendices/candidate-manifest.md) separates the
+  accepted commit, mixed edition checkout, and transient final worker trees,
+  including what can and cannot be reconstructed exactly.
 - [Reproduction recipes](appendices/reproduction.md) gives safe commands and
   evidence expectations.
 - [Research operations](appendices/research-operations.md) covers agent

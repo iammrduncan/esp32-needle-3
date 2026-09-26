@@ -214,3 +214,105 @@ Next mentor: verify B2/B3 have REAL distinct work; read the corrected B1 QK
 actual load-ahead, private-codebook and one-tensor layout timings. Accepted cannot advance past 5.3033
 until the frozen full gate passes. Distinguish screens, proposals and accepted.
 
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~08:45Z (runs #806/#807: both free lanes live; B1's substitute queued)
+
+**Live now (launched, no waits):**
+* **B2 - private 64 B codebook probe** (mentor's bounded substitute): `gemv_rows_offset_asmW` copies
+  `c->cb` into a 16-float **stack** array per call and hands the wide phi walker that pointer, so
+  delivery is private instead of shared. 64 B per call (~few KB/token timed copy), values unchanged.
+  Builds clean, app `06a4e87953de`, screen vs this board's **6.1283** (shared) reading.
+* **B3 - corrected two-deep codebook schedule** in the wide phi: objdump-verified order
+  `lsi f12 -> lsi f14 -> madd.s f0,f12 -> lsi f12 -> madd.s f1,f14 -> ...`, all nine `madd.s` inside
+  the single loop/lend. `a9` is dead once LOOP consumes the count; `f14` is dead until the norm
+  conversion. Screen vs the 6.1433 pin; rename-only was flat, the ordering is the actual change.
+
+**B1 free, substitute queued:** specialize the new outlined QK helper under **`qk_hd == 48`** (archive
+value) so the dynamic count, long-loop setup and remainder handling leave the hot path for that shape -
+same arithmetic/scales, generic fallback kept. Inspect the changed code, host gate, one screen vs 5.9233.
+
+**Standing rules from this window:**
+1. **Never terminate a running board job** or kill across board jobs; let a flashed image produce its
+   own gated verdict so failed evidence survives.
+2. **Reachability of a hand-written loop body is verified by objdump, not by a green build** (my first
+   reorder emitted the block after `retw`, outside the loop, and compiled fine).
+3. B2's residency family needs its lifecycle fixed (**explicit alignment + archive-reset-safe init**)
+   before any promotion; 6.1283 is +0.054 %, banked, not promoted.
+
+**Accepted stays 5.3033 until a tree passes 20/20.** B1's QK-outline tree is gated at 5.9233 (18/20,
+delta 52) and needs no further promotion or capture.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~09:10Z (run #808: codebook family CLOSED by cache-line arithmetic; B3 pin moved to 6.1450)
+
+**B3 measured 6.1450 vs 6.1433 = +0.028% (one tick) for the corrected two-deep codebook schedule** -
+sub-bar, banked, not promoted; rename-only had been exactly flat, so the ordering does something but
+not 0.2%'s worth. **The family is now closed with a reason rather than a shrug:** the CQ4 codebook is
+16 floats = **64 B = one cache line**, so after the first weight of a row it is L1-resident and every
+later load is a hit. Codebook *delivery* was never a cost, which is exactly why B2's private-copy probe
+read +0.054% and why neither register scheduling nor per-worker copies can pay. **Same reasoning
+retires any table of this size** - check the cache-line arithmetic before proposing residency for a
+small table again.
+
+**Housekeeping:** B3's tree now carries the two-deep schedule, so **B3's pin for future work is
+6.1450**, not 6.1433. B2's private-codebook lane is still in flight (expect the same verdict for the
+same reason). **B1 is free** with its queued substitute: specialize the new outlined QK helper under
+`qk_hd == 48` (archive value) to strip the dynamic count, long-loop setup and remainder handling for
+that shape - same arithmetic and scales, generic fallback kept; inspect the changed code, run the host
+gate, then one screen against 5.9233. Longer-term next: the one-real-Q **36-byte group record** layout
+(packed 117,504 B, records 124,416 B) as a cold/split differential against the current walker.
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~09:45Z (run #809: codebook family closed by two independent one-tick results + mechanism; B1's qk_hd==48 specialization host-validated and screening)
+
+| lane | change | reading | vs pin |
+|---|---|---|---|
+| B3 | corrected two-deep codebook load ordering in wide phi | 6.1450 | +0.028 % over 6.1433 |
+| B2 | private 64 B codebook copy on the worker stack | 6.1300 | +0.028 % over 6.1283 |
+
+**Two different mechanisms, the same single tick** - the signature of a non-effect - and the reason is
+arithmetic: the CQ4 codebook is 16 floats = **64 B = one cache line**, so it is L1-resident after the
+first weight and every later load by either core is a hit. Codebook *delivery* was never a cost, so
+nothing optimising it can pay. **The whole sub-family is retired with a reason** (residency, private
+copies, load ordering; and by extension any table of this size). Banked, no promotion, no repeat.
+
+**B1 (screen in flight):** `qk_dot8` now specializes `qk_hd == 48` (the archive's only head dim = six
+exact 8-column groups): compile-time loop bound, no remainder tail possible, body defined once as a
+macro and used by both paths so statements/order/seeds are identical by construction. **Validated by
+the host gate BEFORE any flash** - the rule from #805/#806 paying off: 19/19 cases, golden_missing 0,
+fidelity 5.341e-05 unchanged, top1 10/10, ~6 min, zero board time. Screen vs B1's **5.9233**.
+
+**Pins now:** B3 **6.1450** (carries the two-deep schedule), B2 **6.1283** (shared-codebook tree; the
+private-copy tree measured 6.1300), B1 **5.9233** (QK outline) + this screen. **Accepted stays 5.3033
+until a tree passes 20/20.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~10:15Z (run #810: B1 qk_hd==48 specialization +0.084% banked; three sub-bar results in one window, all explained)
+
+| lane | change | reading | vs own pin | verdict |
+|---|---|---|---|---|
+| B3 | two-deep codebook load ordering (wide phi) | 6.1450 | +0.028 % | sub-bar, banked |
+| B2 | private 64 B codebook copy (worker stack) | 6.1300 | +0.028 % | sub-bar, banked |
+| B1 | `qk_dot8` specialized for `qk_hd == 48` | 5.9283 | +0.084 % | sub-bar, banked |
+
+**All three are positive, clean, and under the bar - with mechanisms, not mystery:**
+* the two codebook results are the same single tick because the CQ4 codebook is **64 B = one cache
+  line**, so delivery was never a cost (residency, private copies and load ordering are all retired);
+* the QK specialization is the second sub-bar half of the *same phase* as B1's QK outline (+0.339 %,
+  already gated in the same tree) - the shape the campaign has twice turned into a kept bundle.
+
+**Method win to keep using:** B1's specialization was the first candidate this campaign validated with
+the **host oracle before its first flash** (`.auto/checks.sh` in the worker: 19/19, golden_missing 0,
+fidelity unchanged, ~6 min, zero board time) - and the device run then measured speed only.
+
+**Pins now:** B3 **6.1450**, B2 **6.1283** (shared-codebook tree), B1 **5.9283** (outline +
+specialization). **Accepted stays 5.3033 until a tree passes 20/20.**
+
+**Next:** the one-real-Q **36-byte group record** layout (packed 117,504 B, records 124,416 B) as a
+cold/split differential against the current walker; then any new phase-level hypothesis needs a fresh
+measurement rather than another sub-bar scheduling screen.

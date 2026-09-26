@@ -11,7 +11,7 @@ pair-table CQ2 row walkers. For Needle 3:
 
 - group size is 128 weights;
 - one group has 32 LSB-first index bytes;
-- pair `p` represents weights `p` and `p+64`;
+- pair `p` represents adjacent weights `2p` and `2p+1` within the group;
 - each pair owns 16 FP32 table entries selected by one packed nibble;
 - the table span per group is `64 * 16 * 4 = 4096` bytes;
 - one FP16 norm follows per row/group in the separate norm blob;

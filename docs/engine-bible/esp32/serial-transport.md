@@ -38,8 +38,10 @@ attach path is known safe.
 
 Requests are newline-terminated, single-line UTF-8. `!route ` selects the route
 schema; unprefixed text uses the local-tool schema. Control commands include
-status and think-mode toggles. Replies are line records and end at an explicit
-`END`. Token fragments preserve spaces—using `.strip()` would corrupt output.
+status and think-mode toggles. Inference replies are line records ending at an
+explicit `END`; `!status` emits one `STATE` record and `!think` emits only its
+acknowledgement. Token fragments preserve spaces—using `.strip()` would corrupt
+output.
 
 The protocol has no transaction ID. Correct pairing therefore depends on
 draining stale lines before a write and reading through the terminator. A

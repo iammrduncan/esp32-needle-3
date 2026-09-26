@@ -5,6 +5,11 @@ current branch. The campaign maintained accepted, preserved candidate, and
 diagnostic trees simultaneously—often on different boards. Always pair a rate
 with its tree, workload, and gates.
 
+**Do not benchmark by checkout name alone.** The edition cutoff `82a3cf1` is a
+mixed research tree: it is neither accepted `2c79104` nor final tree A, B, or
+C. Neither 5.3033 nor 6.1433 tok/s describes a build of that checkout. See the
+[candidate identity manifest](../appendices/candidate-manifest.md).
+
 ## Headline lineage
 
 | State | Decode rate | Delta | Evidence/disposition |
@@ -76,9 +81,13 @@ The durable handoff records:
   EG2, and amortized loop; `1ece8792b190` family.
 
 These are preserved worker-tree/image identities, not a statement that current
-[`engine/src/nd_model.c`](../../../engine/src/nd_model.c) exactly equals tree A.
-Reconstruction must start from the per-experiment assets and hashes, then re-run
-all gates.
+[`engine/src/nd_model.c`](../../../engine/src/nd_model.c)—or current HEAD as a
+whole—equals tree A. The repository has component snapshots and shortened
+worker fingerprints, but no complete checkout or ordered patch series for any
+of the three measured images. Byte-identical reconstruction from the repository
+alone is therefore unavailable. A reconstructed derivative must start from an
+explicit base, record full hashes, and re-run all gates; see the
+[candidate identity manifest](../appendices/candidate-manifest.md).
 
 ## Final-tree incremental evidence
 
@@ -154,4 +163,6 @@ internal-codebook experiment was merely in flight. Neither changes the accepted
 pin, the best fully evidenced tree, or the owner decision above.
 
 See [experiment ledger](../appendices/experiment-ledger.md) for the raw-run
-index and [reproduction](../appendices/reproduction.md) for commands.
+index, [candidate identity manifest](../appendices/candidate-manifest.md) for
+state provenance, and [reproduction](../appendices/reproduction.md) for
+commands.

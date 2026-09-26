@@ -278,3 +278,31 @@ partial-dispatch win; most rows unsafe is not). Then and only then build the par
 
 **Do not** re-run the staging experiment in any form without re-running its dispatch decision (#897), and
 do not price this from the gates alone: the census is the measurement.
+
+
+## CENSUS RUN (2026-09-26): the dispatch-eligibility hypothesis is REFUTED - every CQ tensor already takes the fast walker
+
+The #898 hypothesis (some hot tensor silently on the generic C walker because its norm scan fails) was
+tested with a host-only census over the real archive, no board time: a small tool reusing the
+dispatcher's own predicates - `nd_lut2_asm_ok` directly, and the body of `nd_gemv4_asm_ok` copied
+verbatim, since that symbol is compiled only when the asm walker is enabled - including the whole-tensor
+fp16 exponent scan (reject if any norm exponent is 0 or 31).
+
+**Result: 245 tensors, 53 of them CQ (46 two-bit + 7 four-bit); all 53 select their asm walker
+(`ASM2` x46, `ASM4` x7); zero tensors rejected; zero tensors carry even one offending norm.** So the
+pin already runs the handwritten walker on every quantised tensor in this archive, and the
+"dispatch eligibility" family is closed - not by argument, by census.
+
+**Two facts worth keeping from it.** (1) The 4-bit gate is *whole-tensor*: one denormal or zero norm
+anywhere in a tensor would silently move that entire tensor to the C walker, and nothing would report it -
+a latent hazard in the archive's provenance rather than a speed lever here, since no tensor trips it. If a
+future archive ever changes, this census is the check to re-run (cheap, host-only). (2) The 2-bit gate is
+memo-keyed on `(blob, rows, ngroup, g)` and the 4-bit one on `(blob, rows)` in a four-entry table, which is
+why #897's staged copy changed walker selection - the same mechanism now measured from the other side.
+
+**Consequence for the campaign:** with dispatch eligibility closed, hand-written bodies all measured
+negative (kron2 scheduling -0.81%, 64-bit QK tile -3.36%, staging -33.9%) and the dominant phases at their
+instruction budgets, no candidate in this window's queue survives. The next hypothesis must change
+something the census and the byte arithmetic have not already covered - realistically a *storage* or
+*archive* premise (which the byte-exact and fidelity gates refuse) or an owner decision (the #647
+disposition, the assertion-level RAM, or a new objective).

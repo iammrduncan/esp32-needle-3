@@ -185,3 +185,31 @@ proposal should be made again - it was never disabled. This is the third item th
 already shipped rather than missing (after the int8 K/V word reads and the answer-side truncation
 report), which is why "prove the code is absent before pricing it" is now the first step of any
 candidate review here.
+
+## VERIFIED IN THE LINKED IMAGE: the Hadamard MLP's inner loops are ~1 madd per product (2026-09-28)
+
+The ledger claims `kron_apply` has no asm headroom at "1.75 instructions per product with
+loop+lsi+madd.s". Checked against the ELF rather than trusted:
+
+| kernel | madd.s | lsi | other | products per iteration |
+|---|---|---|---|---|
+| `kron1_blocks` | **8** | 6 | 8 ssi, 6 addx4, 7 add.n, 6 mov.n, 3 loop, 3 extui | 8 (the eight-accumulator pass) |
+| `kron2_rows` | **17** | 19 | 9 ssi, 12 mov.n, 11 add.n, 4 addx4 | ~16 |
+
+So there is **one fused multiply-add per product** and the rest is addressing, moves and the loop
+itself - between about 0.75 and 1.5 overhead instructions per product, which is where the ledger's 1.75
+came from and which is why the wider variants lost: `kron2` four-across measured -0.30 % and the
+single-walk eight-across -0.18 %, both because a wide row costs four registers and the shipped body
+re-reads 16 floats per j step *on purpose* - that is how it affords eight accumulators.
+
+**Three largest phases, all now accounted for from the image rather than from a summary:**
+* **proj2bit (49.7 %)** - 24 forced ALU ops per 16 weights, 12 cycles at 2-wide issue + ~4 slack = the
+  measured 16, and the only escape costs 4x the bytes.
+* **attention (14.6 %)** - FP contraction is already ON (119 `madd.s` vs 58 `mul.s` / 29 `add.s` in
+  `attn_heads`), so the fused instruction budget is already spent.
+* **hadamard (12.6 %)** - one madd per product with under 1.5 overhead, and the wider forms were
+  measured negative for register pressure.
+
+Together with the earlier per-phase closures (engram at the LUT-GEMV floor, phi delivery-bound and
+unpaid, sinkhorn exp/log-bound, mix swept, transform measured on every axis), that is a complete
+account of where 163 ms goes and why none of it is addressable without changing what is stored.

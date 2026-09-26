@@ -102,3 +102,18 @@ plus `float.s`), which is what the item proposed. **Do not re-derive the +6%.**
 linked image prove the code is absent - one `objdump` scan of the relevant opcode is usually enough,
 and it has now caught two stale entries in one session (this one, and the "13.6 us LUT build" that was
 really ~135.8 us).
+
+## CLOSED by resource arithmetic: concurrent prefix priming / flash-cached prefixes
+
+The other half of this campaign's oldest open item ("iteration speed, not the metric") is the ~5 min
+per flash spent priming the two schema prefixes. Both proposed routes die on resources:
+
+* **Priming both prefixes concurrently:** they are sequential phases of ONE model state (prefix 1 from
+  a reset, then prefix 2 from a reset) - they are not independent work that can be handed to the second
+  core. Running them in parallel would need two model instances, and a second instance costs ~13 MB of
+  PSRAM against the **~517 KB** free after open. Impossible on this part.
+* **Caching a primed prefix in flash:** needs its own partition, and `partitions.csv` is frozen.
+
+So experiment latency stays at ~5 min/flash, and any future throughput work has to come from somewhere
+else (fewer flashes per hypothesis, which the anti-repeat guard and the pre-screen rules already push
+toward).

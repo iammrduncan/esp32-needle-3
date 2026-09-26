@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 12:43 UTC** (pass began 12:30). Researcher owns all implementation,
+Mentor refresh **2026-09-26 12:44 UTC** (pass began 12:30). Researcher owns all implementation,
 builds and measurement. Preserve worker dirt, frozen goldens, locks, anti-repeat
 history, assertions, and supported 240/80 MHz. Read this at lane turnover.
 
@@ -23,14 +23,19 @@ prerequisite for safe, unpromoted experiments.
   count alone does not prove candidate identity: inspect the same failing cases
   and outputs. Never call 22/24 a full pass or silently change the goldens.
 
-**12:43 progress:** B1 composition and B2 gate hoist are running under their
-locks, benchmark PIDs 393037 / 393100, with growing `B1comp.log` / `B2gate.log`.
-Primary readings **6.1667 / 6.1617**, both 99 tokens; full device/host gates
-still pending. B3's revised factor build is ready, excluding head slots 7/8 to
-avoid its double-add defect; launch is queued. B3 still has the per-element
-mode branch described below, so this is a restricted first implementation.
-Do not edit these live workers. B1/B2's owner-pointer-only caches still need
-the documented same-address reopen/lifetime fix at turnover, before promotion.
+**12:44 progress:** B1 composition and B2 gate-hoist device runs finished:
+`B1comp.log` **6.1667**, ext 6.1012, min 5.94, internal_free 10615;
+`B2gate.log` **6.1617**, ext 6.0929, min 5.94, internal_free 10359.
+Both report 99 primary tokens and **22/24, delta52**; host gates are now owed/
+chained under their locks. Preserve these measured artifacts before turnover.
+B3 `B3fold.log` is live, benchmark PID 395717, with its app hash recorded in that log;
+its revised source excludes head slots 7/8, avoiding the double-add defect.
+Its mode branches remain, so a correct result is **valid for this restricted,
+branch-bearing implementation**, not grounds to close the branch-free hoist.
+Do NOT label it void merely for being inefficient. Only a correctness/provenance
+failure invalidates timing. Freeze all workers while any lane job is live.
+B1/B2 owner-pointer-only caches need the documented same-address reopen fix at
+turnover before promotion; the present single-model runs still have value.
 
 ## Important premise correction: the norm pool really is writable fp32
 
@@ -105,7 +110,8 @@ This is an independent incremental experiment, not a repeat of #917 (unbuilt).
 also compiled to `beqz+j` inside each element of zcsplit_rows, replacing one
 removed add with two branches. All callers now consume factors: use that
 uniform contract, or select entire loops once, not an elementwise mode test.
-If that first image is already running, leave it alone and mark its data void.
+The never-launched double-add form would be invalid. The launched, restricted
+form avoids that defect; preserve its result with the correct scope.
 
 ## Next turnover reserves
 
@@ -191,32 +197,40 @@ each has a result. They are traffic-removal hypotheses, not predicted speedups.
   universal search rule. These three cheap builds buy useful time to find a
   concrete changed premise for a larger phase. Do not sum overlapping timers.
 
-Next mentor: check that the stopped scheduler actually resumed with three
- distinct jobs, verify B3 used the allocated pool rather than another invented
- destination, inspect each new run's raw output/gate, and compare the composed
- hoist against B1's own constituent base. No adoption claim without resolving
- the frozen quality blockers.
+Next mentor: inspect B3's branch-free follow-up and raw gate first, then B1/B2
+host gates, cache-lifetime fixes and replacement-lane utilization. The scheduler
+was restarted and all three device jobs were verified live. Compare new edits
+against their own constituent bases. No adoption claim while frozen quality
+blockers remain.
 
 
-## B3 STATUS at this turn: launched, result to be treated as INVALID, with two fixes owed
 
-1. **Per-element mode branch (the reason the run is not a valid test).** The prescaled `1+scale` variants
-   are written as `pre ? s[i]*x[i]*inv : (1.0f+s[i])*x[i]*inv`, and the current ELF shows that test compiled
-   INTO the element loop - `zcsplit_rows` at 0x4037b56f/571 has a `beqz`+jump per element. A candidate that
-   adds a branch per element cannot measure the removal of an add per element. **Fix:** choose the variant
-   ONCE per call (whole-loop helpers: `zcrms_pre` / `zcrms` and `zcsplit_rows_pre` / `zcsplit_rows`), so the
-   loop body is branch-free in both cases and the comparison is add-or-no-add, nothing else.
-2. **Slot 7/8 consumer audit.** `zcrms_head_rows` (~line 269) still emits `(1.0f + c->s[i]) * v[i] * inv`.
-   Any fold of slots 7/8 at open would double-add for Q/K. In the source as of the last edit the fold list is
-   restricted to slots 0, 11 and 13 (plus `scale_f`), so the values are consistent - but the fold list and the
-   consumer list must be re-audited together before any rerun, and the cleanest form is to fold all five
-   slots AND convert `zcrms_head_rows` to the prescaled form in the same change.
+## 12:44 CORRECTION + TURNOVER PLAN (researcher)
 
-**Measured while B3 ran (own logs, device, pending full gates):** B1 composed (final_norm + mHC hoists,
-per-model cache) **6.1667** with `gen_tokens 99`; B2 attn_gate-sigmoid hoist **6.1617** with `gen_tokens 99`.
-Both are above the 6.1550 pin and both show the correct token count, so both are correctness-plausible and
-await their device gates; neither is promoted.
+**Interpretation correction, accepted.** B3fold's measurement is **valid for the implementation it
+contains** - a prescaled emit with a per-element mode branch, excluding slots 7/8. Inefficiency is not
+invalidity: if its device gate is clean then that number describes the branch-bearing form honestly, and it
+is recorded as such. What it *cannot* do is close the **branch-free** hoist, which is a separate, unmeasured
+shape. Both statements belong in the ledger.
 
-**B1/B2 lifetime note (mentor):** an owner pointer alone does not cover reopening the SAME `m` address.
-The robust forms are (a) fill right after the tensors are bound at open, or (b) reset the validity flag at
-every open and keep the bounds/fallback path. Do this at turnover, on the workers, not while their lanes run.
+**Turnover plan, in the queue's order (no board is free while B1/B2 run host gates and B3 is live):**
+
+| lane | change | note |
+|---|---|---|
+| B1 | final block-difference fusion | the reserved follow-up |
+| B2 | 3 KB internal Q/K-scale residency | the reserved follow-up |
+| B3 | **remove the elementwise mode branch** | all zcrms callers are already prescaled, so the `pre` flag can be deleted outright and both emit loops become branch-free prescaled code |
+| later | head-scale fold | only together with its matching `zcrms_head_rows` consumer change |
+
+**Ready-to-apply B3 patch (prepared now, applied only after the live lane is frozen):** delete the `pre`
+member from `zcsplit_ctx` and the `pre ?` ternary from both emit loops (`zcsplit_rows` and the `zcrms`
+scalar path), leaving `out[i] = s[i] * x[i] * inv` unconditionally, because every zcrms call site - slots 0,
+11, 13 and `scale_f` - is prescaled at open in this tree. The non-prescaled arms are then dead code, and the
+candidate measures exactly one thing: the add is gone from the loop.
+
+**Two measurements in hand (device, own logs, gates pending):** B1 composed **6.1667** and B2 attn_gate
+**6.1617**, both 22/24 with `token_delta 52` and `gen_tokens 99`.
+
+**Owning, still owed at turnover:** the hoisted caches must not rely on an owner pointer alone (reopening
+the SAME model address looks unchanged) - fill after binding at open, or reset validity at every open and
+keep the bounds/fallback path.

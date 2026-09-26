@@ -246,3 +246,35 @@ reserve's premise: staged bytes do not get the fast path for free, and the queue
 copy be charged was the right instinct - the real cost is larger than the copy.
 
 Pool state: board 3 reverted and verified hashing `d6b8014fd2fb`; all three boards idle on the pin.
+
+
+## NEW HYPOTHESIS from this window's mechanism finding: the dispatch-eligibility census
+
+#897 showed the walker variant is chosen from operands, not arithmetic (`gemv4_pick(&ctx, blob, rows)`).
+Reading the two gates settles what the choice actually depends on, and it is not alignment:
+
+* **4-bit path** (`gemv4_asm_usable` -> `nd_gemv4_asm_ok`): requires `bits == 4`, `g == 128`, `ngroup > 0`,
+  `rows > 0`, **and then scans every norm of the tensor** - `n = ngroup * rows` entries - returning 0 if any
+  fp16 exponent field is 0 or 31 (zero/denormal or inf/NaN). One such norm anywhere disables the
+  handwritten walker for the **whole tensor**, which silently runs the generic C walker instead. The
+  verdict is memoised by `(blob, rows)` in a 4-entry table.
+* **2-bit path** (`lut2_asm_usable` -> `nd_lut2_asm_ok(c, 0, rows)`): the same shape of decision behind a
+  hash-memo table with `(blob, rows, ngroup, g)` as the key.
+
+**Why this is worth a lane.** The model's dominant phases are the 2-bit walker (proj2bit 79.7 ms) and the
+4-bit phi (~8 ms) plus the engram's 2-bit GEMVs (14.6 ms). If any of those tensors fails its gate - one
+denormal or zero norm is enough - then the fastest measured kernel in the campaign is not running on it,
+and the fix is legitimate and bit-exact: **dispatch the rows whose norms are safe to the asm walker and
+only the offending rows to C**, since both walkers compute the same values for safe norms (the C path is
+the correctness reference for the asm, not a different algorithm). No arithmetic changes, no gate
+weakening, no golden re-baseline.
+
+**Probe design (host only, cheap, decide before any board).** Link a small host tool against the engine
+(the `host/` CMake project already builds `nd_dump` and the tests): enumerate the archive's tensors, and
+for each print `bits, g, ngroup, rows, gate verdict, count of offending norms` by calling the same
+`nd_gemv4_asm_ok` / `nd_lut2_asm_ok` the dispatcher uses. Cross-reference against the phase map to see
+whether a hot tensor is on the C path, and if so how many of its rows are unsafe (one bad row in 768 is a
+partial-dispatch win; most rows unsafe is not). Then and only then build the partial dispatch.
+
+**Do not** re-run the staging experiment in any form without re-running its dispatch decision (#897), and
+do not price this from the gates alone: the census is the measurement.

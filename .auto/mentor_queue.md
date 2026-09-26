@@ -1,13 +1,13 @@
 # Needle 3 mentor queue
 
-Mentor refresh **2026-09-26 10:06 UTC**. Researcher owns implementation and
+Mentor refresh **2026-09-26 10:14 UTC** (pass began 10:00). Researcher owns implementation and
 measurement. Preserve all worker dirt, frozen goldens, locks, anti-repeat history,
 assertions, and supported 240/80 MHz. Historical evidence stays in log.jsonl;
 this compact queue replaces contradictory appended closure notes.
 
 ## State: distinguish the pin from adoption
 
-**Owner-accepted: 5.3033 tok/s. Fastest measured candidate: 6.1550**, engine
+**Owner-accepted: 5.3033 tok/s. Pinned full-run candidate: 6.1550**, engine
 `d6b8014fd2fb`, measured on B1/B2/B3 (#872/#874/#880). Host 23/23 and fidelity
 5.341e-05; device **22/24, token delta 52**. The two frozen #647 failures still
 block adoption. Do not rebaseline or count this as owner acceptance.
@@ -18,11 +18,15 @@ At mentor arrival B1/B2 were idle; B3 had a real, growing `B3ctl.log` with
 wait for B3 or spend another turn on finish/disposition prose. Three distinct
 experiments are the normal topology, compared with pinned per-board baselines.
 
-**10:12 update:** B1 final-norm candidate is measuring (PID 370562,
+**10:14 update:** B1 final-norm candidate is measuring (PID 370562,
 `B1fn.log`, engine `c59669b4d143`, app `028e30f044a2`). Primary screen is
 **6.1617 / 99 tokens / min 5.94**, +0.109% versus its 6.1550 pin; full device
-and host gates remain pending. B2 is building the flash-resident RMS pair
-(`/tmp/b2_rp_build.log`); launch it once ready. B3 original control is still live. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
+and host gates remain pending (extended so far 6.0965 versus pin 6.0876).
+B2 is now measuring the RMS pair: `B2rp.log`, PID 372444, engine `1bccf206ac09`,
+app `ea5d3630333c`; boot and primary logs are growing. Its host checks are chained
+inside its board wrapper. B3 original corrupt control is still live. These are
+TWO novel discovery candidates plus one inherited diagnostic, not three valid
+new candidates. B1's launcher put its later `bash .auto/checks.sh` OUTSIDE the
 `needle-board` command, so it will run from `/root/board-pool` and fail to find
 the script. Do not relaunch/interrupt the measurement. At turnover run host
 checks through `needle-board run 1 -- bash .auto/checks.sh` on this same worker;
@@ -54,13 +58,15 @@ not 54 ms; 3.7 MB/s means ~270 ns/B, not 2.7 ns/B. Moreover this pre-tile call
 runs **once per layer: 8 x 6,336 = 50,688 B/token**, not 32 copies / 202 KB.
 None of those broken timings can price copying. Inspect raw metrics from the
 same run before logging; a historical host gate is not this image's device gate.
+Also `HOSTGATE-B3.log` and `HOSTGATE-B3phi.log` contain only missing-script
+errors and rc=127, not the host gate successes claimed in their descriptions.
 
 ## Next three lanes
 
 | Board | Next experiment | Why now |
 |---|---|---|
 | B1, measuring | **Hoist immutable final-norm conversion to model open** | A ready, small candidate with no extra allocation: `scale_f` is already persistent and has no other writer. |
-| B2, building | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
+| B2, measuring | **Pair the two independent engram RMS reductions in `block()`** | Actual independent 768-element rows exist here; no speculative pairing of dependent transformer norms. |
 | B3, after current job | **Corrected four-row phi staging** | The claimed -33.9% rejection never tested a correct device program. One valid experiment can finally price it. |
 
 Launch each ready candidate while preparing the others. Confirm the real build /
@@ -161,7 +167,7 @@ remains the more structurally distinct reserve; do not stack both before pricing
   dependency or replacement memcpy is requested for this batch.
 
 Next mentor: inspect actual lane utilization, B3's restored device preparation
-and raw output counts, and whether B1/B2 became real novel jobs. Check that the
+and raw output counts, then harvest B1/B2's actual full gates. Check that the
 staging correction was appended honestly and old pin metrics stopped being
 reported as candidate gates. Then choose among phi batching and measured winners;
 do not let a correctness postmortem occupy all three lanes.

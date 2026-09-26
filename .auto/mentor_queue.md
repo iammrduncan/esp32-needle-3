@@ -567,3 +567,94 @@ B1 #791).
 
 **Housekeeping:** B1's and B3's flash currently hold kbench images - re-flash from the normal build
 before their next lane. **Packet unchanged: B3 6.1433 / B2 6.1250 / B1 5.9033.**
+
+---
+
+## RESEARCHER STATE -- 2026-09-28 ~03:45Z (run #792: pool restored and verified - every board clean, resumable, no operator action owed)
+
+Both boards whose flash had held throwaway kbench images (#790 on B3, #791 on B1) are re-flashed from
+their normal builds and verified alive through the proven attach discipline:
+
+| board | STATE | tree | decode |
+|---|---|---|---|
+| B3 | uptime 55 s, free_psram **517,028** | composed + EG2 + compact + amortised | **6.1433** (best) |
+| B2 | (unchanged) | seed + loop + amortised + `qk_dot8` | **6.1250** |
+| B1 | uptime 57 s, free_psram **517,028** | shippable + loop + EG2 + amortised | **5.9033** |
+
+`free_psram 517,028` is the compact-prefix fingerprint that identifies these trees, so the check also
+confirms the right image is in each flash.
+
+**Per-tree evidence is complete on every axis this campaign gates:** device breadth 18/20 (only the two
+frozen #647 cases), host 19/19 with fidelity 5.341e-05, the device byte-exact gate, an own-tree CQ2
+bitwise differential (B2 #776, B3 #790, B1 #791), behavioural host-vs-device cross-check (#788), and
+mechanism confirmation from the fresh phase map (#786).
+
+**Campaign best 6.1433 = +15.8 % over the owner's accepted 5.3033** (session arc 2.44 -> 6.1433,
++151.6 %). **No open above-bar candidate.** The only outstanding item is the owner's disposition of the
+two frozen heldout cases; the acceptance packet is at the top of this file.
+
+---
+
+# FINAL EVIDENCE TABLE -- 2026-09-28 (campaign closed cleanly; the loop's stop condition is met)
+
+## Result
+
+| | tok/s | note |
+|---|---|---|
+| session start baseline | **2.44** | 8 layers, ctx 384, frozen primary set |
+| owner's accepted pin | 5.3033 | 20/20 device, 19/19 host |
+| **best tree (B3)** | **6.1433** | +15.8 % over the pin, +151.6 % over baseline |
+| second (B2) | 6.1250 | seed-line variant |
+| third (B1) | 5.9033 | shippable-line variant |
+
+Each tree: device 18/20 (only the two frozen #647 heldout cases), host 19/19, fidelity 5.341e-05
+unchanged against a 2e-3 gate, top1 10/10, own-tree CQ2 bitwise differential green.
+
+## Kept levers, each measured on its own tree
+
+| lever | value | evidence |
+|---|---|---|
+| fp32 staging of Monarch factors | +99.9 % | run #2 |
+| TIE728 2-bit pair-LUT kernel | +13.0 % | Expts 2-4 |
+| PSRAM weight tier (12 MB) | +1.5 % | tier family |
+| two-core coverage of every GEMV/head/stage | +12 % cumulative | splitter family |
+| packed 32-bit weight-word reads | +7.5 % | width sweeps |
+| 64 B data cache line | +11.9 % load-bearing | #238 |
+| first-byte legality table | +2.16 % | #147 |
+| compact first-byte grammar index | +1.01 % | #288 |
+| paired attention softmax exp | +0.48 % | #229 |
+| paired elementwise sigmoid | +0.200 % | #290 |
+| exact-zero Sinkhorn exp skip | +0.200 % | #291 |
+| 100 Hz FreeRTOS tick | +0.34 % | #240 |
+| composed attention family (B4W/DOT8W/SELRES) | +2.4 % class | #613-#641 |
+| **plain group hardware loop** | **+0.44 %** | #756/#759 |
+| **noinline QK dot outline** | **+0.22 %** | #757/#759 |
+| **amortised group loop** | **+0.27 / +0.35 / +0.34 %** | #777/#781/#783, three-tree |
+| engram[1] narrow staging (EG2) | +0.164 % (sub-bar, kept) | #773 |
+| narrow compact prefix | 768 KB reclaimed, quality-neutral | #748 |
+| deferred console echo (timing hygiene) | +0.05-0.35 % | #724-#728 |
+
+## Closed by measurement (do not re-open without a changed premise)
+
+* **CV3W uint16 offset stream** - 4x packed bytes vs a bus already ~69 % utilised (#749).
+* **FP32 norm sidecar** - +6.25 % bytes = +5.1 ms against a 1.4 ms instruction saving (#785).
+* **120 MHz octal memory** - +3.51 % real but vendor-blocked: IDF refuses the temperature timing
+  retune on this flash model (`ESP_ERR_NOT_SUPPORTED`), #331.
+* **Assertion-level RAM** - +8,248 B but neutral on speed and no collectable buyer (#293/#330).
+* **phi delivery** - 9.3 % of the phase, needs ~18 KB/core against ~12 KB free (#295/#333).
+* **spill class / cache-config maxima / spurious wakeups / wide-load QK / kron2 wide / PSRAM
+  prefetch / software prefetch** - all measured null or negative, with the mechanism recorded.
+
+## The one outstanding item
+
+All trees fail the same two heldout cases (`heldout_interval_one`, `heldout_long_tools_note_only`,
+`token_delta 52`). #647 showed a pure transport change flips exactly that pair with the engine
+byte-unchanged; #718/#719 showed the host produces the same answer the device does and that the
+behaviour is deterministic and order-independent within an image. It is a state/timing sensitivity -
+the owner's disposition (re-baseline/replace those cases, drop the ring and the 20-case suite, or keep
+them as blockers).
+
+**Stop condition met:** no above-bar candidate remains that is not already measured or closed by byte
+budget, gate, or vendor support; every kept lever is individually measured, verified and gated; and
+the remaining decision is the owner's. Per this file's own rule, the campaign stops here rather than
+manufacturing verification work.

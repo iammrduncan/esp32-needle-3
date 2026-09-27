@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-27 01:14 UTC**. Researcher owns implementation/measurement.
+Updated **2026-09-27 01:19 UTC**. Researcher owns implementation/measurement.
 Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
 Best completed candidate **B1p1 6.1933**, versus its B1rope **6.1817** (+0.188%).
 Own log: ext **6.1276**, prefill **6.54**, think **4.73**, gen **99**, heap **8303**;
@@ -11,13 +11,13 @@ are lineage evidence, NOT full correctness or permission to change goldens.
 
 At arrival all boards were idle and pi was at its 200-turn cap. Mentor resumed
 it. Failed patch scripts and fixed 80/95-second sleeps then delayed discovery;
-now two real candidate build/gate chains are live. Prepare B3 during that overlap.
+now ALL THREE have live device bench.py children under their own locks. No interrupts.
 
 | Board | Own baseline / actual state | Immediate action |
 |---|---|---|
-| B1 | B1p1 6.1933, engine `523d8fdb31d0`, app `ffa074e020ee`. Correct cleanup built; linked silu_rows **0x46c vs 0x7e4**, saving 888 B. `B1nofb2` build/host/measure chain live. | Freeze through its chained gates; compare with 6.1933. |
-| B2 | B2p1fix 6.1683, ext 6.1018, heap 8415, host RC=0; engine `fedbef245643`, app `5bf7fcd2c424`. Correct W3 prefix source verified; `B2pre2` build/host/measure chain live. | Freeze through its chained gates; compare with 6.1683. |
-| B3 | B3comp 6.1750, ext 6.1100, heap 10351, host RC=0; engine `5091d6b9d115`. `B3meta` BUILD_FAILED, no live job. P2 multiply and need-sized allocation now landed. | Fix declaration/range/cache conditions below; launch fresh B3meta2. |
+| B1 | `B1nofb2` LIVE primary **6.1933**, neutral vs own B1p1; prefill 6.54. Linked silu_rows **0x46c vs 0x7e4**, saving 888 B. | Freeze through device/host gates; record heap before deciding whether to retain smaller code. |
+| B2 | `B2pre2` LIVE primary **6.1933 vs 6.1683 (+0.405%)**, prefill 6.54. Prefix source readback is correct. | Freeze through device/host gates; this is the strongest new mechanism this pass. |
+| B3 | `B3meta2` LIVE device benchmark, engine `a5aaada00f3b`, app `83a6023e7c4d`; preflash host 23/23, fidelity 5.341e-05. Own baseline B3comp **6.1750** (ext 6.1100, heap 10351). | Freeze; assess metadata, with remaining generic guard debt below for AFTER this run. |
 
 **Why the order changed:** P1 fusion is positive on two lineages, but a larger
 untried opportunity is W3's unused output suffix. Removing that work is simpler
@@ -71,11 +71,16 @@ B1 norm factors are raw `(1+s)`; B3's are prescaled: never transplant full files
 Preserve B3comp (`/tmp/B3comp_nd_model_preserved.c` plus saved header) and drafts.
 The intended experiment keeps BOTH gather loops and removes 16,384 FP32-to-index
 conversions/token. Records 226/227 are genuine FP32[1024] bijections, 0..1023.
-A P1-only draft is not a two-table result. Current remaining repairs:
+A P1-only draft is not a two-table result. Specification and current readback:
 
-01:15 actual build error: fp16_get used before declaration in attn_gate_of.
-Add its matching static float prototype. P2 branch/need-sized allocation landed,
-but range-before-cast, dtype/need/pointer guards and real cache bounds did NOT.
+01:17 B3meta2 compiled: prototype, both P2 branches, need-sized allocation,
+short-circuit range-before-cast, nonnull metadata data pointers, mHC readiness
+clear and exact 8-layer/4-lane cache guard NOW landed. Keep the run frozen.
+Still owed AFTER measurement: actual dtype guards (a comment saying dtype is
+not a condition), need<=65536 BEFORE allocation, mHC raw-pointer/FP16 checks.
+The frozen archive's dtypes/geometry are already verified, so these omissions
+do not invalidate this concrete metadata mechanism test; do not claim generic
+validation complete. No edit or restart of the live worker to finish them.
 
 - P2's actual loop is `hada_a[i] = hada_b[(uint32_t)p2[i]] * d3[i]`.
   Add metadata/fallback branch outside the loop, retaining *d3[i] in BOTH.
@@ -99,6 +104,13 @@ Host-gate finished source BEFORE flash, disclose cache repairs with result.
 Use a unique lane/log; don't overwrite the old meta3 host-only evidence.
 
 ## Next turnover: two strong follow-ups, one substitute
+
+If B2's +0.405% survives its gates, **B1 next takes a single W3-prefix composition
+onto its faster lineage**, preserving its own just-measured source first. Copy
+ONLY the bounded prefix wrapper and switch ONLY fp[23]/[24] call; preserve
+B1's raw norm/RoPE factors. This answers whether the structural gain survives
+composition, rather than repeating an identical image. B2 independently takes
+residual emit below; B3 finishes metadata interpretation before inverse-P2.
 
 **W3 residual producer emit** after pricing prefix scheduling. On winning prefix
 base, a SEPARATE kron2 callback keeps all completed sums then emits

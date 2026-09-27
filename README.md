@@ -1,3 +1,7 @@
+[![Needle 3 autoresearch: from 1.22 to 6.22 tokens per second in 943 logged hardware runs](media/progress/needle-progress.gif)](media/progress/needle-progress.mp4)
+
+[Watch the progress film](media/progress/needle-progress.mp4) · [Open the static field report](media/progress/needle-progress-poster.png) · [See how it was rendered](media/progress/README.md)
+
 # Needle 3: an agent-watch model router on ESP32
 
 **Which model should handle this request?** Needle runs on an ESP32-S3 and routes
@@ -14,6 +18,25 @@ This is a watch-brain proof of concept on an ESP32 development board. The 51-sec
 shows real recorded inference with waits condensed and actual timings displayed.
 The HTTP bridge on the computer orchestrates both passes; both model inferences
 and all local tool handlers execute on the ESP32. No external LLM is called.
+
+## Autoresearch result
+
+Needle 3 moved from a measured **1.2217 decode tok/s** baseline to a fastest
+verified **6.2200 tok/s** on the same class of ESP32-S3 hardware: **5.09× the
+starting throughput**, or about **818 ms → 161 ms per token**. The campaign
+closed after **943 logged hardware runs**.
+
+The largest breakthroughs were open-time FP16→FP32 weight staging (1.22→2.44
+tok/s in one change), dual-core scheduling (3.86), hot-weight placement in
+PSRAM (4.18), hand-written TIE728 SIMD (4.74), the grammar first-byte index
+(4.88), Bundle 5 (5.30), KV staging (5.81), wide lane delivery (5.96), and the
+final QK/W3 composition (6.22).
+
+The 6.22 tree is fully host-gated at 23/23 with the frozen fidelity threshold.
+It remains deliberately unpromoted: two device cases associated with the known
+run-647 transport-sensitive golden issue still report 22/24. The evidence,
+last in-flight results, preserved candidates, and owner decisions are recorded
+in the [shutdown handoff](.auto/SHUTDOWN-HANDOFF.md).
 
 ## Scenarios
 

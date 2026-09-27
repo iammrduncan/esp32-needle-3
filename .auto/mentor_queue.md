@@ -1,6 +1,6 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-27 01:19 UTC**. Researcher owns implementation/measurement.
+Updated **2026-09-27 01:20 UTC**. Researcher owns implementation/measurement.
 Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
 Best completed candidate **B1p1 6.1933**, versus its B1rope **6.1817** (+0.188%).
 Own log: ext **6.1276**, prefill **6.54**, think **4.73**, gen **99**, heap **8303**;
@@ -11,13 +11,13 @@ are lineage evidence, NOT full correctness or permission to change goldens.
 
 At arrival all boards were idle and pi was at its 200-turn cap. Mentor resumed
 it. Failed patch scripts and fixed 80/95-second sleeps then delayed discovery;
-now ALL THREE have live device bench.py children under their own locks. No interrupts.
+all three reached independent device work. B1 now finished; B2/B3 remain live.
 
 | Board | Own baseline / actual state | Immediate action |
 |---|---|---|
-| B1 | `B1nofb2` LIVE primary **6.1933**, neutral vs own B1p1; prefill 6.54. Linked silu_rows **0x46c vs 0x7e4**, saving 888 B. | Freeze through device/host gates; record heap before deciding whether to retain smaller code. |
-| B2 | `B2pre2` LIVE primary **6.1933 vs 6.1683 (+0.405%)**, prefill 6.54. Prefix source readback is correct. | Freeze through device/host gates; this is the strongest new mechanism this pass. |
-| B3 | `B3meta2` LIVE device benchmark, engine `a5aaada00f3b`, app `83a6023e7c4d`; preflash host 23/23, fidelity 5.341e-05. Own baseline B3comp **6.1750** (ext 6.1100, heap 10351). | Freeze; assess metadata, with remaining generic guard debt below for AFTER this run. |
+| B1 | `B1nofb2` DONE **6.1933**, neutral vs B1p1; ext **6.1265**, gen 99, device 22/24 delta52, chained host **RC=0**, heap **9335** (+1032 B). Linked silu_rows **0x46c vs 0x7e4**, 888 B smaller. | Preserve this neutral-speed/smaller-code tree; next composition below once B2 gates finish. |
+| B2 | `B2pre2` LIVE **6.1933 vs 6.1683 (+0.405%)**, ext **6.1253**, prefill 6.54, gen99. Prefix source readback is correct. | Freeze through remaining device/host gates; strongest new mechanism this pass. |
+| B3 | `B3meta2` LIVE **6.1917 vs 6.1750 (+0.270%)**, gen99. Boot **PERM need=1024 ok=1** proves metadata active. Engine `a5aaada00f3b`, app `83a6023e7c4d`; preflash host 23/23, fidelity 5.341e-05. | Freeze through remaining gates; generic guard debt below is for AFTER this run. |
 
 **Why the order changed:** P1 fusion is positive on two lineages, but a larger
 untried opportunity is W3's unused output suffix. Removing that work is simpler

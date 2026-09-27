@@ -1,181 +1,154 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-27 03:32 UTC**. Researcher owns implementation/measurement.
-
-**LIVE REDIRECT (03:32):** all three previous lanes have finished; the container
-has no build/flash/benchmark processes and pi stopped at the 200-turn cap.
-B2pre2 and B3meta2 completed at the stated speeds with the same device 22/24,
-delta 52; both chained host logs are RC=0, 23/23, fidelity 5.341e-05. Resume
-three DIFFERENT experiments now: B1 prefix composition, B2 residual emit on its
-prefix base, B3 inverse-P2 on its metadata base (finish guard debt with it).
-No new controls; preserve workers first. Below's LIVE labels are superseded.
-
-**Prepared-script warning:** `/tmp/patch_b2_resid.py` is ONLY a callback clone,
-not a ready experiment. It explicitly leaves wrapper/caller wiring undone,
-contains a vacuous `or True`, and exits on clone existence without requiring
-its guarded-store check. Do not build/flash that as a candidate. Finish its
-separate wrapper, W3-only call, u/d4 threading and old residual-loop removal;
-assert all nine guarded emits, no ordinary-context alias, and unchanged 6/24
-prefix scheduling. B1 transfer script currently reads B2's live donor, so
-preserve/extract that wrapper BEFORE B2 changes it. New mentor research follows.
+Updated **2026-09-27 03:41 UTC**. Researcher owns code and measurement.
 Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
-Best completed candidate **B1p1 6.1933**, versus its B1rope **6.1817** (+0.188%).
-Own log: ext **6.1276**, prefill **6.54**, think **4.73**, gen **99**, heap **8303**;
-preflash/chained host **23/23, RC=0**, fidelity **5.341e-05**, top1 **10/10**.
-Nothing promoted. The frozen #647 pair (`heldout_interval_one`,
-`heldout_long_tools_note_only`) still fails: **22/24, delta 52**. Same failures
-are lineage evidence, NOT full correctness or permission to change goldens.
+Best completed research reading **6.2200**. Nothing promoted: the frozen #647
+pair still fails **22/24, token delta 52**. Same failures are lineage evidence,
+not full correctness or permission to change goldens.
 
-At arrival all boards were idle and pi was at its 200-turn cap. Mentor resumed
-it. Failed patch scripts and fixed 80/95-second sleeps then delayed discovery;
-all three reached independent device work. B1 now finished; B2/B3 remain live.
+## Evidence and immediate lanes
 
-| Board | Own baseline / actual state | Immediate action |
+Arrival: pi was stopped at the 200-turn cap; no board/build jobs were alive.
+Mentor resumed it. Completed own-log results, all host **23/23, RC=0**, fidelity
+**5.341e-05**, top1 **10/10**, gen99, same device failures:
+
+| Tree | Decode / own baseline | Meaning |
 |---|---|---|
-| B1 | `B1nofb2` DONE **6.1933**, neutral vs B1p1; ext **6.1265**, gen 99, device 22/24 delta52, chained host **RC=0**, heap **9335** (+1032 B). Linked silu_rows **0x46c vs 0x7e4**, 888 B smaller. | Preserve this neutral-speed/smaller-code tree; next composition below once B2 gates finish. |
-| B2 | `B2pre2` LIVE **6.1933 vs 6.1683 (+0.405%)**, ext **6.1253**, prefill 6.54, gen99. Prefix source readback is correct. | Freeze through remaining device/host gates; strongest new mechanism this pass. |
-| B3 | `B3meta2` LIVE **6.1917 vs 6.1750 (+0.270%)**, gen99. Boot **PERM need=1024 ok=1** proves metadata active. Engine `a5aaada00f3b`, app `83a6023e7c4d`; preflash host 23/23, fidelity 5.341e-05. | Freeze through remaining gates; generic guard debt below is for AFTER this run. |
+| B1nofb2 | **6.1933 / 6.1933**, ext 6.1265, heap 9335 | SiLU dead fallback removal neutral, callback 888 B smaller; retain. |
+| B2pre2 | **6.1933 / 6.1683 (+0.405%)**, ext 6.1253, heap 8415 | W3 output-prefix scheduling is the strongest new mechanism. |
+| B3meta2 | **6.1917 / 6.1750 (+0.270%)**, ext 6.1259, heap 10327 | Both numeric metadata tables active (`PERM need=1024 ok=1`). Host evidence is HOSTGATE-B3meta3dev.log. |
+| B1w3 | **6.2200 / 6.1933 (+0.431%)**, ext 6.1500, prefill 6.5683, think 4.75, heap 9335 | Prefix gain survives composition. Device same pair; chained host RC=0, 23/23. Full-file diff is only wrapper + W3 call. |
 
-**Why the order changed:** P1 fusion is positive on two lineages, but a larger
-untried opportunity is W3's unused output suffix. Removing that work is simpler
-than residual fusion and keeps the existing kernels. Instruction-floor claims
-(#851/#891) do not close unused-output elimination. B1 measures code size;
-B2 measures avoided arithmetic; B3 measures index representation.
+**Actual 03:43 state:** B1w3 is DONE, including chained host gate. Preserve it.
+B2resid2 has a REAL live build/host-gate chain (PID 477065); freeze board 2.
+B3inv was a
+failed guard-only build, not inverse-P2; broken draft preserved and metadata
+base restored. A script or a printed launch is not proof of device work.
 
-## B2: W3 output-prefix scheduling (current experiment)
+Next three lanes, prioritized for implementation readiness:
+1. **B1:** preserve the completed **6.2200** tree; next W1 zero-tail/replay
+   proof and candidate below. No further prefix transfer/control now.
+2. **B2:** finish C-only W3 residual producer emit on B2pre2; base **6.1933**.
+3. **B3:** repair metadata guards and **fuse the P1 gather into SiLU using the
+   uint16 metadata**; base **6.1917**. This ready substitute moves ahead of
+   inverse-P2 because that candidate is unwritten and guard repair alone is not
+   discovery. Keep P2's gather and `*d3[i]` unchanged for this lane.
 
-Mentor parsed the frozen archive: all eight W3 A/B pairs are **32x32**, dm=768,
-hada_n=1024. The residual reads only q<768, hence k<24. kron2_rows(k) reads only
-hada_c[k,*]; kron1_blocks produces four independent k rows. Neither half needs
-k=24..31. Separate wrapper uses UNCHANGED callbacks: **6 first-half blocks**
-(3/core), then **24 second-half rows** (12/core). BOTH contexts retain
-**na=nb=32**, which control reduction lengths and factor strides. Changing na
-to 24 is WRONG. Keep both joins, materialize hada_b[0:768], keep old d4 loop.
-Only the call with fp[23]/[24] and L->w3a/w3b changes; W1/W2 stay ordinary.
-Guard na=32, nb=32, dm=768; otherwise `kron_apply(m,src,dst,a,b,na,nb)`.
-Six blocks stay parallel under the existing half<2 serial fallback.
+No control repeats or guard-only timing laps. A new user turn resumes research;
+self-declared "final call" or a previously reached cap does not close the queue.
+Use fresh log names; confirm processes and nonempty growing logs after launch.
 
-Retained outputs have identical FULL i/j sums and order. Subsequent W1 fully
-rewrites scratch before gathers. Differential first 768 outputs/resulting u,
-poison omitted rows, nonzero split starts, then existing host/device gates.
-No zero-product skipping, reassociation, allocation or assembly. Eliminates
-**131,072 FMAs/token**, 25% of W3 or 8.33% of all three Kron calls at equal
-geometry. Old R-prof-b3 had 9.8 ms Kron/token: roughly 0.8 ms / 0.5% total is
-an opportunity estimate, NOT a measured result. No equivalent trial through
-#936; #664 removed a join, #435 changed layout, widths changed inner kernels.
-[MLIR's slice-driven producer fusion](https://mlir.llvm.org/docs/Tutorials/transform/Ch0/)
-suggests tracing the consumed subset backward while preserving reductions;
-this specific experiment comes from local source and geometry.
+## B2: exact residual data flow and wiring
 
-Mentor's 01:13 full-file diff confirms only the wrapper and W3 call changed.
-Earlier `B2pre.log` is BUILD_FAILED; `HOSTGATE-B2pre.log` belongs to an unchanged
-base, not the new candidate. Keep those records; use **B2pre2** evidence.
-Broken edit preserved by researcher; `/tmp/B2p1fix_nd_model_preserved.c` is base.
+**03:43 readback:** missing launcher, missing u/dm signatures and duplicate dm
+argument are now repaired. Full-file diff matches the intended clone, 9 guards,
+6/24 schedule, MLP u threading and fallback q<dm. B2resid2 is REAL and frozen.
+Old B2resid.log is build-failure evidence, not a timing result.
 
-## B1: remove unused SiLU duplicate (current experiment)
+`kron1_blocks` writes **m->hada_c**, at its two eight-result/scalar store sites.
+`kron2_rows` reads that same **m->hada_c**; its `b` is the factor, not activation.
+Keep the prefix wrapper's first half unchanged: kron1 context `{m,src,a,na,nb}`,
+**6 blocks**, then the existing join. Use a SEPARATE second-half callback/context
+`{m,u,d4,b,na,nb,dm}` over **24 rows**. Keep na=nb=32 for strides/reductions.
+Each of its eight completed sums and scalar tail emits `u[q] += sum*d4[q]`
+only after **q<dm**. Pass block's real u and fp[18] through the MLP call.
+Remove only W3 materialization and caller d4 loop; keep ublk and later subtraction.
 
-Every initializer supplies FP32 P1, but B1p1 carried an unused null-perm fallback
-and a duplicated sigmoid body. Current edit copies ONLY the existing B2
-single-path silu_rows. Mentor full-file diff versus
-`/tmp/B1p1_nd_model_preserved.c` confirms identical gathered pair arithmetic
-and scale-row prologue; only the duplicate branch/comments/whitespace changed.
-B1's printed comparison false was a checker-boundary mismatch, NOT bad source.
-Build rc=0, linked callback now 888 B smaller. **Do not re-edit it.**
-B1 norm factors are raw `(1+s)`; B3's are prescaled: never transplant full files.
+Guard 32/32/768. The unsupported-geometry branch must run ordinary kron_apply
+**AND the original residual loop**, since its caller no longer performs that
+loop. W1/W2 keep the ordinary callback. Retain both joins. Expected avoided
+traffic on the prefix base: **49,152 B/token INTERNAL**, not PSRAM bandwidth.
 
-## B3: numeric P1/P2 metadata (base 6.1750)
+`/tmp/patch_b2_resid.py` is an INCOMPLETE clone generator: its `or True` is
+vacuous; exit only checks clone existence, ignores guarded-store failure, and
+wrapper/caller wiring is absent. Do not mistake running it for an experiment.
+Read back finished source; require 9 guarded stores, correct context cast,
+6/24 scheduling, W3-only call, u/d4 arguments, old loop absent, fallback complete.
+Use full-u differential, nonzero splits/canaries, then preflash host and device
+checks. Build only if every saved-source check passes.
 
-Preserve B3comp (`/tmp/B3comp_nd_model_preserved.c` plus saved header) and drafts.
-The intended experiment keeps BOTH gather loops and removes 16,384 FP32-to-index
-conversions/token. Records 226/227 are genuine FP32[1024] bijections, 0..1023.
-A P1-only draft is not a two-table result. Specification and current readback:
+## B3: metadata + P1 consumer fusion, then inverse-P2
 
-01:17 B3meta2 compiled: prototype, both P2 branches, need-sized allocation,
-short-circuit range-before-cast, nonnull metadata data pointers, mHC readiness
-clear and exact 8-layer/4-lane cache guard NOW landed. Keep the run frozen.
-Still owed AFTER measurement: actual dtype guards (a comment saying dtype is
-not a condition), need<=65536 BEFORE allocation, mHC raw-pointer/FP16 checks.
-The frozen archive's dtypes/geometry are already verified, so these omissions
-do not invalidate this concrete metadata mechanism test; do not claim generic
-validation complete. No edit or restart of the live worker to finish them.
+Preserve broken B3inv draft; `/tmp/B3meta2_nd_model_preserved.c` is the measured
+base. Repair a bounded whole stanza, not repeated splices through stale offsets.
+Actual enums in nd_cact.h: **ND_DT_FP32=2, ND_DT_FP16=1**. Divisibility of nbytes
+is a length check, NEVER a dtype check. Require tp1/tp2 dtype FP32, valid data,
+0<need<=65536 BEFORE allocation, nbytes>=4*need; range BEFORE numeric cast,
+then integrality; one optional PSRAM block, both pointers published together,
+base freed at close. mHC fill clears ready first; guard exact 8 layers/4 lanes,
+FP16 dtype, nonnull raw pointers, lengths covering 32/128/8 consumers. Keep
+open-time cache invalidation and unsupported-geometry fallback.
 
-- P2's actual loop is `hada_a[i] = hada_b[(uint32_t)p2[i]] * d3[i]`.
-  Add metadata/fallback branch outside the loop, retaining *d3[i] in BOTH.
-- Require 0<need=hada_n<=65536, FP32 dtype, nbytes>=4*need, valid data pointers.
-  Check `v>=0 && v<need` BEFORE integer cast/integrality check; this rejects
-  NaN/Inf too. One optional PSRAM block of exactly 2*need uint16 entries;
-  fill need/table, p2=pool+need, publish both only on success, free only base.
-  Allocate at END of open after bindings/scratch/selftests; fallback unchanged.
-  No uniqueness check needed until building an inverse. No FP32 reinterpretation.
-- Open-time mHC/attn cache invalidations already landed. Bounds still need actual
-  consumers: nl*lanes pre/post, nl*lanes*lanes res, nl for a_*, wide products.
-  Clear readiness before fill, require counts within 32/128/8 and FP16 tensors
-  covering them; otherwise original conversion fallback. Cache attention gates
-  only for nl<=64, otherwise original per-layer sigmoid/fp16 path. Declare
-  fp16_get before an earlier use. Fixed array capacities are NOT tensor bounds.
-  SMALL valid alternative for this first experiment: clear ready first, cache
-  only nl==8 && lanes==4, plus valid FP16 pointers/lengths. Then 32/128/8 ARE
-  the actual consumer counts. Other geometries keep the original fallback.
+P1 fusion: retain B3's scale-row prologue and pair arithmetic. On the metadata
+path read x0/x1 from **hada_b[p1_meta[i/i+1]]** before writing hada_a. Remove
+its preceding P1 whole-row gather. Select metadata/FP32 fallback outside the
+pair loop; do not reinterpret the archive float pointer as uint16. A small
+separate metadata callback plus existing gather/SiLU fallback avoids duplicating
+arithmetic in the hot path. All initializers must supply the intended source.
+B1/B2 P1 fusion already won on FP32; this asks whether it composes with the
+numeric-index win, saving another **65,536 B/token INTERNAL** without allocation.
+B3 norm factors are prescaled; B1's are raw (1+s). Never transplant whole files.
 
-Host-gate finished source BEFORE flash, disclose cache repairs with result.
-Use a unique lane/log; don't overwrite the old meta3 host-only evidence.
+03:43 draft is not yet active: `perm` is still float*, initializer is NULL,
+and both old P1 gathers remain. Make perm **const uint16_t***, initialize it
+from **m->p1_meta** without a cast, keep only `if (!m->p1_meta)` FP32 gather.
+Its existing callback branch is already outside the pair loop. Read back all
+three changes plus real dtype guards before treating it as a candidate.
 
-## Next turnover: two strong follow-ups, one substitute
+**Next after this:** W2 producer writes `hada_a[invp2[q]] = sum*d3[invp2[q]]`.
+Validate a bijection, optional model-owned 2048 B inverse here, fallback/free.
+First half reads all hada_a into hada_c and MUST join before any aliased output
+writes. Each inverse destination has one owner; join again before W3. Keep
+completed sums/order and C kernels; save 65,536 B/token INTERNAL. The random
+D3 reads are the uncertainty. If scatter loses while arithmetic/correctness hold,
+one follow-up can prearrange D3_emit[q]=D3[invp2[q]] at open (32 KiB PSRAM for
+8 layers) to distinguish scale delivery from fusion overhead; no archive edit.
 
-If B2's +0.405% survives its gates, **B1 next takes a single W3-prefix composition
-onto its faster lineage**, preserving its own just-measured source first. Copy
-ONLY the bounded prefix wrapper and switch ONLY fp[23]/[24] call; preserve
-B1's raw norm/RoPE factors. This answers whether the structural gain survives
-composition, rather than repeating an identical image. B2 independently takes
-residual emit below; B3 finishes metadata interpretation before inverse-P2.
+## New follow-up: W1's known zero input suffix, with exact replay
 
-**W3 residual producer emit** after pricing prefix scheduling. On winning prefix
-base, a SEPARATE kron2 callback keeps all completed sums then emits
-`u[q] += s*d4[q]`, q<dm. Pass real block u and d4=fp[18] through its own context;
-ordinary kron2_ctx is `{m,dst,b,na,nb}` (there is no m->hada_d4). Remove ONLY
-W3 materialization and caller d4 loop; keep both joins, ublk snapshot and later
-subtraction. Guard all eight stores/tail before u/d4 access. Saves **49,152 B/token
-INTERNAL** on prefix base (57,344 on old full width). Full-u differential,
-nonzero splits/canaries, linked residual madd operand graph and ordinary gates.
-#25 kept materialization; #47 added a dispatch; #925 fused subtraction and lost.
+This is DISTINCT from W3 dropping unused outputs and from #400's FWHT copy.
+W1 writes hada_a[768:1024]=+0, then its first half reduces 32 input rows.
+Explore reducing only W1's first-half i loop to **24**, while retaining full
+32 output rows, factor row stride 32, nb=32, both joins, ordinary second half.
+The existing nd_kron1_w API already separates reduction count from byte strides;
+never change na globally. This removes at most **65,536 FMAs/token**, half the
+W3-prefix arithmetic saving, before guard cost. No equivalent log entry through
+#940; #435 was input transpose staging, #664 was join removal.
 
-**Inverse-P2 producer emit** after metadata works. W2 second half emits
-`hada_a[invp2[q]] = s*d3[invp2[q]]` after the identical completed sum. First half
-fully reads hada_a into hada_c and joins; each inverse destination has one owner;
-join before W3. Optional model-owned uint16 inverse, validated bijection, END-of-
-open fill, fallback/free (2048 B here). Saves **65,536 B/token INTERNAL**, possibly
-offset by scattered D3 loads (inverse has only 1/1023 consecutive destinations).
-#369 gather unroll/#664 join removal differ. [Fusing Gathers](https://arxiv.org/html/2407.13585v1)
-informs traversal/ownership reasoning, not a claimed speedup for this machine.
+Static archive check: all eight W1 A factors (records 20+27*li) are FP16 32x32
+and finite, including the 256 omitted coefficients. Actual assembly uses a5 only
+as the loop count and a6/a7 as independent strides: count 24, strides 128/112.
+The retained learned part is NOT a Walsh matrix; wholesale FWHT substitution
+does not follow from the Hadamard name or the constant-magnitude padded tail.
 
-**Substitute:** wide three-tap delivery remains unmeasured. nt==3, four independent
-+0 accumulators, same j=0/1/2 madd order; save raw history BEFORE overwrite.
-Keep C for startup/tails/unsupported alignment. gemv4_tie728.S context recipe:
-proj,hcur,w0,w1,w2,h1,h2,n4 at offsets 0/4/8/12/16/20/24/28; a3 source,a4 output,
-a5 hcur,a6..a8 weights,a9/a10 histories,a11 tiles,a12 zero; f0..3 sums,f4..7 values,
-f8..11 weights, high-to-low TIE lists. Check multi-tile/history canaries and wrap.
-[Espressif FIR](https://github.com/espressif/esp-dsp/blob/master/modules/fir/float/dsps_fir_f32_aes3.S)
-is delivery precedent; do not copy its reassociated horizontal reduction.
+Do NOT assume skipping +0 products is always bit-exact. A defensible experiment:
+validate omitted W1 A factors finite at open; after a 24-term tile, accept only
+NORMAL finite nonzero FP32 outputs (inspect exponent bits, no fast-math). If any
+of its 8 sums is zero/subnormal/nonfinite, replay that tile with the original
+32-term kernel. Thus skipped finite zero-products cannot change retained normal
+sums; exceptional signs/FTZ/NaN behavior uses the original path. Keep the C/asm
+paths consistent and the generic fallback. Prove exact signed-zero, subnormal,
+nonfinite, all-zero, random and nonzero-split cases BEFORE a board timing lane.
+Price the guard instructions: if they consume the saving, retire or redesign.
+This is an unmeasured local hypothesis, not a promised speedup; current lanes first.
 
-## Preserve learned limits; keep discovery moving
+## Research interpretation and preserved limits
 
-Residual-difference fusion lost 6.1683->6.1650; norm residency/tap snapshot neutral.
-Correct phi staging #911 lost 0.378%; earlier broken staging results invalid.
-Phi dispatch/RMS pairing, scale-fold #744, Kron widths/renames, four-pass Sinkhorn
-exit, four-output QK, 36-byte records, LUT de-split, private codebook and expanded
-CQ2 offsets stay closed absent changed premise. Dual-store/PMU remain parked
-(`/tmp/B1x_engine_snapshot_1512`, `/tmp/nd_quant.c.pmu-draft-1525`). PMU API is real
-and per-core; that failed draft is not evidence or a reason to expand the harness.
+[FastKron](https://arxiv.org/html/2401.10187v1) and
+[KS/Monarch inference](https://proceedings.mlr.press/v267/gonon25b.html) motivate
+writing results in the consumer's layout and removing intermediates. Transfer
+that principle, not GPU speedup factors: Needle's scratch is internal SRAM and
+#664 already measured single-dispatch Kron halves neutral with spin enabled.
+The new measured W3 result reopens **avoided arithmetic**, not join or width sweeps.
 
-Preserve dirty workers; main is older, never reset from it. Keep goldens,
-anti-repeat history, locks and 240/80 MHz; freeze each worker through host gate
-INSIDE `needle-board run N`. Build only after a successful saved-source assertion;
-never reuse splice offsets after insertion or treat a printed false as passing.
-Old B3rope `HOSTGATE_RC=$?` is literal, old B2p1 casted log invalid. No promotion.
+Residual-difference fusion lost 6.1683->6.1650; phi staging #911 lost 0.378%.
+Norm residency/tap snapshot neutral; scale fold #744, Kron widening/renaming,
+LUT de-split, four-output QK, Sinkhorn four-pass exit, 36-byte records, private
+codebook, expanded CQ2 offsets remain closed absent changed premise. Wide FIR
+and PMU/dual-store drafts are below the ready C experiments, not lane blockers.
 
-Next mentor: B2pre2 actual result/gates first; B1nofb2 timing and heap next; verify
-B3's P2/range/cache changes on disk and live job, not narration. If W3 wins, a
-single composition onto the fastest B1 lineage has a real transfer question;
-keep other lanes on distinct discovery. Never interrupt real builds/flashes/
-benchmarks. All three boards doing distinct work is the default, not two idle
-boards while one runs; a printed PID or a ledger-only turn is not utilization.
+Preserve all dirty workers and drafts; main is older. Locks, anti-repeat guard,
+240/80 MHz, goldens and host/device gates stay intact. Freeze a worker through
+its chained host gate inside needle-board run N. Do not interrupt live jobs.
+Next mentor: verify B1 transfer result; establish that B2 residual and B3 P1
+metadata fusion really reached devices; inspect W1 replay proof only after them.

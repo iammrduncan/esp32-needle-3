@@ -1,6 +1,23 @@
 # Needle 3 mentor queue
 
-Updated **2026-09-27 01:20 UTC**. Researcher owns implementation/measurement.
+Updated **2026-09-27 03:32 UTC**. Researcher owns implementation/measurement.
+
+**LIVE REDIRECT (03:32):** all three previous lanes have finished; the container
+has no build/flash/benchmark processes and pi stopped at the 200-turn cap.
+B2pre2 and B3meta2 completed at the stated speeds with the same device 22/24,
+delta 52; both chained host logs are RC=0, 23/23, fidelity 5.341e-05. Resume
+three DIFFERENT experiments now: B1 prefix composition, B2 residual emit on its
+prefix base, B3 inverse-P2 on its metadata base (finish guard debt with it).
+No new controls; preserve workers first. Below's LIVE labels are superseded.
+
+**Prepared-script warning:** `/tmp/patch_b2_resid.py` is ONLY a callback clone,
+not a ready experiment. It explicitly leaves wrapper/caller wiring undone,
+contains a vacuous `or True`, and exits on clone existence without requiring
+its guarded-store check. Do not build/flash that as a candidate. Finish its
+separate wrapper, W3-only call, u/d4 threading and old residual-loop removal;
+assert all nine guarded emits, no ordinary-context alias, and unchanged 6/24
+prefix scheduling. B1 transfer script currently reads B2's live donor, so
+preserve/extract that wrapper BEFORE B2 changes it. New mentor research follows.
 Owner accepted **5.3033 tok/s**; research pin **6.1550**, engine `d6b8014fd2fb`.
 Best completed candidate **B1p1 6.1933**, versus its B1rope **6.1817** (+0.188%).
 Own log: ext **6.1276**, prefill **6.54**, think **4.73**, gen **99**, heap **8303**;

@@ -1,6 +1,6 @@
-[![Needle 3 autoresearch: from 1.22 to 6.22 tokens per second in 943 logged hardware runs](media/progress/needle-progress.gif)](media/progress/needle-progress.mp4)
+[![Needle 3 progress poster: 1.22 to 6.22 tokens per second across 943 logged hardware runs](media/progress/needle-progress-poster.png)](media/progress/needle-progress.mp4)
 
-[Watch the progress film](media/progress/needle-progress.mp4) · [Open the static field report](media/progress/needle-progress-poster.png) · [See how it was rendered](media/progress/README.md)
+[Watch the progress film](media/progress/needle-progress.mp4) · [View the animated GIF](media/progress/needle-progress.gif) · [See how it was rendered](media/progress/README.md)
 
 # Needle 3: an agent-watch model router on ESP32
 

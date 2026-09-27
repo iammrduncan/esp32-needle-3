@@ -67,6 +67,15 @@ Read back finished source; require 9 guarded stores, correct context cast,
 Use full-u differential, nonzero splits/canaries, then preflash host and device
 checks. Build only if every saved-source check passes.
 
+**03:46 live timing 6.1900 vs 6.1933, gates pending.** Do not mutate this run.
+Linked residual callback is 0x29c vs ordinary 0x1b8, with per-output unsigned
+bounds branches still emitted. If final result is flat/down, one bounded
+follow-up is warranted: a W3-only 32-column callback with k restricted to 0..23
+before the row body, allowing its eight stores without per-store checks.
+Keep the ordinary guarded fallback and prove q<768 for every reachable store;
+do not simply erase checks from the generic callback. This separates guard/
+address overhead from the value of removing materialization; no width sweep.
+
 ## B3: metadata + P1 consumer fusion, then inverse-P2
 
 Preserve broken B3inv draft; `/tmp/B3meta2_nd_model_preserved.c` is the measured

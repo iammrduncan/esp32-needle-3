@@ -16,3 +16,6 @@ benchmarks/results/2026-09-27-matrix-v1/
 benchmarks/results/2026-09-27-matrix-v2/
 .DS_Store
 
+.ie-mode
+.ie-home/
+benchmarks/assets/

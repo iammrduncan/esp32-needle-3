@@ -21,10 +21,10 @@ and all local tool handlers execute on the ESP32. No external LLM is called.
 
 ## Autoresearch result
 
-Needle 3 moved from a measured **1.2217 decode tok/s** baseline to a fastest
-verified **6.2200 tok/s** on the same class of ESP32-S3 hardware: **5.09× the
-starting throughput**, or about **818 ms → 161 ms per token**. The campaign
-closed after **943 logged hardware runs**.
+The full eight-layer Needle 3 moved from a measured **1.2217 decode tok/s**
+baseline to a fastest verified **6.2200 tok/s** on the same class of ESP32-S3
+hardware: **5.09× the starting throughput**, or about **818 ms → 161 ms per token**.
+The campaign closed after **943 logged hardware runs**.
 
 The largest breakthroughs were open-time FP16→FP32 weight staging (1.22→2.44
 tok/s in one change), dual-core scheduling (3.86), hot-weight placement in
@@ -37,6 +37,36 @@ It remains deliberately unpromoted: two device cases associated with the known
 run-647 transport-sensitive golden issue still report 22/24. The evidence,
 last in-flight results, preserved candidates, and owner decisions are recorded
 in the [shutdown handoff](.auto/SHUTDOWN-HANDOFF.md).
+
+## Three-board layer benchmark
+
+![Needle 3 layer matrix poster: layers 1–8 with decode tokens per second, exact calls, a downward accuracy arrow and an upward speed arrow](media/benchmarks/needle3-layer-matrix-poster.png)
+
+On a matched 12-request tool-routing workload on the same board, the historical
+eight-layer image measured **1.2142 decode tok/s** and the optimized eight-layer
+matrix image measured **6.1492 tok/s** (**5.06×**). Both made the same 11/12
+exact calls and produced byte-identical raw outputs on all 12 requests. The
+optimized image was then held fixed across depths 2–8 on three identical
+ESP32-S3 boards; the eight-layer matrix repeat measured 6.1508 tok/s:
+
+| Firmware / layers | Decode tok/s | Prefill tok/s | Successful | Exact calls |
+| --- | ---: | ---: | ---: | ---: |
+| Historical / 8 | 1.214 | 1.247 | 12/12 | 11/12 |
+| Optimized / 1 diagnostic | 9.755† | 55.577† | 0/12 | 0/12 |
+| Optimized / 2 | 20.313 | 23.427 | 12/12 | 4/12 |
+| Optimized / 3 | 14.972 | 16.658 | 12/12 | 3/12 |
+| Optimized / 4 | 11.704 | 12.927 | 12/12 | 9/12 |
+| Optimized / 5 | 9.717 | 10.558 | 12/12 | 9/12 |
+| Optimized / 6 | 8.293 | 8.923 | 12/12 | 9/12 |
+| Optimized / 7 | 6.908 | 7.342 | 12/12 | 8/12 |
+| Optimized / 8 | 6.151 | 6.513 | 12/12 | 11/12 |
+
+† The one-layer slice needed a separate zero-site allocation image and every
+response truncated, so its rates are not usable throughput. Eight layers was
+the deepest device-verified rung: depth 9 flashed but could not be mapped into
+the ESP32-S3's MMU space. The [full benchmark report](docs/benchmarks.md)
+includes raw results, host logit drift, memory headroom and limitations; the
+[rerunnable package](benchmarks/README.md) pins images, models and tasks.
 
 ## Scenarios
 

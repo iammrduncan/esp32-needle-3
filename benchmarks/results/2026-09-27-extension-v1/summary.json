@@ -1,0 +1,27 @@
+[
+  {
+    "board": "3",
+    "cases": 0,
+    "decode_ms_mean": null,
+    "decode_timed_cases": 0,
+    "decode_tokens_sum": 0,
+    "decode_tps_mean": null,
+    "decode_tps_pooled": null,
+    "depth": 9,
+    "exact_calls": 0,
+    "free_internal_bytes": null,
+    "free_psram_bytes": null,
+    "image_sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6",
+    "job": "current9",
+    "latency_ms_mean": null,
+    "model_bytes": 16734228,
+    "prefill_ms_mean": null,
+    "prefill_timed_cases": 0,
+    "prefill_tps_mean": null,
+    "retried": 0,
+    "run_id": "2026-09-27-extension-v1",
+    "scored_cases": 0,
+    "status": "failed",
+    "success": 0
+  }
+]

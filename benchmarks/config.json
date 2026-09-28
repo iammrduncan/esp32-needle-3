@@ -1,0 +1,27 @@
+{
+  "name": "needle3-esp32-layer-matrix-v1",
+  "source": {
+    "path": "model/needle3-full.cact",
+    "sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+    "revision": "Cactus-Compute/needle3@9da75122d4ca11aa4a667281c9c8ba38a7eed679"
+  },
+  "reference_model_sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16",
+  "context": 384,
+  "flash": {"python": "/opt/esp/python_env/idf5.5_py3.12_env/bin/python", "bootloader_offset": "0x0", "partition_offset": "0x8000", "app_offset": "0x10000", "model_offset": "0x210000", "model_partition_bytes": 31391744, "baud": 921600},
+  "partition": {"path": "benchmarks/assets/partition-table.bin", "sha256": "461ee5cbe1696f0c7ea00ef4a8b4e79bba1ab8cef8b77a58b77d7fc252c13592"},
+  "images": {
+    "baseline": {"path": "benchmarks/assets/needle-baseline.bin", "sha256": "a6d1fc64b9b02b8ca8455b7726af0494104a8f40f8bf748769010c3f391e520d", "bootloader": "benchmarks/assets/bootloader-baseline.bin", "bootloader_sha256": "f36af2accd415a297bfedf1f9166a830ed4dd7c5b1d13223b0a2b68327e5469e", "source_commit": "3dcd1de6eb3e610908b7d04431399fe40c574417"},
+    "current": {"path": "benchmarks/assets/needle-matrix.bin", "sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6", "bootloader": "benchmarks/assets/bootloader-current.bin", "bootloader_sha256": "0a5c851247def1550d8707f5dab17bd043293dd47c18da3bb7a9801877bba01d", "source": "B1w3 with archive-bounded PSRAM tier copy for depth matrix"},
+    "original": {"path": "benchmarks/assets/needle-b1w3.bin", "sha256": "1be1d1027f70265edd5d8e5a25e859232e61043bf743d50cbf3d16343effb92b", "bootloader": "benchmarks/assets/bootloader-current.bin", "bootloader_sha256": "0a5c851247def1550d8707f5dab17bd043293dd47c18da3bb7a9801877bba01d", "source": "Unmodified B1w3, 6.22 tok/s candidate; eight-layer control only"}
+  },
+  "boards": {
+    "1": {"flash": "/dev/needle-pi/flash", "console": "/dev/needle-pi/console", "lock": "/root/board-pool/locks/board1.lock"},
+    "2": {"flash": "/dev/needle-pi/board2-flash", "console": "/dev/needle-pi/board2-console", "lock": "/root/board-pool/locks/board2.lock"},
+    "3": {"flash": "/dev/needle-pi/board3-flash", "console": "/dev/needle-pi/board3-console", "lock": "/root/board-pool/locks/board3.lock"}
+  },
+  "tasks": "benchmarks/tasks.json",
+  "boot_timeout_seconds": 750,
+  "request_timeout_seconds": 600,
+  "matrix": [1, 2, 3, 4, 5, 6, 7, 8],
+  "extension_limit": 18
+}

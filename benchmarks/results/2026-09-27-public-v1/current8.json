@@ -1,0 +1,265 @@
+{
+  "board": "2",
+  "boot_state": {
+    "device": "esp32-s3",
+    "free_internal_bytes": 8503,
+    "free_psram_bytes": 517028,
+    "last_sample_free_internal_bytes": 9263,
+    "last_sample_uptime_ms": 53222,
+    "layers": 8,
+    "model_bytes": 16155796,
+    "sample_period_s": 30,
+    "samples": 1,
+    "schema": "agent-watch-v2",
+    "timer_fired_count": 0,
+    "timer_remaining_ms": 0,
+    "timer_status": "idle",
+    "uptime_ms": 54244
+  },
+  "depth": 8,
+  "finished_utc": "2026-09-27T05:17:07Z",
+  "image": "current",
+  "image_sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6",
+  "job": "current8",
+  "metrics": {
+    "cases": 4,
+    "decode_ms_mean": 2349.75,
+    "decode_timed_cases": 4,
+    "decode_tokens_sum": 58,
+    "decode_tps_mean": 6.16,
+    "decode_tps_pooled": 6.1709,
+    "exact_calls": 1,
+    "latency_ms_mean": 5647.725,
+    "prefill_ms_mean": 2602.25,
+    "prefill_timed_cases": 4,
+    "prefill_tps_mean": 6.535,
+    "retried": 0,
+    "scored_cases": 4,
+    "success": 4
+  },
+  "model_bytes": 16155796,
+  "model_sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16",
+  "rows": [
+    {
+      "calls_exact": true,
+      "case": {
+        "adaptation": "translation intent maps to this firmware's translate_or_write route",
+        "expect": [
+          {
+            "arguments": {},
+            "name": "translate_or_write"
+          }
+        ],
+        "id": "jevbench_easy_tool_selection_04",
+        "input": "Translate 'good morning' into Japanese.",
+        "phase": "route",
+        "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl",
+        "source_expected": "translate_text"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 2352.0,
+        "decode_tokens": 14,
+        "decode_tps": 5.95,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {},
+            "name": "translate_or_write"
+          }
+        ],
+        "latency_ms": 5746.9,
+        "phase": "route",
+        "prefill_ms": 2694.0,
+        "prefill_tps": 6.31,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "translate_or_write",
+            "outcome": "model_selected",
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "adaptation": "no light-control tool in this firmware; correct local behavior is abstention",
+        "expect": [],
+        "id": "jevbench_easy_intent_10",
+        "input": "Turn off the lights in the bedroom.",
+        "phase": "tools",
+        "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl",
+        "source_expected": "turn_off_lights"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 3023.0,
+        "decode_tokens": 19,
+        "decode_tps": 6.28,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 60
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 5988.2,
+        "phase": "tools",
+        "prefill_ms": 2268.0,
+        "prefill_tps": 6.61,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 499104,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 53222,
+              "layers": 8,
+              "model_bytes": 16155796,
+              "sample_period_s": 60,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 61184
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "adaptation": "an absolute-time reminder is not representable by the device's countdown timer; correct local behavior is abstention",
+        "expect": [],
+        "id": "jevbench_easy_tool_selection_08",
+        "input": "Remind me to call my mother at 6 pm.",
+        "phase": "tools",
+        "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl",
+        "source_expected": "set_reminder"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 2400.0,
+        "decode_tokens": 15,
+        "decode_tps": 6.25,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 600
+            },
+            "name": "set_timer"
+          }
+        ],
+        "latency_ms": 5819.1,
+        "phase": "tools",
+        "prefill_ms": 2724.0,
+        "prefill_tps": 6.61,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_timer\",\"arguments\":{\"seconds\":600}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_timer",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7991,
+              "free_psram_bytes": 499104,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 53222,
+              "layers": 8,
+              "model_bytes": 16155796,
+              "sample_period_s": 60,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 599999,
+              "timer_status": "running",
+              "uptime_ms": 68008
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "adaptation": "weather is unavailable in this firmware; correct local behavior is abstention",
+        "expect": [],
+        "id": "needle3_weather_example",
+        "input": "what's it like in Lagos right now?",
+        "phase": "tools",
+        "source": "https://github.com/cactus-compute/needle/blob/42bf1f2d0a7784b0d4d1ec94bb5ade425cf9a67c/README.md",
+        "source_expected": "get_weather(city='Lagos')"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1624.0,
+        "decode_tokens": 10,
+        "decode_tps": 6.16,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {},
+            "name": "get_status"
+          }
+        ],
+        "latency_ms": 5036.7,
+        "phase": "tools",
+        "prefill_ms": 2723.0,
+        "prefill_tps": 6.61,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"get_status\",\"arguments\":{}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "get_status",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 8051,
+              "free_psram_bytes": 499104,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 53222,
+              "layers": 8,
+              "model_bytes": 16155796,
+              "sample_period_s": 60,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 593954,
+              "timer_status": "running",
+              "uptime_ms": 74054
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    }
+  ],
+  "started_utc": "2026-09-27T05:11:20Z",
+  "status": "completed",
+  "tasks_sha256": "69dbe538a54aeee44a1f3b032a92a90cc9e02658c5fe7fcd05152087007ec755"
+}

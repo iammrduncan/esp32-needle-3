@@ -10,6 +10,9 @@ host/build/
 model/*.download
 model/*.tmp
 *.log
+!benchmarks/results/**/*.log
+benchmarks/results/2026-09-27-matrix-v1/
+benchmarks/results/2026-09-27-matrix-v2/
 .DS_Store
 
 .auto/log.jsonl

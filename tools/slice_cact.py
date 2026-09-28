@@ -84,8 +84,10 @@ def load(path: Path) -> tuple[list[int | float], bytes, list[Tensor]]:
 
 
 def layer_order(count: int) -> list[int]:
-    if count < 2:
-        raise ValueError("model needs at least two layers")
+    if count < 1:
+        raise ValueError("model needs at least one layer")
+    if count == 1:
+        return [0]
     selected = [0, count - 1]
     order = selected.copy()
     while len(order) < count:
@@ -99,9 +101,11 @@ def layer_order(count: int) -> list[int]:
 
 def slice_model(header: list[int | float], tensors: list[Tensor], depth: int) -> tuple[list[int | float], list[Tensor]]:
     full = int(header[10])
-    if not 2 <= depth <= full:
-        raise ValueError(f"depth must be 2..{full}")
-    selected = sorted(layer_order(full)[:depth])
+    if not 1 <= depth <= full:
+        raise ValueError(f"depth must be 1..{full}")
+    # A one-layer diagnostic takes the first source layer. Deeper rungs retain
+    # the endpoint-preserving order used for the published eight-layer slice.
+    selected = [0] if depth == 1 else sorted(layer_order(full)[:depth])
     original_sites = list(header[32:32 + int(header[31])])
     block_size = 27 if header[19] else 24
     block_end = 1 + full * block_size

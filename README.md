@@ -39,6 +39,7 @@ scripts/ie-step.sh build      # firmware (ESP-IDF 5.5.2)
 scripts/ie-step.sh flash      # ERASES AND WRITES the board: bootloader, app, model at 0x210000
 scripts/ie-step.sh serve      # foreground bridge on 127.0.0.1:$IE_HTTP_PORT; stop with Ctrl-C
 scripts/ie-step.sh health     # in another shell
+scripts/ie-step.sh fidelity   # host engine vs frozen golden logits (max |delta| <= 0.002)
 ```
 
 `scripts/ie-step.sh <target>` runs `make <target>` on the host when make, a Python
@@ -68,6 +69,7 @@ at a pinned commit and calls `scripts/ie-step.sh` for each step:
 | deploy | `flash` | `IE_PORT_FLASH` |
 | serve | `serve` (foreground) | `IE_PORT_SERIAL`, `IE_HTTP_PORT` (default 8081) |
 | health | `health` | `IE_HTTP_PORT` |
+| fidelity check | `fidelity` | writes `$IE_OUT/harness-summary.json` |
 
 Stopping is SIGTERM to the step's process group; in container mode the named
 container is stopped as well. The runtime disclosure for this engine: it runs

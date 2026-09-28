@@ -14,7 +14,7 @@ IDF_IMAGE ?= docker.io/espressif/idf:v5.5.2
 CONTAINER ?= $(firstword $(shell command -v podman docker 2>/dev/null))
 ESPTOOL ?= $(if $(shell command -v esptool.py 2>/dev/null),esptool.py,$(PYTHON) -m esptool)
 
-.PHONY: check setup model verify-model build flash flash-app serve health host test install-service capture demo
+.PHONY: fidelity check setup model verify-model build flash flash-app serve health host test install-service capture demo
 
 check:
 	@PYTHON="$(PYTHON)" CONTAINER="$(CONTAINER)" IDF_IMAGE="$(IDF_IMAGE)" \
@@ -53,6 +53,16 @@ host:
 test: host
 	$(VENV_PY) -m unittest discover -s tests -v
 	ctest --test-dir host/build --output-on-failure
+# Numerical fidelity of the host engine against the frozen golden logits
+# (benchmarks/golden/logits.txt) on the probe ids in benchmarks/prompts.json.
+# Gate: max |delta| <= 0.002, the research campaign's gate.
+# Writes $(IE_OUT)/harness-summary.json when IE_OUT is set.
+FIDELITY_MAX_DELTA ?= 0.002
+fidelity: host verify-model
+	@ids=$$(python3 -c 'import json; print(*json.load(open("benchmarks/prompts.json"))["probe_ids"])'); \
+	line=$$(host/build/nd_ftest model/needle3.cact benchmarks/golden/logits.txt $$ids) || exit 2; \
+	echo "$$line"; \
+	python3 -c 'import json,os,re,sys; l=sys.argv[1]; m=dict(re.findall(r"(\w+)=(\S+)",l)); d=float(m["max_delta"]); t=m["top1"].split("/"); ok=d<=float(sys.argv[2]); s=dict(check="host engine vs benchmarks/golden/logits.txt",steps=int(m["steps"]),vocab=int(m["vocab"]),max_delta=d,threshold=float(sys.argv[2]),top1_agree=int(t[0]),top1_total=int(t[1]),passed=ok); o=os.environ.get("IE_OUT"); o and open(os.path.join(o,"harness-summary.json"),"w").write(json.dumps(s,indent=2)+"\n"); sys.exit(0 if ok else 1)' "$$line" "$(FIDELITY_MAX_DELTA)"
 # Optional: run the bridge as a systemd user service. Not part of the launch path.
 install-service:
 	$(VENV_PY) tools/install_service.py --serial $(SERIAL_PORT)

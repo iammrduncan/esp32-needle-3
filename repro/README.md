@@ -65,3 +65,7 @@ archive; they are not inputs to the build or benchmark runner. Historical
 commit IDs in the ledger refer to the pre-identity-rewrite history;
 [`identity-rewrite-map.tsv`](../.auto/identity-rewrite-map.tsv) maps them to
 current commit IDs where that history is on this branch.
+The archives also include early research-code checkpoints and the separate
+LED-identification prototype (compiled but never flashed). Private Pi session
+transcripts and local provider configuration were intentionally not published;
+neither is needed to rebuild the engine or replay the benchmark package.

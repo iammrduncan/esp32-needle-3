@@ -66,6 +66,10 @@ if [ -n "${IE_WORK_DIR:-}" ]; then
     mkdir -p "$IE_WORK_DIR"
     args+=(-v "$IE_WORK_DIR:$IE_WORK_DIR")
 fi
+if [ -n "${IE_OUT:-}" ]; then
+    mkdir -p "$IE_OUT"
+    args+=(-v "$IE_OUT:$IE_OUT")
+fi
 for var in $(compgen -e | grep '^IE_' || true); do args+=(-e "$var"); done
 # Serial ports: pass the real device node (by-id paths are symlinks) and point
 # the Makefile at it.

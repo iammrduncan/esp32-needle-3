@@ -21,9 +21,9 @@ results are in [`benchmarks/`](../benchmarks/README.md).
   `3dcd1de6eb3e610908b7d04431399fe40c574417`; the comparison image is the
   preserved B1w3 6.22-tok/s candidate. The old baseline commit is not on this
   branch; its complete source tree is saved in
-  [the baseline source archive](../.auto/archives/baseline-source-3dcd1de6.tar.gz).
+  [the baseline source archive](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/archives/baseline-source-3dcd1de6.tar.gz).
   The exact B1w3, matrix, and one-layer source trees and provenance hashes
-  are in [the final source snapshots](../.auto/trees/README.md). The matrix image differs from B1w3 by
+  are in [the final source snapshots](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/trees/README.md). The matrix image differs from B1w3 by
   a single archive-bound check in the PSRAM weight-tier copy. Without it, the
   fixed 12 MB copy read past shallow model archives; host runs segfaulted and
   device boots reported cache errors. The eight-layer span is unchanged. The
@@ -33,7 +33,7 @@ results are in [`benchmarks/`](../benchmarks/README.md).
 - Twelve schema-compatible requests are frozen in
   [`tasks.json`](../benchmarks/tasks.json): timers, telemetry cadence, status,
   paired tool calls, three model routes, and an off-topic empty-call case. They
-  are a subset of this repository's original `.auto/prompts.json`, not a public
+  are a subset of this repository's original [`benchmarks/prompts.json`](../benchmarks/prompts.json), not a public
   benchmark score. Exact-call accuracy requires a successful response with the
   expected ordered names and arguments, including `[]` where specified.
   Every request is counted. The separate

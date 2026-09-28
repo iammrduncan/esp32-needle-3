@@ -56,12 +56,12 @@ def main():
     if sha256(ENGINE) != ENGINE_SHA:
         raise ValueError("host engine SHA mismatch")
     manifest = read_json(MODEL_DIR.parent / "model-manifest.json")
-    probe = read_json(ROOT / ".auto/prompts.json")["probe_ids"]
+    probe = read_json(ROOT / "benchmarks/prompts.json")["probe_ids"]
     reference_model = MODEL_DIR / "depth-08.cact"
     if sha256(reference_model) != manifest["8"]["sha256"]:
         raise ValueError("reference model SHA mismatch")
     reference = logits(reference_model, probe)
-    golden = [float(line) for line in (ROOT / ".auto/golden/logits.txt").read_text().splitlines()]
+    golden = [float(line) for line in (ROOT / "benchmarks/golden/logits.txt").read_text().splitlines()]
     if len(golden) != len(reference):
         raise ValueError("frozen golden length differs")
     result = {"engine_sha256": ENGINE_SHA, "probe_ids": probe,

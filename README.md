@@ -36,11 +36,11 @@ The 6.22 tree is fully host-gated at 23/23 with the frozen fidelity threshold.
 It remains deliberately unpromoted: two device cases associated with the known
 run-647 transport-sensitive golden issue still report 22/24. The evidence,
 last in-flight results, preserved candidates, and owner decisions are recorded
-in the [shutdown handoff](.auto/SHUTDOWN-HANDOFF.md).
+in the [shutdown handoff](docs/engine-bible/appendices/shutdown-handoff.md).
 The default source build therefore remains the accepted 5.3033 tok/s tree;
 the exact 6.22 candidate and benchmark firmware source variants are preserved
-with [restore instructions](.auto/trees/README.md). The complete 943-run ledger
-is [checked in](.auto/log.jsonl).
+with [restore instructions](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/trees/README.md). The complete 943-run ledger
+is [checked in](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/log.jsonl).
 
 ## Three-board layer benchmark
 
@@ -185,7 +185,7 @@ for firmware builds. VHS, ttyd and FFmpeg are needed only to render the demo.
 ## Build and run
 
 For a clean clone, including the Podman recipe, worker source snapshots and
-historical evidence, see the [reproduction guide](repro/README.md).
+historical evidence, see the [reproduction guide](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/repro/README.md).
 
 From the repository root:
 

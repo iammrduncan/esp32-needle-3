@@ -21,7 +21,7 @@ class BenchmarkPackageTests(unittest.TestCase):
                       "sha256": one_layer["bootloader_sha256"]})
 
     def test_tasks_are_verbatim_project_cases(self):
-        prompts = read_json(ROOT / ".auto/prompts.json")
+        prompts = read_json(ROOT / "benchmarks/prompts.json")
         by_id = {case["id"]: case for group in ("primary", "extended")
                  for case in prompts[group]}
         for case in read_json(ROOT / self.config["tasks"])["cases"]:
@@ -45,7 +45,7 @@ class BenchmarkPackageTests(unittest.TestCase):
                          "06b667e63c9148a8b3aa8fc645da4d341e6d1fe440eb47a6910835e4252b2ea9")
         self.assertEqual(sha256(patched),
                          "6b36d802b03a4eb6ed6e4e1008ec5efd2d9862b23ac5eba3b6f3a04b62e7a381")
-        probe = read_json(ROOT / ".auto/prompts.json")["probe_ids"]
+        probe = read_json(ROOT / "benchmarks/prompts.json")["probe_ids"]
 
         def dump(engine):
             return subprocess.check_output([str(engine), str(model), "logits",
@@ -61,7 +61,7 @@ class BenchmarkPackageTests(unittest.TestCase):
         patched = ROOT / "benchmarks/assets/needle-matrix-nd_dump"
         self.assertEqual(sha256(original),
                          "fc67c0dc0d4b6351a302bdf2809893964e8ea33532bb95a46ed5ac552dc72387")
-        probe = read_json(ROOT / ".auto/prompts.json")["probe_ids"]
+        probe = read_json(ROOT / "benchmarks/prompts.json")["probe_ids"]
 
         def dump(engine):
             return subprocess.check_output([str(engine), str(model), "logits",

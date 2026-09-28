@@ -63,7 +63,7 @@ function.
 
 Xtensa zero-overhead loops are not free to configure. Assembler-generated long
 loop setup can erase a small-body win. The **final candidate asset**
-[`exp96/lut2_tie728.S.amortised`](../../../.auto/exp96/lut2_tie728.S.amortised)
+[`exp96/lut2_tie728.S.amortised`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp96/lut2_tie728.S.amortised)
 pays setup once per call and updates loop-count state per row. It uses the
 instruction-sequencing requirements documented by Cadence, including `isync`
 after loop-register reconfiguration. The linked current-checkout

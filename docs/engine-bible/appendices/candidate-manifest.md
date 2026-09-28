@@ -81,7 +81,7 @@ for candidate A, B, or C.
 
 ## Preserved final-candidate evidence
 
-The durable [handoff](../../../.auto/HANDOFF-2026-09-28.md) gives the measured
+The durable [handoff](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/HANDOFF-2026-09-28.md) gives the measured
 worker identities and compositions:
 
 | Tree | Board | Measured composition | Rate |
@@ -92,17 +92,17 @@ worker identities and compositions:
 
 The repository preserves useful but incomplete component material:
 
-- [exp88](../../../.auto/exp88/README.md): compact-prefix source snapshot and
+- [exp88](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp88/README.md): compact-prefix source snapshot and
   RX-ring/secondary-console patches;
-- [exp89](../../../.auto/exp89/README.md): shippable-line wide-CQ4 worker
+- [exp89](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp89/README.md): shippable-line wide-CQ4 worker
   snapshot;
-- [exp90](../../../.auto/exp90/README.md): plain CQ2 hardware group loop;
-- [exp91 B3](../../../.auto/exp91/nd_model.c.qkdot8) and
-  [exp91 B2](../../../.auto/exp91/nd_model.c.qkdot8.b2): QK-dot source
+- [exp90](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp90/README.md): plain CQ2 hardware group loop;
+- [exp91 B3](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp91/nd_model.c.qkdot8) and
+  [exp91 B2](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp91/nd_model.c.qkdot8.b2): QK-dot source
   snapshots;
-- [exp95](../../../.auto/exp95/README.md): seed-line EG2 plus compact-prefix
+- [exp95](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp95/README.md): seed-line EG2 plus compact-prefix
   snapshots;
-- [exp96](../../../.auto/exp96/README.md): per-tree amortized CQ2 loop assets
+- [exp96](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp96/README.md): per-tree amortized CQ2 loop assets
   and kbench sweep wiring.
 
 These files overlap, originate from different workers, and are not a complete,

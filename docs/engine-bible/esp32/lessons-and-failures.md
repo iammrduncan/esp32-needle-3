@@ -305,7 +305,7 @@ Before spending a board run:
       soak before promotion.
 
 The full evidence trail is in
-[`HANDOFF-2026-09-28.md`](../../../.auto/HANDOFF-2026-09-28.md),
-[`OWNER_ACCEPTANCE_PACKET.md`](../../../.auto/OWNER_ACCEPTANCE_PACKET.md), and
+[`HANDOFF-2026-09-28.md`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/HANDOFF-2026-09-28.md),
+[`OWNER_ACCEPTANCE_PACKET.md`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/OWNER_ACCEPTANCE_PACKET.md), and
 the [experiment ledger](../appendices/experiment-ledger.md). Hardware and SDK
 facts are sourced in [the source catalog](../sources.md).

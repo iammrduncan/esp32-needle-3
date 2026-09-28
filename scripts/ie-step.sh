@@ -73,6 +73,8 @@ fi
 for var in $(compgen -e | grep '^IE_' || true); do args+=(-e "$var"); done
 # Serial ports: pass the real device node (by-id paths are symlinks) and point
 # the Makefile at it.
+# One board may use the same port for both roles (e.g. flashing over the UART).
+seen=" "
 for pair in IE_PORT_FLASH:FLASH_PORT IE_PORT_SERIAL:SERIAL_PORT; do
     src=${pair%%:*}; dst=${pair#*:}
     val=${!src:-}
@@ -82,7 +84,8 @@ for pair in IE_PORT_FLASH:FLASH_PORT IE_PORT_SERIAL:SERIAL_PORT; do
         echo "ie-step: $src=$val is not a character device" >&2
         exit 1
     fi
-    args+=(--device "$real" -e "$dst=$real")
+    case "$seen" in *" $real "*) ;; *) args+=(--device "$real"); seen="$seen$real ";; esac
+    args+=(-e "$dst=$real")
 done
 
 echo "ie-step: $target in container mode ($rt, $IDF_IMAGE)" >&2

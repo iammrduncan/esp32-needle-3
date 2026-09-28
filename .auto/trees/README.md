@@ -40,17 +40,22 @@ will reproduce an identical timing on different hardware.
 | `final-b2resid2-source` | `d2b3c85ae2e45eee69a6de7393ea0c7d` | Final B2 worker source, matching `final-logs/B2resid2.log` |
 | `final-b3p1fix-source` | `9e4ca21af947fbde703efd702f867614` | Final B3 worker source, matching `final-logs/B3p1fix.log`; its device run did not produce a complete quality-gate summary |
 
-From a fresh clone, verify and overlay a candidate into a **separate worktree**:
+From a fresh clone, verify and overlay a candidate into a **separate clone**:
 
 ```sh
 bash .auto/trees/verify.sh
-git worktree add --detach ../needle3-b1w3 HEAD
+git clone --no-local . ../needle3-b1w3
 cp -a .auto/trees/final-b1w3-source/. ../needle3-b1w3/
 cd ../needle3-b1w3
+make setup
 make model
 make test
 # With ESP-IDF 5.5.2 activated: make build
 ```
+
+Use a separate clone rather than a Git worktree when crossing the host/Podman
+bind mount: worktree `.git` files can embed a host-only absolute path, which
+prevents ESP-IDF in the container from resolving `git describe`.
 
 Use `final-matrix-source` or `final-one-layer-source` instead to rebuild the
 corresponding benchmark image. Do not flash the one-layer variant as a useful

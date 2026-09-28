@@ -65,7 +65,7 @@ class ReproductionArchiveTests(unittest.TestCase):
         self.assertEqual(len(mapping), 509)
         self.assertTrue(all(len(pair) == 2 and all(len(sha) == 40 for sha in pair)
                             for pair in mapping))
-        self.assertEqual(sum(old != new for old, new in mapping), 392)
+        self.assertEqual(sum(old != new for old, new in mapping), len(mapping))
 
     def test_archives_open_and_baseline_source_is_complete(self):
         archives = ROOT / ".auto/archives"
@@ -76,6 +76,12 @@ class ReproductionArchiveTests(unittest.TestCase):
                 if archive.name.startswith("baseline-source-"):
                     self.assertIn("engine/src/nd_model.c", names)
                     self.assertIn("esp32/main/main.c", names)
+                if archive.name.startswith("led-identify-source-"):
+                    self.assertIn("led-identify/engine/src/nd_model.c", names)
+                    self.assertNotIn("led-identify/esp32/build/needle_demo.bin", names)
+                if archive.name.startswith("research-checkpoints-code-"):
+                    self.assertTrue(any(name.endswith("/working-tree.patch") for name in names))
+                    self.assertFalse(any(name.endswith("/pi-session.jsonl") for name in names))
 
 
 if __name__ == "__main__":

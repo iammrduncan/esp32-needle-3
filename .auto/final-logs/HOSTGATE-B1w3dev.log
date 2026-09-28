@@ -1,0 +1,9 @@
+METRIC host_output_exact=23
+METRIC host_cases=23
+METRIC host_token_delta=0
+METRIC host_golden_missing=0
+METRIC host_lines_same=23
+FIDELITY steps=10 vocab=8192 max_delta=5.341e-05 top1=10/10
+METRIC logit_max_delta=5.341e-05
+METRIC logit_top1_match=10
+HOSTGATE_RC=0

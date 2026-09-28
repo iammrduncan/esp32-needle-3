@@ -19,7 +19,11 @@ results are in [`benchmarks/`](../benchmarks/README.md).
   subnetworks from two layers](https://github.com/cactus-compute/needle#readme).
 - The baseline app was rebuilt from historical commit
   `3dcd1de6eb3e610908b7d04431399fe40c574417`; the comparison image is the
-  preserved B1w3 6.22-tok/s candidate. The matrix image differs from B1w3 by
+  preserved B1w3 6.22-tok/s candidate. The old baseline commit is not on this
+  branch; its complete source tree is saved in
+  [the baseline source archive](../.auto/archives/baseline-source-3dcd1de6.tar.gz).
+  The exact B1w3, matrix, and one-layer source trees and provenance hashes
+  are in [the final source snapshots](../.auto/trees/README.md). The matrix image differs from B1w3 by
   a single archive-bound check in the PSRAM weight-tier copy. Without it, the
   fixed 12 MB copy read past shallow model archives; host runs segfaulted and
   device boots reported cache errors. The eight-layer span is unchanged. The

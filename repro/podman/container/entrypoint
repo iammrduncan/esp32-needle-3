@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Bind the small udev-managed directory, so new device nodes appear after USB resets.
+# Conventional paths remain compatible with the project's Makefile.
+ln -sfn /dev/needle-pi/flash /dev/ttyACM0
+ln -sfn /dev/needle-pi/console /dev/ttyACM1
+project_venv=/workspace/esp32-needle-3/.venv
+if [ ! -x "$project_venv/bin/python" ]; then
+    python3 -m venv "$project_venv"
+fi
+if ! cmp -s /usr/local/share/needle-requirements.txt "$project_venv/.needle-requirements.txt"; then
+    "$project_venv/bin/python" -m pip install -r /usr/local/share/needle-requirements.txt
+    cp /usr/local/share/needle-requirements.txt "$project_venv/.needle-requirements.txt"
+fi
+sync-packages.py
+tmux new-session -d -s pi -n agent -c /workspace/esp32-needle-3 'pi-session; exec bash'
+tmux new-window -t pi -n shell -c /workspace/esp32-needle-3
+tmux select-window -t pi:0
+while tmux has-session -t pi 2>/dev/null; do sleep 5; done
+echo 'The Pi terminal ended; exiting so the container can restart.' >&2
+exit 1

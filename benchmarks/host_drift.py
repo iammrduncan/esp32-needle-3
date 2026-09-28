@@ -11,6 +11,7 @@ import math
 import subprocess
 from pathlib import Path
 
+from fetch_assets import ensure as ensure_asset
 from run_matrix import MODEL_DIR, RESULT_DIR, ROOT, read_json, sha256, write_json
 
 VOCAB = 8192
@@ -19,7 +20,7 @@ ENGINE_SHA = "06b667e63c9148a8b3aa8fc645da4d341e6d1fe440eb47a6910835e4252b2ea9"
 
 
 def logits(model, probe):
-    command = [str(ENGINE), str(model), "logits", *map(str, probe)]
+    command = [str(ensure_asset(ENGINE)), str(model), "logits", *map(str, probe)]
     output = subprocess.check_output(command, text=True)
     # The preserved B1w3 binary prints two instrumentation diagnostics; reject
     # all other nonnumeric output rather than letting a partial dump look valid.
@@ -53,7 +54,7 @@ def main():
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--max-depth", type=int, default=8)
     args = parser.parse_args()
-    if sha256(ENGINE) != ENGINE_SHA:
+    if sha256(ensure_asset(ENGINE)) != ENGINE_SHA:
         raise ValueError("host engine SHA mismatch")
     manifest = read_json(MODEL_DIR.parent / "model-manifest.json")
     probe = read_json(ROOT / "benchmarks/prompts.json")["probe_ids"]

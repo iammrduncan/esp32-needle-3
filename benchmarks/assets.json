@@ -1,0 +1,47 @@
+{
+  "release_tag": "benchmark-assets-2026-09-27",
+  "url": "https://github.com/iammrduncan/esp32-needle-3/releases/download/{tag}/{file}",
+  "note": "Firmware images, bootloaders, partition table and host nd_dump builds used by the benchmark package. Fetched on demand by benchmarks/fetch_assets.py; not stored in Git.",
+  "files": {
+    "bootloader-baseline.bin": {
+      "sha256": "f36af2accd415a297bfedf1f9166a830ed4dd7c5b1d13223b0a2b68327e5469e",
+      "bytes": 21520
+    },
+    "bootloader-current.bin": {
+      "sha256": "0a5c851247def1550d8707f5dab17bd043293dd47c18da3bb7a9801877bba01d",
+      "bytes": 21520
+    },
+    "needle-b1w3-nd_dump": {
+      "sha256": "fc67c0dc0d4b6351a302bdf2809893964e8ea33532bb95a46ed5ac552dc72387",
+      "bytes": 128648
+    },
+    "needle-b1w3.bin": {
+      "sha256": "1be1d1027f70265edd5d8e5a25e859232e61043bf743d50cbf3d16343effb92b",
+      "bytes": 312848
+    },
+    "needle-baseline.bin": {
+      "sha256": "a6d1fc64b9b02b8ca8455b7726af0494104a8f40f8bf748769010c3f391e520d",
+      "bytes": 272928
+    },
+    "needle-matrix-nd_dump": {
+      "sha256": "06b667e63c9148a8b3aa8fc645da4d341e6d1fe440eb47a6910835e4252b2ea9",
+      "bytes": 128648
+    },
+    "needle-matrix.bin": {
+      "sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6",
+      "bytes": 312880
+    },
+    "needle-one-layer-nd_dump": {
+      "sha256": "6b36d802b03a4eb6ed6e4e1008ec5efd2d9862b23ac5eba3b6f3a04b62e7a381",
+      "bytes": 128648
+    },
+    "needle-one-layer.bin": {
+      "sha256": "7c9dfe6c0820666381660f6d11bef248b611240efcf4377f432c302623b42d89",
+      "bytes": 312912
+    },
+    "partition-table.bin": {
+      "sha256": "461ee5cbe1696f0c7ea00ef4a8b4e79bba1ab8cef8b77a58b77d7fc252c13592",
+      "bytes": 3072
+    }
+  }
+}

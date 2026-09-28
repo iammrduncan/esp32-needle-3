@@ -24,6 +24,8 @@ MODEL_DIR = ROOT / ".runtime/benchmarks/models"
 RESULT_DIR = ROOT / "benchmarks/results"
 sys.path.insert(0, str(ROOT / "tools"))
 
+from fetch_assets import ensure as ensure_asset  # noqa: E402  (benchmarks/ is on sys.path)
+
 
 def read_json(path):
     return json.loads(Path(path).read_text())
@@ -46,7 +48,7 @@ def sha256(path):
 
 
 def checked_file(spec):
-    path = ROOT / spec["path"]
+    path = ensure_asset(ROOT / spec["path"])
     if not path.is_file():
         raise FileNotFoundError(f"missing {path}; see benchmarks/README.md")
     actual = sha256(path)

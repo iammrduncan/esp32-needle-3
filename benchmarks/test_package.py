@@ -4,6 +4,7 @@
 import subprocess
 import unittest
 
+from fetch_assets import ensure as ensure_asset
 from run_matrix import (CONFIG_PATH, MODEL_DIR, ROOT, check_assets, equal_calls,
                         checked_file, metrics, output_drift, read_json,
                         selected_layers, sha256)
@@ -39,8 +40,8 @@ class BenchmarkPackageTests(unittest.TestCase):
         model = MODEL_DIR / "depth-01.cact"
         if not model.exists():
             self.skipTest("run benchmarks/run_matrix.py prepare first")
-        original = ROOT / "benchmarks/assets/needle-matrix-nd_dump"
-        patched = ROOT / "benchmarks/assets/needle-one-layer-nd_dump"
+        original = ensure_asset(ROOT / "benchmarks/assets/needle-matrix-nd_dump")
+        patched = ensure_asset(ROOT / "benchmarks/assets/needle-one-layer-nd_dump")
         self.assertEqual(sha256(original),
                          "06b667e63c9148a8b3aa8fc645da4d341e6d1fe440eb47a6910835e4252b2ea9")
         self.assertEqual(sha256(patched),
@@ -57,8 +58,8 @@ class BenchmarkPackageTests(unittest.TestCase):
         model = MODEL_DIR / "depth-08.cact"
         if not model.exists():
             self.skipTest("run benchmarks/run_matrix.py prepare first")
-        original = ROOT / "benchmarks/assets/needle-b1w3-nd_dump"
-        patched = ROOT / "benchmarks/assets/needle-matrix-nd_dump"
+        original = ensure_asset(ROOT / "benchmarks/assets/needle-b1w3-nd_dump")
+        patched = ensure_asset(ROOT / "benchmarks/assets/needle-matrix-nd_dump")
         self.assertEqual(sha256(original),
                          "fc67c0dc0d4b6351a302bdf2809893964e8ea33532bb95a46ed5ac552dc72387")
         probe = read_json(ROOT / "benchmarks/prompts.json")["probe_ids"]

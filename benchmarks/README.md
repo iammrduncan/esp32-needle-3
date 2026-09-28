@@ -28,6 +28,22 @@ if they were official JevBench or Needle 3 scores would be misleading. The
 frozen, schema-compatible project tasks make the baseline and every depth
 comparable; the report names this workload explicitly.
 
+## Binary assets
+
+The firmware images, bootloaders, partition table and host `nd_dump` builds
+this package flashes or compares are not stored in Git. They are release assets
+pinned by SHA-256 in [`assets.json`](assets.json) and downloaded on first use
+into the ignored `benchmarks/assets/` directory, from
+`https://github.com/iammrduncan/esp32-needle-3/releases/download/benchmark-assets-2026-09-27/<file>`.
+`python3 benchmarks/fetch_assets.py` fetches them all up front; every runner
+path verifies each file's hash before use and refuses a mismatch. Set
+`NEEDLE_ASSET_URL` (a format string with `{tag}` and `{file}`) to use a mirror
+or a local copy.
+
+The shipping firmware is the matrix image's source, built by `make build`; see
+[`docs/matrix-firmware.md`](../docs/matrix-firmware.md) for how that build
+compares with the pinned `needle-matrix.bin`.
+
 ## Rerun
 
 Run inside the existing `needle-pi` container, with all three `/dev/needle-pi/*`
@@ -76,12 +92,12 @@ that depth 8 is byte-identical to `model/manifest.json`. The board runner verifi
 every binary and model hash before flashing and stores immutable task/image/model
 identities in each result. `config.json` pins the exact prebuilt firmware images;
 the historical image comes from commit `3dcd1de6eb3e610908b7d04431399fe40c574417`
-(not reachable from this branch, so its [full source archive](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/archives/baseline-source-3dcd1de6.tar.gz)
-is checked in). The optimized images have [verified source overlays](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/trees/README.md)
+(not reachable from this branch; its [full source archive](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/archives/baseline-source-3dcd1de6.tar.gz)
+is in the research archive). The optimized images have [verified source overlays](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/trees/README.md)
 for B1w3, the matrix boundary fix, and the one-layer allocation diagnostic.
 The `needle-matrix.bin` image is B1w3 with one boundary fix: its 12 MB PSRAM
 tier-copy pad is clipped to the mapped archive length for shallow slices.
-The original `needle-b1w3.bin` remains in `assets/` as the eight-layer speed
+The original `needle-b1w3.bin` remains in the assets as the eight-layer speed
 control. The boundary fix does not change the eight-layer copied span; the
 package test checks byte-exact eight-layer host logits between those builds.
 The one-layer slice has zero engram sites; ESP-IDF's zero-byte allocations

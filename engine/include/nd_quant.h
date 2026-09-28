@@ -285,6 +285,7 @@ typedef struct {
 } nd_gemv4_ctx;
 
 void nd_gemv4_rows_tie1(void *vc);
+void nd_gemv4_rows_tie1W(void *vc);   /* ee.ldf.128.ip xh, 16-aligned */
 
 /* The 4-bit kernel is specialised to group 128 (16 index words and a 512-byte xh
  * stride per group) and does the inline FP16->FP32 conversion only, so no norm in

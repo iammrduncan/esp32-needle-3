@@ -358,7 +358,11 @@ void nd_cq_prepare(const nd_tensor *t, const float *x, float *xh)
     uint32_t ngroup = in_pad / g;
     float    scale  = 1.0f / sqrtf((float)g);
 
-    memcpy(xh, x, t->shape[1] * sizeof(float));
+    /* E68: x == xh is the in-place form - the caller already wrote the activation
+     * into the transform buffer - so the copy is skipped (memcpy onto itself is
+     * undefined and pointless). Pad and transform are unchanged. */
+    if (xh != x)
+        memcpy(xh, x, t->shape[1] * sizeof(float));
     if (in_pad > t->shape[1])
         memset(xh + t->shape[1], 0, (in_pad - t->shape[1]) * sizeof(float));
 
@@ -519,6 +523,25 @@ static void gemv_rows_offset_asm(void *vc, uint32_t i0, uint32_t i1)
     nd_gemv4_rows_tie1(&a);
 }
 
+static void gemv_rows_offset_asmW(void *vc, uint32_t i0, uint32_t i1)
+{
+    const gemv_ctx *c = (const gemv_ctx *)vc;
+    nd_gemv4_ctx    a;
+    uint32_t        r0 = c->base + i0;
+
+    a.packed0  = c->packed + (size_t)r0 * c->rowbytes;
+    a.norms0   = c->norms + (size_t)r0 * c->ngroup;
+    a.xh       = c->xh;
+    a.cb       = c->cb;
+    a.y0       = c->y + i0;
+    a.ngroup   = c->ngroup;
+    a.g        = c->g;
+    a.rowbytes = c->rowbytes;
+    a.normstep = c->ngroup * 2u;
+    a.nrows    = i1 - i0;
+    nd_gemv4_rows_tie1W(&a);
+}
+
 /* nd_gemv4_asm_ok() walks the tensor's norms and a projection runs once per token,
  * so the answer is remembered per (blob, rows) like the 2-bit kernel's. Four
  * entries, because the mHC phi stage sweeps three tensors back to back and a
@@ -546,6 +569,12 @@ static int gemv4_asm_usable(const gemv_ctx *c, const void *blob, uint32_t rows)
 }
 
 static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    if (!gemv4_asm_usable(c, blob, rows)) return gemv_rows_offset;
+    return ((uintptr_t)c->xh & 15u) == 0u ? gemv_rows_offset_asmW
+                                          : gemv_rows_offset_asm;
+}
+static nd_row_fn gemv4_pick_unused_removed(const gemv_ctx *c, const void *blob, uint32_t rows)
 {
     return gemv4_asm_usable(c, blob, rows) ? gemv_rows_offset_asm
                                           : gemv_rows_offset;
@@ -933,5 +962,10 @@ void nd_cq_dequant_row(const nd_cact *c, const nd_tensor *t, const void *blob,
         for (j = 0; j < g; j++)
             blk[j] *= scale;
     }
-    memcpy(w, scratch, t->shape[1] * sizeof(float));
+    /* E69: when the caller hands the destination as the scratch (the field call
+     * sites do), the transform already ran there and this copy is pure waste - the
+     * same lifetime defect E68 removed in the phi path. The dequant's inner loop
+     * only writes blk[], so running it in the destination is exactly equivalent. */
+    if (w != scratch)
+        memcpy(w, scratch, t->shape[1] * sizeof(float));
 }

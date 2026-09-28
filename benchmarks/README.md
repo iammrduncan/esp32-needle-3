@@ -9,7 +9,7 @@ model flash partition. Depth 1 is a requested diagnostic, not an upstream
 supported deployment depth; [Needle 3 documents ladder sizes 2–20](https://github.com/cactus-compute/needle#readme).
 
 The 12 requests in [tasks.json](tasks.json) are a frozen subset of this
-project's `.auto/prompts.json`, using the firmware's real `tools` and `route`
+project's [`prompts.json`](prompts.json), using the firmware's real `tools` and `route`
 schemas. Exact-call accuracy requires the same ordered tool names and arguments;
 an empty expected list means that no tool call is correct. Failed requests never
 count as accurate. `EVT prefill` and `EVT done` provide firmware-measured rates;
@@ -18,7 +18,7 @@ and retry flag. Device drift means byte-exact raw output plus token-count match
 against the patched eight-layer run. Host logit drift is a separate, deterministic
 comparison of each depth to eight layers on ten fixed probe tokens; it does not
 measure firmware numerical error. The patched eight-layer host engine is also
-compared to `.auto/golden/logits.txt` to test numerical fidelity.
+compared to [`golden/logits.txt`](golden/logits.txt) to test numerical fidelity.
 
 I examined [JevBench's public easy tasks](https://github.com/fstandhartinger/jevbench/blob/main/datasets/public/easy.jsonl)
 and [Cactus's Needle 3 examples](https://github.com/cactus-compute/needle#readme).
@@ -76,8 +76,8 @@ that depth 8 is byte-identical to `model/manifest.json`. The board runner verifi
 every binary and model hash before flashing and stores immutable task/image/model
 identities in each result. `config.json` pins the exact prebuilt firmware images;
 the historical image comes from commit `3dcd1de6eb3e610908b7d04431399fe40c574417`
-(not reachable from this branch, so its [full source archive](../.auto/archives/baseline-source-3dcd1de6.tar.gz)
-is checked in). The optimized images have [verified source overlays](../.auto/trees/README.md)
+(not reachable from this branch, so its [full source archive](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/archives/baseline-source-3dcd1de6.tar.gz)
+is checked in). The optimized images have [verified source overlays](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/trees/README.md)
 for B1w3, the matrix boundary fix, and the one-layer allocation diagnostic.
 The `needle-matrix.bin` image is B1w3 with one boundary fix: its 12 MB PSRAM
 tier-copy pad is clipped to the mapped archive length for shallow slices.

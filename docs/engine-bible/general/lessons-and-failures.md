@@ -290,8 +290,8 @@ run count.
 
 The detailed chronology and raw measurements remain in
 [the experiment ledger](../appendices/experiment-ledger.md),
-[`ideas.md`](../../../.auto/ideas.md),
-[`mimimodel-experiments.md`](../../../.auto/mimimodel-experiments.md), and the
-final [`HANDOFF-2026-09-28.md`](../../../.auto/HANDOFF-2026-09-28.md). Interpret
+[`ideas.md`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/ideas.md),
+[`mimimodel-experiments.md`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/mimimodel-experiments.md), and the
+final [`HANDOFF-2026-09-28.md`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/HANDOFF-2026-09-28.md). Interpret
 all numbers using the state labels and proof rules in
 [the evidence policy](../evidence-policy.md).

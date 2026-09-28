@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-cd /workspace/esp32-needle-3
-exec .venv/bin/python -u tools/serial_api.py --serial /dev/ttyACM1 --host 0.0.0.0 --port 8081 "$@"

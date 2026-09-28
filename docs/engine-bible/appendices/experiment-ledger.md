@@ -1,6 +1,6 @@
 # Experiment ledger
 
-The authoritative complete history is [`.auto/log.jsonl`](../../../.auto/log.jsonl).
+The authoritative complete history is [`.auto/log.jsonl`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/log.jsonl).
 This appendix is its map, not a replacement: it explains what the records mean, marks
 the accepted/candidate boundary, groups the full run range into research eras, and
 points back to exact queries for every omitted row.

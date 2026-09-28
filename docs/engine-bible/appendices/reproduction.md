@@ -118,7 +118,7 @@ Perform this on the exact tree carrying the candidate kernel:
 
 1. copy that tree to a throwaway work/build area;
 2. apply only the two-line shape-sweep hoist preserved under
-   [`.auto/exp96`](../../../.auto/exp96/);
+   [`.auto/exp96`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/exp96/);
 3. build kbench with `NEEDLE_KBENCH=ON` and `NEEDLE_KBENCH_ASM=1`;
 4. inspect linked symbols/disassembly;
 5. flash the diagnostic image and capture every `KB NUM` record.

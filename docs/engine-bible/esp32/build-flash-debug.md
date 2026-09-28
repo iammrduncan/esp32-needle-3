@@ -99,11 +99,11 @@ The campaign harnesses are:
 
 | Tool | Purpose |
 |---|---|
-| [`.auto/measure.sh`](../../../.auto/measure.sh) | Build/flash/device workload and quality gate |
-| [`.auto/bench.py`](../../../.auto/bench.py) | Serial suite, metrics, exact-output checks |
-| [`.auto/checks.sh`](../../../.auto/checks.sh) | Host 19-case, fidelity/top-1, prefix checks |
-| [`.auto/prompts.json`](../../../.auto/prompts.json) | Workloads/groups |
-| [`.auto/golden/`](../../../.auto/golden/) | Frozen host/device/logit oracles |
+| [`.auto/measure.sh`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/measure.sh) | Build/flash/device workload and quality gate |
+| [`.auto/bench.py`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/bench.py) | Serial suite, metrics, exact-output checks |
+| [`.auto/checks.sh`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/checks.sh) | Host 19-case, fidelity/top-1, prefix checks |
+| [`.auto/prompts.json`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/prompts.json) | Workloads/groups |
+| [`.auto/golden/`](https://github.com/iammrduncan/esp32-needle-3/blob/research-archive-2026-09-27/.auto/golden/) | Frozen host/device/logit oracles |
 
 The canonical full device suite is required for acceptance. A primary-only
 screen can reject a bad candidate cheaply, but it must still enforce the

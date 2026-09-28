@@ -1,5 +1,0 @@
-/* Generated from @ND_SCHEMA_PATH@. */
-#ifndef ND_@ND_SCHEMA_NAME@_SCHEMA_H
-#define ND_@ND_SCHEMA_NAME@_SCHEMA_H
-#define ND_@ND_SCHEMA_NAME@_JSON "@ND_SCHEMA_ESC@"
-#endif

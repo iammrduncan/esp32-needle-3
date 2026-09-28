@@ -1,0 +1,532 @@
+{
+  "board": "2",
+  "boot_state": {
+    "device": "esp32-s3",
+    "free_internal_bytes": 8503,
+    "free_psram_bytes": 9308524,
+    "last_sample_free_internal_bytes": 9263,
+    "last_sample_uptime_ms": 21493,
+    "layers": 3,
+    "model_bytes": 9184276,
+    "sample_period_s": 30,
+    "samples": 1,
+    "schema": "agent-watch-v2",
+    "timer_fired_count": 0,
+    "timer_remaining_ms": 0,
+    "timer_status": "idle",
+    "uptime_ms": 21934
+  },
+  "depth": 3,
+  "image": "current",
+  "image_sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6",
+  "job": "current3",
+  "metrics": {
+    "cases": 8,
+    "decode_ms_mean": 1199.625,
+    "decode_tokens_sum": 146,
+    "decode_tps_mean": 15.1888,
+    "exact_calls": 2,
+    "latency_ms_mean": 2374.6,
+    "prefill_ms_mean": 862.25,
+    "prefill_tps_mean": 16.8163,
+    "retried": 0,
+    "scored_cases": 8,
+    "success": 8
+  },
+  "model_bytes": 9184276,
+  "model_sha256": "46f604953cd0820bf48c472a82a164933f8983c06b26b738774ab811782d550e",
+  "rows": [
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 5
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "id": "sampling5",
+        "input": "Sample telemetry every 5 seconds",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1246.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.25,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 50
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2388.2,
+        "phase": "tools",
+        "prefill_ms": 828.0,
+        "prefill_tps": 16.91,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":50}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 50,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 25309
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 60
+            },
+            "name": "set_timer"
+          }
+        ],
+        "id": "timer60",
+        "input": "Start a 60 second timer",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1235.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.38,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 60
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2197.2,
+        "phase": "tools",
+        "prefill_ms": 650.0,
+        "prefill_tps": 16.93,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":60}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 60,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 28508
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {},
+            "name": "get_status"
+          }
+        ],
+        "id": "status_heap",
+        "input": "How much free memory does this device have?",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1240.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.32,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 50
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2442.3,
+        "phase": "tools",
+        "prefill_ms": 887.0,
+        "prefill_tps": 16.91,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":50}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 50,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 31953
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 10
+            },
+            "name": "set_sampling_interval"
+          },
+          {
+            "arguments": {
+              "seconds": 30
+            },
+            "name": "set_timer"
+          }
+        ],
+        "id": "batch",
+        "input": "Sample every 10 seconds and start a 30 second timer",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1179.0,
+        "decode_tokens": 18,
+        "decode_tps": 15.26,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 30
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2503.0,
+        "phase": "tools",
+        "prefill_ms": 1007.0,
+        "prefill_tps": 16.89,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":30}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 30,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 35459
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 45
+            },
+            "name": "set_timer"
+          }
+        ],
+        "id": "heldout_timer45",
+        "input": "Start a 45 second timer",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1236.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.37,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 45
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2198.5,
+        "phase": "tools",
+        "prefill_ms": 650.0,
+        "prefill_tps": 16.93,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":45}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 45,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 38660
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": true,
+      "case": {
+        "expect": [
+          {
+            "arguments": {},
+            "name": "translate_or_write"
+          }
+        ],
+        "id": "route_translate",
+        "input": "Translate good morning into Spanish",
+        "phase": "route"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 979.0,
+        "decode_tokens": 14,
+        "decode_tps": 14.31,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {},
+            "name": "translate_or_write"
+          }
+        ],
+        "latency_ms": 2078.5,
+        "phase": "route",
+        "prefill_ms": 804.0,
+        "prefill_tps": 16.17,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"translate_or_write\",\"arguments\":{}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "translate_or_write",
+            "outcome": "model_selected",
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": true,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 15
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "id": "heldout_sampling15",
+        "input": "Sample telemetry every 15 seconds",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1239.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.34,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 15
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2379.9,
+        "phase": "tools",
+        "prefill_ms": 827.0,
+        "prefill_tps": 16.92,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":15}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 15,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 30423
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    },
+    {
+      "calls_exact": false,
+      "case": {
+        "expect": [
+          {
+            "arguments": {
+              "seconds": 7
+            },
+            "name": "set_sampling_interval"
+          },
+          {
+            "arguments": {
+              "seconds": 120
+            },
+            "name": "set_timer"
+          }
+        ],
+        "id": "heldout_batch",
+        "input": "Set the sampling interval to 7 seconds and start a 120 second timer",
+        "phase": "tools"
+      },
+      "result": {
+        "confidence": null,
+        "decode_ms": 1243.0,
+        "decode_tokens": 19,
+        "decode_tps": 15.28,
+        "device": "esp32-s3",
+        "error": null,
+        "function_calls": [
+          {
+            "arguments": {
+              "seconds": 120
+            },
+            "name": "set_sampling_interval"
+          }
+        ],
+        "latency_ms": 2809.2,
+        "phase": "tools",
+        "prefill_ms": 1245.0,
+        "prefill_tps": 16.87,
+        "raw": "<think></think>\n<tool_call>[{\"name\":\"set_sampling_interval\",\"arguments\":{\"seconds\":120}}]</tool_call>",
+        "reasoning": false,
+        "results": [
+          {
+            "name": "set_sampling_interval",
+            "state": {
+              "device": "esp32-s3",
+              "free_internal_bytes": 7979,
+              "free_psram_bytes": 9290600,
+              "last_sample_free_internal_bytes": 9263,
+              "last_sample_uptime_ms": 21493,
+              "layers": 3,
+              "model_bytes": 9184276,
+              "sample_period_s": 120,
+              "samples": 1,
+              "schema": "agent-watch-v2",
+              "timer_fired_count": 0,
+              "timer_remaining_ms": 0,
+              "timer_status": "idle",
+              "uptime_ms": 34235
+            },
+            "success": true
+          }
+        ],
+        "success": true,
+        "type": "call"
+      }
+    }
+  ],
+  "started_utc": "2026-09-27T04:42:00Z",
+  "status": "interrupted",
+  "error": "needle-pi container stopped at 2026-09-27T04:45:18Z; partial rows retained, not a full benchmark",
+  "finished_utc": "2026-09-27T04:45:18Z",
+  "tasks_sha256": "07689be5089dcce5232d8604921777c3cd0365bf7f44305508c3d4968e768692"
+}

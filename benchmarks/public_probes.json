@@ -1,0 +1,9 @@
+{
+  "provenance": "Adapted public prompts, not official JevBench or Needle 3 scores: the device's schemas cannot express most source labels or tools",
+  "cases": [
+    {"id": "jevbench_easy_tool_selection_04", "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl", "source_expected": "translate_text", "adaptation": "translation intent maps to this firmware's translate_or_write route", "phase": "route", "input": "Translate 'good morning' into Japanese.", "expect": [{"name": "translate_or_write", "arguments": {}}]},
+    {"id": "jevbench_easy_intent_10", "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl", "source_expected": "turn_off_lights", "adaptation": "no light-control tool in this firmware; correct local behavior is abstention", "phase": "tools", "input": "Turn off the lights in the bedroom.", "expect": []},
+    {"id": "jevbench_easy_tool_selection_08", "source": "https://github.com/fstandhartinger/jevbench/blob/d06ee95988da1350eb8ae5511daa0e06bfffe911/datasets/public/easy.jsonl", "source_expected": "set_reminder", "adaptation": "an absolute-time reminder is not representable by the device's countdown timer; correct local behavior is abstention", "phase": "tools", "input": "Remind me to call my mother at 6 pm.", "expect": []},
+    {"id": "needle3_weather_example", "source": "https://github.com/cactus-compute/needle/blob/42bf1f2d0a7784b0d4d1ec94bb5ade425cf9a67c/README.md", "source_expected": "get_weather(city='Lagos')", "adaptation": "weather is unavailable in this firmware; correct local behavior is abstention", "phase": "tools", "input": "what's it like in Lagos right now?", "expect": []}
+  ]
+}

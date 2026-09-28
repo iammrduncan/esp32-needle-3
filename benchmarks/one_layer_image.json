@@ -1,0 +1,7 @@
+{
+  "path": "benchmarks/assets/needle-one-layer.bin",
+  "sha256": "7c9dfe6c0820666381660f6d11bef248b611240efcf4377f432c302623b42d89",
+  "bootloader": "benchmarks/assets/bootloader-current.bin",
+  "bootloader_sha256": "0a5c851247def1550d8707f5dab17bd043293dd47c18da3bb7a9801877bba01d",
+  "source": "B1w3 matrix image plus minimum-size inert engram buffers for a zero-site one-layer diagnostic"
+}

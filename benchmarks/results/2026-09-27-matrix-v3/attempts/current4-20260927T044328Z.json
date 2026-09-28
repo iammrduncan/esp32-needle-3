@@ -1,0 +1,15 @@
+{
+  "board": "3",
+  "depth": 4,
+  "image": "current",
+  "image_sha256": "4a89784b39b3f9c0c790afbde65f8ec4e5e7583e9553548534b4bb9534451eb6",
+  "job": "current4",
+  "model_bytes": 9762644,
+  "model_sha256": "c50024d4ed8390bd5d4e2eb0d8540282bf85dc3563d4a076656fa7146f0d22cd",
+  "rows": [],
+  "started_utc": "2026-09-27T04:43:28Z",
+  "status": "interrupted",
+  "error": "needle-pi container stopped at 2026-09-27T04:45:18Z during flashing; no benchmark cases were run",
+  "finished_utc": "2026-09-27T04:45:18Z",
+  "tasks_sha256": "07689be5089dcce5232d8604921777c3cd0365bf7f44305508c3d4968e768692"
+}

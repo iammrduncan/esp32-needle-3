@@ -18,8 +18,8 @@ cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c | md5sum
 # 1bd2ba7c68ce57848a92d3406abf9612
 ```
 
-Research-only firmware (`kbench.c`, `kb_wide.S`, `dot4_tie728.S`,
-`thermal_diag.c`) is compiled only with `-DNEEDLE_KBENCH=ON` or
+Research-only firmware (`kbench.c` with its `exp_pairs.h` fixture, `kb_wide.S`,
+`dot4_tie728.S`, `thermal_diag.c`) is compiled only with `-DNEEDLE_KBENCH=ON` or
 `-DNEEDLE_THERMAL_DIAG=ON`; both options default to OFF, so `make build`
 produces the shipping app only.
 

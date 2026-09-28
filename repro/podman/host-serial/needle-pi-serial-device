@@ -1,0 +1,29 @@
+#!/usr/bin/python3 -I
+"""Publish explicitly named ESP32 serial nodes for a rootless container."""
+import os
+from pathlib import Path
+import stat
+import sys
+
+action, label, major, minor = sys.argv[1:]
+if action not in {"add", "remove"} or label not in {"flash", "console", "board2-flash", "board2-console", "board3-flash", "board3-console"}:
+    raise SystemExit("invalid device action")
+dev = os.makedev(int(major), int(minor))
+root = Path("/dev/needle-pi")
+root.mkdir(mode=0o755, exist_ok=True)
+if root.is_symlink() or root.stat().st_uid != 0:
+    raise SystemExit("unsafe device directory")
+node = root / label
+if action == "remove":
+    try:
+        info = node.lstat()
+        if stat.S_ISCHR(info.st_mode) and info.st_rdev == dev:
+            node.unlink()
+    except FileNotFoundError:
+        pass
+else:
+    temp = root / ("." + label + ".tmp")
+    temp.unlink(missing_ok=True)
+    os.mknod(temp, stat.S_IFCHR | 0o660, dev)
+    os.chown(temp, 1000, 1000)
+    os.replace(temp, node)

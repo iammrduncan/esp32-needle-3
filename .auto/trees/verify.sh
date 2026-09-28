@@ -22,6 +22,32 @@ for T in .auto/trees/board*-*.tar.gz; do
     fi
     rm -rf "$tmp"
 done
+# The final campaign and benchmark source trees are stored unpacked so that a
+# fresh clone can inspect and overlay them without access to the pool workers.
+for spec in \
+    final-b1w3-source:1ada94b5b3d0c038f5f47e80006958df \
+    final-matrix-source:1bd2ba7c68ce57848a92d3406abf9612 \
+    final-one-layer-source:b8b3b60013fd92c702bb5ee50f6a07f2 \
+    final-b2resid2-source:d2b3c85ae2e45eee69a6de7393ea0c7d \
+    final-b3p1fix-source:9e4ca21af947fbde703efd702f867614; do
+    name=${spec%%:*}
+    want=${spec#*:}
+    tree=".auto/trees/$name"
+    if [ ! -d "$tree/engine/src" ] || [ ! -d "$tree/engine/include" ] ||
+       [ ! -d "$tree/esp32/main" ]; then
+        echo "FINAL_SOURCE_MISSING $name"
+        fail=1
+        continue
+    fi
+    got=$(cd "$tree" && cat engine/src/*.c engine/src/*.S engine/include/*.h esp32/main/*.c \
+          | md5sum | cut -d' ' -f1)
+    if [ "$got" = "$want" ]; then
+        echo "FINAL_SOURCE_OK $name hash=$got"
+    else
+        echo "FINAL_SOURCE_MISMATCH $name want=$want got=$got"
+        fail=1
+    fi
+done
 # LIVE DRIFT: a snapshot that matches its own filename is still useless if the worker it came from
 # has moved on. The first version of this script could not see that - it compared each snapshot only
 # against the hash embedded in its filename, so it reported OK while board 3's live tree had already

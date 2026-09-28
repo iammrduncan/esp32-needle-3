@@ -75,7 +75,10 @@ SHA-256, and slices it into ignored `.runtime/benchmarks/models`. It verifies
 that depth 8 is byte-identical to `model/manifest.json`. The board runner verifies
 every binary and model hash before flashing and stores immutable task/image/model
 identities in each result. `config.json` pins the exact prebuilt firmware images;
-the historical image comes from commit `3dcd1de6eb3e610908b7d04431399fe40c574417`.
+the historical image comes from commit `3dcd1de6eb3e610908b7d04431399fe40c574417`
+(not reachable from this branch, so its [full source archive](../.auto/archives/baseline-source-3dcd1de6.tar.gz)
+is checked in). The optimized images have [verified source overlays](../.auto/trees/README.md)
+for B1w3, the matrix boundary fix, and the one-layer allocation diagnostic.
 The `needle-matrix.bin` image is B1w3 with one boundary fix: its 12 MB PSRAM
 tier-copy pad is clipped to the mapped archive length for shallow slices.
 The original `needle-b1w3.bin` remains in `assets/` as the eight-layer speed

@@ -1,0 +1,183 @@
+PROVENANCE tree=/root/board-pool/board3 head=5c2abfb engine_md5=9e4ca21af947fbde703efd702f867614
+build_s=1
+engine_md5=9e4ca21af947
+app_md5=999f380837d1
+flash_s=6
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+Octal Flash Mode Enabled
+For OPI Flash, Use Default Flash Boot Mode
+mode:SLOW_RD, clock div:1
+load:0x3fce2820,len:0x15bc
+load:0x403c8700,len:0xe2c
+load:0x403cb700,len:0x2fcc
+entry 0x403c8944
+I (32) boot: ESP-IDF v5.5.2 2nd stage bootloader
+I (33) boot: compile time Sep 24 2026 16:51:12
+I (33) boot: Multicore bootloader
+I (33) boot: chip revision: v0.2
+I (36) boot: efuse block revision: v1.3
+I (39) boot.esp32s3: Boot SPI Speed : 80MHz
+I (43) boot.esp32s3: SPI Mode       : SLOW READ
+I (47) boot.esp32s3: SPI Flash Size : 32MB
+I (51) boot: Enabling RNG early entropy source...
+I (56) boot: Partition Table:
+I (58) boot: ## Label            Usage          Type ST Offset   Length
+I (65) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (78) boot:  2 factory          factory app      00 00 00010000 00200000
+I (84) boot:  3 model            Unknown data     01 40 00210000 01df0000
+I (91) boot: End of partition table
+I (94) esp_image: segment 0: paddr=00010020 vaddr=3c030020 size=0cd5ch ( 52572) map
+I (114) esp_image: segment 1: paddr=0001cd84 vaddr=3fc9c600 size=02f10h ( 12048) load
+I (118) esp_image: segment 2: paddr=0001fc9c vaddr=40378000 size=0037ch (   892) load
+I (118) esp_image: segment 3: paddr=00020020 vaddr=42000020 size=28660h (165472) map
+I (165) esp_image: segment 4: paddr=00048688 vaddr=4037837c size=141d0h ( 82384) load
+I (189) esp_image: segment 5: paddr=0005c860 vaddr=50000000 size=00020h (    32) load
+I (197) boot: Loaded app from partition at offset 0x10000
+I (197) boot: Disabling RNG early entropy source...
+I (208) MSPI Timing: Enter flash timing tuning
+I (209) octal_psram: vendor id    : 0x0d (AP)
+I (209) octal_psram: dev id       : 0x03 (generation 4)
+I (210) octal_psram: density      : 0x05 (128 Mbit)
+I (215) octal_psram: good-die     : 0x01 (Pass)
+I (219) octal_psram: Latency      : 0x01 (Fixed)
+I (223) octal_psram: VCC          : 0x00 (1.8V)
+I (227) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (232) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (237) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (242) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (247) octal_psram: DriveStrength: 0x00 (1/1)
+I (251) MSPI Timing: Enter psram timing tuning
+I (256) esp_psram: Found 16MB PSRAM device
+I (259) esp_psram: Speed: 80MHz
+I (262) cpu_start: Multicore app
+I (829) esp_psram: SPI SRAM memory test OK
+I (837) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (842) cpu_start: Pro cpu start user code
+I (842) cpu_start: cpu freq: 240000000 Hz
+I (844) app_init: Application information:
+I (848) app_init: Project name:     needle_demo
+I (852) app_init: App version:      5c2abfb-dirty
+I (857) app_init: Compile time:     Sep 25 2026 09:49:15
+I (862) app_init: ELF file SHA256:  6abce19b9...
+I (866) app_init: ESP-IDF:          v5.5.2
+I (870) efuse_init: Min chip rev:     v0.0
+I (874) efuse_init: Max chip rev:     v0.99 
+I (878) efuse_init: Chip rev:         v0.2
+I (882) heap_init: Initializing. RAM available for dynamic allocation:
+I (888) heap_init: At 3FCC9C50 len 0001FAC0 (126 KiB): RAM
+I (893) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (898) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (904) esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+I (910) spi_flash: detected chip: mxic (opi)
+I (914) spi_flash: flash io: opi_dtr
+I (917) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (924) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (930) main_task: Started on CPU0
+I (960) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (960) main_task: Calling app_main()
+EVT mapped model=16155796 bytes at 0x3d040000
+WARN drained 77 stale line(s) before the think toggle
+EG2 ok=1 bytes=313344 k=[15707584,15864256) v=[15864256,16020928)
+LSXCOST fixture_bad=0 cpwA=34 cpwB=25 ratioB_x100=73
+LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000
+PV8W selftest trials=128 bad=0 canaries=ok
+KRON1W selftest trials=64 bad=0
+LANEMIX selftest trials=64 bad=0
+LANEMIXROW selftest trials=64 bad=0
+LANEPRE selftest trials=64 bad=0
+KRON1W pool_align=0 kron1=1 lanemix=1 lanemix_row=1 lanepre=1
+EVT PERM n1=1024 n2=1024 need=1024 ok=1
+EVT ready model=needle3 layers=8 d_model=768 vocab=8192 window=384 tools=3 psram_free=1738900 internal_free=9311
+EVT priming tokens=143 (one-time; every later request reuses this)
+EVT priming 8/143  6%  elapsed=1s  eta=21s
+EVT priming 16/143  11%  elapsed=2s  eta=19s
+EVT priming 24/143  17%  elapsed=3s  eta=17s
+EVT priming 32/143  22%  elapsed=5s  eta=16s
+EVT priming 40/143  28%  elapsed=6s  eta=15s
+EVT priming 48/143  34%  elapsed=7s  eta=13s
+EVT priming 56/143  39%  elapsed=8s  eta=12s
+EVT priming 64/143  45%  elapsed=9s  eta=11s
+EVT priming 72/143  50%  elapsed=10s  eta=10s
+EVT priming 80/143  56%  elapsed=11s  eta=9s
+EVT priming 88/143  62%  elapsed=13s  eta=8s
+EVT priming 96/143  67%  elapsed=14s  eta=7s
+EVT priming 104/143  73%  elapsed=15s  eta=6s
+EVT priming 112/143  78%  elapsed=16s  eta=4s
+EVT priming 120/143  84%  elapsed=17s  eta=3s
+EVT priming 128/143  90%  elapsed=18s  eta=2s
+EVT priming 136/143  95%  elapsed=20s  eta=1s
+EVT priming 143/143  100%  elapsed=21s  eta=0s
+EVT prefix tokens=143 ms=20647 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=34s
+EVT priming 16/213  8%  elapsed=2s  eta=30s
+EVT priming 24/213  11%  elapsed=4s  eta=28s
+EVT priming 32/213  15%  elapsed=5s  eta=26s
+EVT priming 40/213  19%  elapsed=6s  eta=25s
+EVT priming 48/213  23%  elapsed=7s  eta=24s
+EVT priming 56/213  26%  elapsed=8s  eta=22s
+EVT priming 64/213  30%  elapsed=9s  eta=21s
+EVT priming 72/213  34%  elapsed=10s  eta=20s
+EVT priming 80/213  38%  elapsed=11s  eta=19s
+EVT priming 88/213  41%  elapsed=13s  eta=18s
+EVT priming 96/213  45%  elapsed=14s  eta=17s
+EVT priming 104/213  49%  elapsed=15s  eta=16s
+EVT priming 112/213  53%  elapsed=16s  eta=15s
+EVT priming 120/213  56%  elapsed=17s  eta=13s
+EVT priming 128/213  60%  elapsed=18s  eta=12s
+EVT priming 136/213  64%  elapsed=20s  eta=11s
+EVT priming 144/213  68%  elapsed=21s  eta=10s
+EVT priming 152/213  71%  elapsed=22s  eta=9s
+EVT priming 160/213  75%  elapsed=23s  eta=8s
+EVT priming 168/213  79%  elapsed=25s  eta=7s
+EVT priming 176/213  83%  elapsed=26s  eta=5s
+EVT priming 184/213  86%  elapsed=27s  eta=4s
+EVT priming 192/213  90%  elapsed=28s  eta=3s
+EVT priming 200/213  94%  elapsed=29s  eta=2s
+EVT priming 208/213  98%  elapsed=31s  eta=1s
+EVT priming 213/213  100%  elapsed=32s  eta=0s
+EVT prefix tokens=213 ms=31543 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=950 ms_per_tok=158 tps=6.316
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":8,"model_bytes":16155796,"uptime_ms":54339,"free_internal_bytes":8475,"free_psram_bytes":512928,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":53349,"last_sample_free_internal_bytes":9239,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+ATTACH_DEVICE path=/dev/needle-pi/board3-console real=/dev/needle-pi/board3-console rdev=166.5
+EVT think=0
+### group=primary think=0
+CASE sampling5 phase=tools tps=6.270 tokens=18 decode_ms=2872 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":5}}]
+CASE timer60 phase=tools tps=6.250 tokens=14 decode_ms=2239 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_timer","arguments":{"seconds":60}}]
+CASE status_heap phase=tools tps=6.150 tokens=10 decode_ms=1625 prefill_tps=6.60 calls_ok=1 calls=[{"name":"get_status","arguments":{}}]
+CASE batch phase=tools tps=6.320 tokens=29 decode_ms=4586 prefill_tps=6.59 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":10}},{"name":"set_timer","argument
+CASE heldout_timer45 phase=tools tps=6.250 tokens=14 decode_ms=2240 prefill_tps=6.61 calls_ok=1 calls=[{"name":"set_timer","arguments":{"seconds":45}}]
+CASE route_translate phase=route tps=5.980 tokens=14 decode_ms=2343 prefill_tps=6.30 calls_ok=1 calls=[{"name":"translate_or_write","arguments":{}}]
+GROUP primary mean_tps=6.203 calls_ok=6/6
+METRIC decode_tps=6.2033
+METRIC prefill_tps=6.55
+METRIC gen_tokens=99
+METRIC min_case_tps=5.98
+### reconnect before group=extended
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":8,"model_bytes":16155796,"uptime_ms":95910,"free_internal_bytes":8475,"free_psram_bytes":495004,"sample_period_s":10,"samples":6,"last_sample_uptime_ms":92094,"last_sample_free_internal_bytes":8895,"timer_status":"running","timer_remaining_ms":36808,"timer_fired_count":0}
+EVT think=0
+### group=extended think=0
+CASE heldout_sampling15 phase=tools tps=6.290 tokens=19 decode_ms=3021 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":15}}]
+CASE heldout_batch phase=tools tps=6.310 tokens=31 decode_ms=4913 prefill_tps=6.58 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":7}},{"name":"set_timer","arguments
+CASE heldout_status phase=tools tps=6.250 tokens=14 decode_ms=2242 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_timer","arguments":{"seconds":60}}]
+CASE route_code phase=route tps=5.890 tokens=11 decode_ms=1867 prefill_tps=6.29 calls_ok=1 calls=[{"name":"write_code","arguments":{}}]
+CASE heldout_route_timer phase=route tps=5.900 tokens=10 decode_ms=1695 prefill_tps=6.31 calls_ok=1 calls=[{"name":"set_timer","arguments":{}}]
+CASE heldout_route_research phase=route tps=5.930 tokens=13 decode_ms=2192 prefill_tps=6.29 calls_ok=1 calls=[{"name":"research_and_plan","arguments":{}}]
+CASE heldout_interval_over_max phase=tools tps=6.290 tokens=19 decode_ms=3022 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":400}}]
+CASE heldout_free_text phase=tools tps=6.290 tokens=19 decode_ms=3022 prefill_tps=6.60 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":120}}]
+CASE heldout_route_translate_short phase=route tps=5.980 tokens=14 decode_ms=2342 prefill_tps=6.30 calls_ok=1 calls=[{"name":"translate_or_write","arguments":{}}]
+CASE heldout_batch_three_field phase=tools tps=6.270 tokens=67 decode_ms=10693 prefill_tps=6.57 calls_ok=1 calls=[{"name":"set_sampling_interval","arguments":{"seconds":300}},{"name":"set_timer","argumen
+CASE heldout_long_route phase=route tps=5.830 tokens=14 decode_ms=2401 prefill_tps=6.22 calls_ok=1 calls=[{"name":"translate_or_write","arguments":{}}]

@@ -7,12 +7,21 @@ import os
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import serial
 
 CATALOG = json.loads((Path(__file__).with_name('model-catalog.json')).read_text())
+# The firmware compiles these two schemas in (esp32/main/CMakeLists.txt); a
+# request cannot change them at run time.
+SCHEMAS = {
+    "tools": json.loads((Path(__file__).with_name('demo-tools.json')).read_text()),
+    "route": json.loads((Path(__file__).with_name('model-routes.json')).read_text()),
+}
+# OpenAI-compatible model ids, each bound to one firmware phase.
+OPENAI_MODELS = {"needle3": "tools", "needle3-router": "route"}
 
 # Printed when the startup log turns out to be interleaved with echoed console
 # probes: past this point it must not be parsed as boot output.
@@ -383,7 +392,7 @@ class Device:
         `retried` marker plus the WARN line keep it visible in the lane log.
         """
         try:
-            return self._complete_once(prompt, phase)
+            return METRICS.observe(self._complete_once(prompt, phase))
         except TimeoutError:
             if getattr(self, "port", None) is None:
                 # Nothing to reconnect to: this Device was never attached (the
@@ -419,12 +428,12 @@ class Device:
                 print("WARN reconnect got no answer; resetting the chip and re-sending "
                       "this case (not skipping it)")
                 self._hard_reset()          # re-establishes readiness or raises
-                result = self._complete_once(prompt, phase)
+                result = METRICS.observe(self._complete_once(prompt, phase))
                 result["retried"] = 1
                 result["hard_reset"] = 1
                 return result
             self.available = True
-            result = self._complete_once(prompt, phase)
+            result = METRICS.observe(self._complete_once(prompt, phase))
             result["retried"] = 1
             return result
 
@@ -444,7 +453,7 @@ class Device:
             self.serial.write((b"!route " if phase == "route" else b"") + prompt.encode() + b"\n")
             self.serial.flush()
             output, calls, results = [], None, None
-            prefill_ms = decode_ms = prefill_tps = decode_tps = None
+            prefill_ms = decode_ms = prefill_tps = decode_tps = prefill_tokens = None
             tokens = confidence = error = None
             done = False
             try:
@@ -461,6 +470,7 @@ class Device:
                     elif line.startswith("EVT prefill "):
                         prefill_ms = metric(line, "ms")
                         prefill_tps = metric(line, "tps")
+                        prefill_tokens = metric(line, "tokens")
                     elif line.startswith("EVT done "):
                         decode_ms = metric(line, "ms")
                         decode_tps = metric(line, "tps")
@@ -484,6 +494,7 @@ class Device:
                 "function_calls": calls or [], "results": results or [],
                 "raw": "".join(output), "confidence": confidence,
                 "prefill_ms": prefill_ms, "prefill_tps": prefill_tps,
+                "prefill_tokens": int(prefill_tokens) if prefill_tokens is not None else None,
                 "decode_ms": decode_ms, "decode_tps": decode_tps,
                 "decode_tokens": int(tokens) if tokens is not None else None,
                 "latency_ms": round((time.monotonic() - start) * 1000, 1),
@@ -523,6 +534,159 @@ class Device:
             return result
 
 
+class Metrics:
+    """Firmware timings from `EVT prefill` / `EVT done`, as Prometheus text."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.counters = {"requests": 0, "failures": 0, "http_errors": 0,
+                         "prefill_tokens": 0, "prefill_ms": 0.0,
+                         "decode_tokens": 0, "decode_ms": 0.0}
+        self.last_decode_tps = None
+        self.last_prefill_tps = None
+
+    def observe(self, result):
+        with self.lock:
+            c = self.counters
+            c["requests"] += 1
+            if not result.get("success"):
+                c["failures"] += 1
+            for key in ("prefill_tokens", "prefill_ms", "decode_tokens", "decode_ms"):
+                if result.get(key) is not None:
+                    c[key] += result[key]
+            if result.get("decode_tps") is not None:
+                self.last_decode_tps = result["decode_tps"]
+            if result.get("prefill_tps") is not None:
+                self.last_prefill_tps = result["prefill_tps"]
+        return result
+
+    def error(self):
+        with self.lock:
+            self.counters["http_errors"] += 1
+
+    def render(self):
+        with self.lock:
+            c = dict(self.counters)
+            last = (self.last_prefill_tps, self.last_decode_tps)
+        rows = [
+            ("needle_requests_total", "counter", "Device inference passes", c["requests"]),
+            ("needle_request_failures_total", "counter", "Passes the firmware reported as failed", c["failures"]),
+            ("needle_http_errors_total", "counter", "HTTP requests answered with an error status", c["http_errors"]),
+            ("needle_prefill_tokens_total", "counter", "Prompt tokens prefilled on the device", c["prefill_tokens"]),
+            ("needle_prefill_milliseconds_total", "counter", "Device prefill time from EVT prefill", c["prefill_ms"]),
+            ("needle_decode_tokens_total", "counter", "Tokens generated on the device", c["decode_tokens"]),
+            ("needle_decode_milliseconds_total", "counter", "Device decode time from EVT done", c["decode_ms"]),
+        ]
+        if last[0] is not None:
+            rows.append(("needle_last_prefill_tokens_per_second", "gauge", "Prefill rate of the latest pass", last[0]))
+        if last[1] is not None:
+            rows.append(("needle_last_decode_tokens_per_second", "gauge", "Decode rate of the latest pass", last[1]))
+        out = []
+        for name, kind, help_text, value in rows:
+            out += [f"# HELP {name} {help_text}", f"# TYPE {name} {kind}", f"{name} {value:g}"]
+        return "\n".join(out) + "\n"
+
+
+METRICS = Metrics()
+
+
+class RequestError(ValueError):
+    """An OpenAI-style request the device cannot serve (HTTP 400)."""
+
+    def __init__(self, message, code="invalid_request"):
+        super().__init__(message)
+        self.code = code
+
+
+def openai_models():
+    return {"object": "list", "data": [
+        {"id": model, "object": "model", "created": 0, "owned_by": "needle3-esp32",
+         "phase": phase, "tools": [tool["name"] for tool in SCHEMAS[phase]]}
+        for model, phase in OPENAI_MODELS.items()]}
+
+
+def parse_chat_request(body):
+    """Map a /v1/chat/completions body onto (phase, prompt, offered tool names)."""
+    if not isinstance(body, dict):
+        raise RequestError("body must be a JSON object")
+    if body.get("stream"):
+        raise RequestError("streaming is not supported by this device bridge", "unsupported")
+    model = body.get("model") or "needle3"
+    if model not in OPENAI_MODELS:
+        raise RequestError(f"unknown model {model!r}; available: {', '.join(OPENAI_MODELS)}", "model_not_found")
+    phase = OPENAI_MODELS[model]
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise RequestError("messages must be a nonempty list")
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in ("system", "developer", "user"):
+            raise RequestError("only system and user messages are supported; the device keeps no "
+                               "conversation state, so assistant and tool turns cannot be replayed", "unsupported")
+    content = next((m.get("content") for m in reversed(messages) if m["role"] == "user"), None)
+    if isinstance(content, list):
+        content = "".join(part.get("text", "") for part in content
+                          if isinstance(part, dict) and part.get("type") == "text")
+    if not isinstance(content, str):
+        raise RequestError("a user message with text content is required")
+    known = [tool["name"] for tool in SCHEMAS[phase]]
+    tools = body.get("tools")
+    if tools is None:
+        offered = known
+    else:
+        if not isinstance(tools, list) or not tools:
+            raise RequestError("tools must be a nonempty list when given")
+        offered = []
+        for tool in tools:
+            fn = tool.get("function") if isinstance(tool, dict) else None
+            if not isinstance(fn, dict) or tool.get("type", "function") != "function" or not fn.get("name"):
+                raise RequestError("each tool must be {\"type\": \"function\", \"function\": {\"name\": ...}}")
+            offered.append(fn["name"])
+        unknown = [name for name in offered if name not in known]
+        if unknown:
+            raise RequestError(
+                f"tool(s) {', '.join(unknown)} are not in the {model} firmware schema. Tool schemas are "
+                f"compiled into the firmware at build time and cannot be supplied per request; "
+                f"available tools: {', '.join(known)}", "unsupported_tool")
+    if body.get("tool_choice") not in (None, "auto", "required"):
+        raise RequestError("tool_choice must be omitted, \"auto\" or \"required\"", "unsupported")
+    return model, phase, content, offered
+
+
+def chat_completion(model, result, offered):
+    """Shape a device result as an OpenAI chat.completion."""
+    calls = result.get("function_calls") or []
+    outside = [call.get("name") for call in calls if call.get("name") not in offered]
+    if outside:
+        raise RuntimeError(f"model called tool(s) outside the requested set: {', '.join(outside)}")
+    tool_calls = [{"id": f"call_{uuid.uuid4().hex[:24]}", "type": "function",
+                   "function": {"name": call.get("name"),
+                                "arguments": json.dumps(call.get("arguments") or {}, separators=(",", ":"))}}
+                  for call in calls]
+    prompt_tokens = result.get("prefill_tokens")
+    completion_tokens = result.get("decode_tokens")
+    usage = None
+    if prompt_tokens is not None and completion_tokens is not None:
+        usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+                 "total_tokens": prompt_tokens + completion_tokens}
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": None if tool_calls else result.get("raw", ""),
+                        "tool_calls": tool_calls or None},
+            "finish_reason": "tool_calls" if tool_calls else "stop",
+        }],
+        "usage": usage,
+        # Device-side detail: local tools already ran on the ESP32 in this request.
+        "needle": {k: result.get(k) for k in (
+            "phase", "results", "confidence", "prefill_ms", "prefill_tps",
+            "decode_ms", "decode_tps", "latency_ms", "retried")},
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     device = None
 
@@ -534,6 +698,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/models":
             self._json(200, CATALOG)
             return
+        if self.path == "/v1/models":
+            self._json(200, openai_models())
+            return
+        if self.path == "/metrics":
+            payload = METRICS.render().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path not in ("/health", "/state"):
             self._json(404, {"error": "not found"})
             return
@@ -544,6 +719,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(503, {"ready": False, "error": str(exc)})
 
     def do_POST(self):
+        if self.path == "/v1/chat/completions":
+            self._chat()
+            return
         if self.path not in ("/complete", "/agent", "/route"):
             self._json(404, {"error": "not found"})
             return
@@ -566,7 +744,39 @@ class Handler(BaseHTTPRequestHandler):
         except (ConnectionError, serial.SerialException, OSError) as exc:
             self._json(503, {"error": str(exc)})
 
+    def _chat(self):
+        def fail(status, message, code):
+            self._json(status, {"error": {"message": message, "type": code, "code": code}})
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 65536:
+                raise RequestError("request body must be 1..65536 bytes")
+            try:
+                body = json.loads(self.rfile.read(length))
+            except (ValueError, UnicodeError) as exc:
+                raise RequestError(f"invalid JSON: {exc}") from exc
+            model, phase, prompt, offered = parse_chat_request(body)
+            try:
+                validate_prompt(prompt)
+            except ValueError as exc:
+                raise RequestError(str(exc)) from exc
+            result = self.device.complete(prompt, phase=phase)
+            if not result["success"]:
+                fail(502, f"device reported {result.get('error')}", "device_error")
+                return
+            self._json(200, chat_completion(model, result, offered))
+        except RequestError as exc:
+            fail(400, str(exc), exc.code)
+        except (RuntimeError, ValueError) as exc:
+            fail(502, str(exc), "device_error")
+        except TimeoutError as exc:
+            fail(504, str(exc), "timeout")
+        except (ConnectionError, serial.SerialException, OSError) as exc:
+            fail(503, str(exc), "unavailable")
+
     def _json(self, status, data):
+        if status >= 400:
+            METRICS.error()
         payload = json.dumps(data, separators=(",", ":")).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")

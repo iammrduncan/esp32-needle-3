@@ -10,10 +10,18 @@ This project modifies that code for the Needle 3 archive and architecture,
 adds model selection, a two-pass local telemetry agent and HTTP bridge,
 and supplies reproducible demos.
 
-Needle 3 architecture and model weights are by Cactus Compute:
-  https://cactuscompute.com/needle
+Needle 3 architecture and model weights are by Cactus Compute, Inc.:
+  https://github.com/cactus-compute/needle
   https://huggingface.co/Cactus-Compute/needle3
-Weights are downloaded separately. See model/manifest.json for provenance.
+  revision 9da75122d4ca11aa4a667281c9c8ba38a7eed679
+  Licensed under Apache License 2.0 (model card: "license: apache-2.0").
+Weights are downloaded separately and are not redistributed here. See
+model/manifest.json for provenance.
+
+  Needle: Automation Foundation Model for Tiny Devices. Ndubuaku, Henry;
+  Mosoyan, Karen; Mroz, Jakub; Cylich, Noah; Kumar, Satyajit; Sandhu, Parkirat;
+  Shemet, Roman; Lee, Justin H. Cactus Compute, Inc., 2026.
+  https://github.com/cactus-compute/needle
 
 Demo recordings are produced with Charmbracelet VHS (MIT license):
   https://github.com/charmbracelet/vhs

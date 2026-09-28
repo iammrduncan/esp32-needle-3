@@ -5,6 +5,13 @@ engine work. It is written so that another inference-engine project can reuse
 the mechanisms, measurement discipline, and failure knowledge without needing
 the original agent conversations or the ESP32 board pool.
 
+The research workspace these pages cite (`.auto/`: the run ledger `log.jsonl`,
+experiment directories, final logs, source snapshots and board-pool tooling) is
+not on the default branch. It is preserved at the
+[`research-archive-2026-09-27`](https://github.com/iammrduncan/esp32-needle-3/tree/research-archive-2026-09-27)
+tag; a path written as `.auto/...` below refers to that tag. The campaign's
+[shutdown handoff](appendices/shutdown-handoff.md) records the final state.
+
 The bible is not a changelog and it is not a claim that every preserved
 candidate is shipped. It separates four states that the research history often
 had alive at the same time:

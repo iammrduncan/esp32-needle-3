@@ -28,7 +28,10 @@ endforeach()
 # NEEDLE_KBENCH unbuildable). With the option OFF the requirement list is the
 # same four components, so the shipping image cannot move.
 option(NEEDLE_THERMAL_DIAG "Log die temperature and PSRAM integrity" OFF)
-set(MAIN_REQUIRES needle esp_partition esp_timer json)
+# The lossless console RX ring (console_rx_ring_enable in main.c) needs the UART
+# driver component; esp_vfs_dev.h is a header of component vfs (already on the
+# common requires). Same spelling the B2/B3 workers use.
+set(MAIN_REQUIRES needle esp_partition esp_timer json esp_driver_uart)
 if(NEEDLE_THERMAL_DIAG)
     list(APPEND MAIN_REQUIRES esp_driver_tsens)
 endif()
@@ -62,7 +65,7 @@ if(NEEDLE_KBENCH)
     # dot4_tie728.S is the Experiment 22 screen kernel (see the file header). It is
     # compiled only into a kbench image, so a shipping configure never places it in
     # IRAM and the accepted image cannot move.
-    target_sources(${COMPONENT_LIB} PRIVATE "kbench.c" "dot4_tie728.S")
+    target_sources(${COMPONENT_LIB} PRIVATE "kbench.c" "dot4_tie728.S" "kb_wide.S")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE ND_KBENCH=1)
 
     # Experiment 29: which performance lane this image screens. A bare

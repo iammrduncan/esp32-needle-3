@@ -183,3 +183,590 @@ nd_gemv4_rows_tie1:
 	bnez	a12, .Lrow
 	retw
 	.size	nd_gemv4_rows_tie1, .-nd_gemv4_rows_tie1
+
+/* nd_gemv4_rows_tie1W - wide-load twin of nd_gemv4_rows_tie1.
+ *
+ * WHY THIS IS NOT RUN #333'S WIDE LOAD. That screen's negative rested on a
+ * probe that never reset its A fixture and on a register list (f4,f5,f6,f7)
+ * OPPOSITE to the hardware fill: the extension's 128-bit forms are all
+ * post-increment and the LAST named register receives the LOWEST address (TRM
+ * 1.8.25/1.8.65; E50's store-back probe is consistent with it and is not used
+ * here as proof - it only ever wrote the address it had just read). The list
+ * must therefore be written f7,f6,f5,f4 so f4 receives the LOWEST address. With
+ * that order the kernel is
+ * bit-exact against tie1 row-for-row (96/96, real phi bytes, internal xh) and
+ * warm 5.400 vs 6.281 cycles per weight = +16.3 % on the field-shape sweep.
+ * Requires 16-byte-aligned xh: the wrapper checks, and nd_model_open now
+ * allocates m->xh with heap_caps_aligned_alloc(16).
+ */
+	.align	4
+	.global	nd_gemv4_rows_tie1W
+	.type	nd_gemv4_rows_tie1W,@function
+nd_gemv4_rows_tie1W:
+	entry	a1, 32
+	l32i	a3,  a2, GC_CB
+	l32i	a7,  a2, GC_G
+	l32i	a12, a2, GC_NROWS
+	l32i	a8,  a2, GC_PACKED
+	l32i	a5,  a2, GC_NORMS
+	l32i	a13, a2, GC_Y
+	movi	a14, 0
+.Lwrow:
+	wfr	f13, a14
+	l32i	a6, a2, GC_NGROUP
+	l32i	a4, a2, GC_XH
+.Lwgroup:
+	wfr	f0, a14
+	wfr	f1, a14
+	wfr	f2, a14
+	wfr	f3, a14
+	srli	a9, a7, 3
+	loop	a9, .Lwwend
+	l32i	a11, a8, 0
+	addi	a8, a8, 4
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a4, 16
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a4, 16
+	extui	a15, a11, 0, 4
+	addx4	a15, a15, a3
+	lsi	f12, a15, 0
+	extui	a9, a11, 4, 4
+	addx4	a9, a9, a3
+	lsi	f14, a9, 0
+	madd.s	f0, f12, f4
+	extui	a15, a11, 8, 4
+	addx4	a15, a15, a3
+	lsi	f12, a15, 0
+	madd.s	f1, f14, f5
+	extui	a9, a11, 12, 4
+	addx4	a9, a9, a3
+	lsi	f14, a9, 0
+	madd.s	f2, f12, f6
+	extui	a15, a11, 16, 4
+	addx4	a15, a15, a3
+	lsi	f12, a15, 0
+	madd.s	f3, f14, f7
+	extui	a9, a11, 20, 4
+	addx4	a9, a9, a3
+	lsi	f14, a9, 0
+	madd.s	f0, f12, f8
+	extui	a15, a11, 24, 4
+	addx4	a15, a15, a3
+	lsi	f12, a15, 0
+	madd.s	f1, f14, f9
+	extui	a9, a11, 28, 4
+	addx4	a9, a9, a3
+	lsi	f14, a9, 0
+	madd.s	f2, f12, f10
+	madd.s	f3, f14, f11
+.Lwwend:
+	add.s	f0, f0, f1
+	add.s	f2, f2, f3
+	add.s	f0, f0, f2
+	l16ui	a15, a5, 0
+	addi	a5, a5, 2
+	NF16V	a15, f14, a9, a11
+	madd.s	f13, f14, f0
+	addi	a6, a6, -1
+	bnez	a6, .Lwgroup
+	ssi	f13, a13, 0
+	addi	a13, a13, 4
+	addi	a12, a12, -1
+	bnez	a12, .Lwrow
+	retw
+	.size	nd_gemv4_rows_tie1W, .-nd_gemv4_rows_tie1W
+
+/* nd_pv_pair2w - E53: the wide-load form of the B4W paired-head P.V update.
+ *
+ * void nd_pv_pair2w(float *ohA, float *ohB, const float *vf0, const float *vf1,
+ *                   uint32_t nchunk, float w0, float w1, float w2, float w3);
+ *   a2 ohA, a3 ohB, a4 vf0, a5 vf1, a6 nchunk (= v_hd/4, must be >= 1),
+ *   a7 = w0, a1+32 = w1, a1+36 = w2, a1+40 = w3   (mixed int/float args: the
+ *   windowed ABI puts the first six in a2-a7 whatever their type - measured with
+ *   a probe, not assumed - and the rest on the caller's frame)
+ *   per 4-float chunk j:
+ *     ohA[j] = madd(w0, vf0[j], madd(w1, vf1[j], ohA[j]))
+ *     ohB[j] = madd(w2, vf0[j], madd(w3, vf1[j], ohB[j]))
+ *
+ * Two statements per cell, term0 then term1, is what the shipped body has and
+ * what GCC -O2 emits for it: lsi oh; madd.s oh,w0,v0; madd.s oh,w1,u0; ssi oh.
+ * The accumulator is updated by TWO separately rounded FMAs, so no pairing of
+ * them into one expression is allowed - only the operand delivery changes.
+ *
+ * Against the shipped body this is 6 memory operations per chunk instead of 32:
+ * both staged rows and each output row arrive as one 128-bit load, and the
+ * outputs leave as one 128-bit store. The rows stay resident across all eight
+ * madds (the compiler already keeps each output row in registers, so the whole
+ * saving is the row transport).
+ *
+ * BOTH 128-bit forms are POST-INCREMENT and for BOTH the LAST-named register
+ * receives the LOWEST address (TRM 1.8.25 for ee.ldf.128.ip, 1.8.65 for
+ * ee.stf.128.ip). Two consequences the first version of this kernel got wrong:
+ *   - a load followed by a store of the same row advances the pointer TWICE, so
+ *     the store must be preceded by `addi aS, aS, -16` and the pair then nets
+ *     +16 per chunk (a double advance walks 384 bytes past a 192-byte row and
+ *     corrupts the caller's frame - the first version crashed the board in its
+ *     own self-test, which is what the canaries in nd_model.c now assert);
+ *   - the store list must be written in the SAME order as the load list
+ *     (`stf f15,f14,f13,f12`), not reversed, or the four cells are permuted.
+ * E50's store-back probe cannot settle the store order: it stores to the address
+ * it has just read and then rewinds the pointer, so a permutation is invisible.
+ *
+ * f0-f3 hold the four weight scalars for the whole loop; f4-f7 are the vf0 row,
+ * f8-f11 the vf1 row and f12-f15 the output row being updated. Preconditions are
+ * the caller's: 16-byte-aligned ohA/ohB/vf0/vf1 (nd_model.c checks once per pair
+ * and keeps the C body otherwise), nchunk = v_hd/4 with the v_hd % 4 remainder
+ * left to the C tail.
+ */
+	.align	4
+	.global	nd_pv_pair2w
+	.type	nd_pv_pair2w,@function
+nd_pv_pair2w:
+	entry	a1, 32
+	wfr	f0, a7
+	l32i	a8, a1, 32
+	l32i	a9, a1, 36
+	l32i	a10, a1, 40
+	wfr	f1, a8
+	wfr	f2, a9
+	wfr	f3, a10
+	loop	a6, .Lpvend
+.Lpvchunk:
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a4, 16	/* vf0[j..j+3] */
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a5, 16	/* vf1[j..j+3] */
+	ee.ldf.128.ip	f15, f14, f13, f12, a2, 16	/* ohA[j..j+3] */
+	madd.s	f12, f0, f4
+	madd.s	f13, f0, f5
+	madd.s	f14, f0, f6
+	madd.s	f15, f0, f7
+	madd.s	f12, f1, f8
+	madd.s	f13, f1, f9
+	madd.s	f14, f1, f10
+	madd.s	f15, f1, f11
+	addi	a2, a2, -16			/* stf also post-increments: same address */
+	ee.stf.128.ip	f15, f14, f13, f12, a2, 16
+	ee.ldf.128.ip	f15, f14, f13, f12, a3, 16	/* ohB[j..j+3] */
+	madd.s	f12, f2, f4
+	madd.s	f13, f2, f5
+	madd.s	f14, f2, f6
+	madd.s	f15, f2, f7
+	madd.s	f12, f3, f8
+	madd.s	f13, f3, f9
+	madd.s	f14, f3, f10
+	madd.s	f15, f3, f11
+	addi	a3, a3, -16
+	ee.stf.128.ip	f15, f14, f13, f12, a3, 16
+.Lpvend:
+	retw
+	.size	nd_pv_pair2w, .-nd_pv_pair2w
+
+/* nd_kron1_w - E55: wide-load factor row for the kron1 4x2 pass.
+ *
+ * void nd_kron1_w(float *out8, const float *src_j, const float *a_k,
+ *                 uint32_t na, uint32_t nb_bytes, uint32_t a_skip);
+ *   a2 out8, a3 src_j, a4 a_k, a5 na (i count, >= 1), a6 nb*4 (src row stride),
+ *   a7 na*4 - 16 (bytes to add after the 128-bit load, so each i advances one
+ *   full factor row)
+ *   out[0..3] = s[0..3] (column j), out[4..7] = u[0..3] (column j+1)
+ *
+ * The shipped kron1 body, per i: two scalar src reads (v0 at j, v1 at j+1), four
+ * scalar factor reads ar[0..3] through a pointer, and eight madd.s - the four
+ * factor values are CONTIGUOUS, which is the only reason a 128-bit load can
+ * replace them. The per-output sums stay in i order with the same two terms, so
+ * every stored float is identical; only the factor transport changes (4 lsi -> 1
+ * ldf.128 per i, ~19 % of the loop's instructions).
+ *
+ * This half is register-feasible where the kron2 half is not: eight accumulators
+ * (f0-f3 for column j, f4-f7 for j+1), the four factor values (f8-f11) and the
+ * two src values (f12, f13) are 14 of the 16 fp registers. kron2 needs 8
+ * accumulators AND two eight-float factor rows, which cannot fit, and the
+ * four-accumulator fallback measured -0.30 % (#674).
+ *
+ * Last-named register receives the LOWEST address (TRM 1.8.25). Preconditions
+ * are the caller's: a_k 16-byte aligned (k0 is a multiple of four and the factor
+ * pool is 16-byte aligned), na a multiple of four so every row stays aligned.
+ */
+	.align	4
+	.global	nd_kron1_w
+	.type	nd_kron1_w,@function
+nd_kron1_w:
+	entry	a1, 32
+	movi	a8, 0
+	wfr	f0, a8
+	wfr	f1, a8
+	wfr	f2, a8
+	wfr	f3, a8
+	wfr	f4, a8
+	wfr	f5, a8
+	wfr	f6, a8
+	wfr	f7, a8
+	loop	a5, .Lk1end
+.Lk1:
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a4, 16	/* ar[0..3] */
+	lsi	f12, a3, 0				/* v0 = src[i*nb + j]     */
+	lsi	f13, a3, 4				/* v1 = src[i*nb + j + 1] */
+	add.n	a3, a3, a6
+	add.n	a4, a4, a7
+	madd.s	f0, f12, f8
+	madd.s	f4, f13, f8
+	madd.s	f1, f12, f9
+	madd.s	f5, f13, f9
+	madd.s	f2, f12, f10
+	madd.s	f6, f13, f10
+	madd.s	f3, f12, f11
+	madd.s	f7, f13, f11
+.Lk1end:
+	ssi	f0, a2, 0
+	ssi	f1, a2, 4
+	ssi	f2, a2, 8
+	ssi	f3, a2, 12
+	ssi	f4, a2, 16
+	ssi	f5, a2, 20
+	ssi	f6, a2, 24
+	ssi	f7, a2, 28
+	retw
+	.size	nd_kron1_w, .-nd_kron1_w
+
+/* nd_lanemix4w / nd_mul4w - E64: wide delivery for the mHC lane mix.
+ *
+ * void nd_lanemix4w(float *dst, const float *src, float w, uint32_t n4);
+ *   dst[i] += w * src[i] over 4*n4 floats, one madd.s per cell, four cells per
+ *   128-bit load/store pair.
+ * void nd_mul4w(float *dst, const float *src, float w, uint32_t n4);
+ *   dst[i] = w * src[i], the same transport for the mix's initialiser.
+ *
+ * The shipped body is `dst[i] = hpost[k]*u[i]` followed by four passes of
+ * `dst[i] += w*src[i]` over d_model - five read-modify-write passes per output
+ * lane with contiguous rows, independent cells and no accumulator chain (one
+ * madd per cell per pass). That is the shape the P.V kernel already proved pays:
+ * the compiler cannot keep dst in registers across the passes, so every cell is
+ * loaded and stored twice per pass; here it is loaded once and stored once.
+ *
+ * Bit-exactness is structural: one rounding per cell per pass, same order of
+ * passes, same madd. Register lists high-to-low (the LAST-named register is the
+ * LOWEST address, TRM 1.8.25); both stores are preceded by the rewind their own
+ * load needs because 128-bit loads and stores BOTH post-increment (1.8.65).
+ *
+ * Caller-gated: dst and src 16-byte aligned, n4 = d_model/4.
+ */
+	.align	4
+	.global	nd_lanemix4w
+	.type	nd_lanemix4w,@function
+nd_lanemix4w:
+	entry	a1, 32
+	wfr	f0, a4			/* w: a2 dst, a3 src, a4 w, a5 n4 */
+	loop	a5, .Llm_end
+.Llm:
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a2, 16	/* dst */
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a3, 16	/* src */
+	madd.s	f4,  f8,  f0
+	madd.s	f5,  f9,  f0
+	madd.s	f6,  f10, f0
+	madd.s	f7,  f11, f0
+	addi	a2, a2, -16
+	ee.stf.128.ip	f7,  f6,  f5,  f4,  a2, 16
+.Llm_end:
+	retw
+	.size	nd_lanemix4w, .-nd_lanemix4w
+
+	.align	4
+	.global	nd_mul4w
+	.type	nd_mul4w,@function
+nd_mul4w:
+	entry	a1, 32
+	wfr	f0, a4			/* w: a2 dst, a3 src, a4 w, a5 n4 */
+	loop	a5, .Lmu_end
+.Lmu:
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a3, 16	/* src */
+	mul.s	f8,  f8,  f0
+	mul.s	f9,  f9,  f0
+	mul.s	f10, f10, f0
+	mul.s	f11, f11, f0
+	ee.stf.128.ip	f11, f10, f9,  f8,  a2, 16
+.Lmu_end:
+	retw
+	.size	nd_mul4w, .-nd_mul4w
+
+/* nd_lanemix_row4 - E65: the mHC lane mix with the output row resident.
+ *
+ * void nd_lanemix_row4(float *dst, const float *u, float hpost,
+ *                      const float *lane, uint32_t stride_bytes,
+ *                      const float *w4, uint32_t n4);
+ *   a2 dst, a3 u, a4 hpost, a5 lane (row 0), a6 stride in BYTES, a7 w4 (the four
+ *   weights for this output lane), n4 on the caller's frame at a1+32.
+ *
+ * E64 moved four cells per 128-bit pair but still made five passes over the output
+ * row (init + four accumulations), so dst was loaded and stored five times. Here
+ * the four-cell tile of dst stays in f4-f7 across all four input lanes: one u load,
+ * four weight madds, four src loads and ONE store per tile instead of ten memory
+ * operations. Per 4 cells: 6 memory ops + 20 fp ops against E64's 15 + 20.
+ *
+ * Bit-exact by construction: per cell the order is  dst = hpost*u, then += w_j*src_j
+ * for j ascending - identical to the two-loop form, and the tile is what changes,
+ * not the arithmetic.
+ *
+ * Register lists high-to-low (LAST-named = LOWEST address, TRM 1.8.25); the store
+ * replaces the load's increment, so no rewind is needed here (the loads all advance
+ * their own pointers by 16 and the dst pointer is advanced by the store itself).
+ * Caller-gated: 16-byte-aligned dst/u/lane row bases, n4 = dm/4.
+ */
+	.align	4
+	.global	nd_lanemix_row4
+	.type	nd_lanemix_row4,@function
+nd_lanemix_row4:
+	entry	a1, 32
+	l32i	a14, a1, 32			/* n4: 7th argument, same offset E53 proved on device */
+	ee.ldf.128.ip	f3,  f2,  f1,  f0,  a7, 16	/* w0..w3 */
+	wfr	f12, a4				/* hpost */
+	/* four row pointers, one per input lane */
+	mov.n	a8,  a5
+	add.n	a9,  a5,  a6
+	add.n	a10, a5,  a6
+	add.n	a10, a10, a6
+	add.n	a11, a5,  a6
+	add.n	a11, a11, a6
+	add.n	a11, a11, a6
+	loop	a14, .Llmr_end
+.Llmr:
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a3, 16	/* u tile */
+	mul.s	f4, f4, f12
+	mul.s	f5, f5, f12
+	mul.s	f6, f6, f12
+	mul.s	f7, f7, f12
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a8, 16
+	madd.s	f4, f8,  f0
+	madd.s	f5, f9,  f0
+	madd.s	f6, f10, f0
+	madd.s	f7, f11, f0
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a9, 16
+	madd.s	f4, f8,  f1
+	madd.s	f5, f9,  f1
+	madd.s	f6, f10, f1
+	madd.s	f7, f11, f1
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a10, 16
+	madd.s	f4, f8,  f2
+	madd.s	f5, f9,  f2
+	madd.s	f6, f10, f2
+	madd.s	f7, f11, f2
+	ee.ldf.128.ip	f11, f10, f9,  f8,  a11, 16
+	madd.s	f4, f8,  f3
+	madd.s	f5, f9,  f3
+	madd.s	f6, f10, f3
+	madd.s	f7, f11, f3
+	ee.stf.128.ip	f7,  f6,  f5,  f4,  a2, 16
+.Llmr_end:
+	retw
+	.size	nd_lanemix_row4, .-nd_lanemix_row4
+
+/* nd_lanepre4w - E67: wide delivery for the mHC lane pre-mix reduction.
+ *
+ * void nd_lanepre4w(float *dst, const float *lane, const float *hpre,
+ *                   uint32_t dm_bytes, uint32_t n4);
+ *   a2 dst, a3 lane (row 0 at the first column), a4 hpre (four weights, possibly
+ *   a stack array - loaded SCALARLY for that reason), a5 dm in BYTES (row stride),
+ *   a6 n4 (four-column chunks).
+ *
+ * The shipped loop is one serial chain per column:
+ *   acc = 0; acc += hpre[j]*lane[j*dm + i] for j = 0..3; dst[i] = acc
+ * so four independent columns can be walked together: one 128-bit load per input
+ * lane covers four columns, and each column keeps its own j-ascending chain with a
+ * single madd per term (the first adds to +0.0f, exactly as the C statement does).
+ *
+ * FOUR row pointers (a8-a11) advance by 16 bytes per tile, so every tile starts at
+ * row 0 again. The first version used ONE pointer and added a stride between rows,
+ * which walked off the end of row 3 after the first tile - the multi-tile case in
+ * the selftest is what covers that, not the four-row single-tile case.
+ *
+ * Register lists high-to-low: the LAST-named register is the LOWEST address (TRM
+ * 1.8.25). Caller-gated: 16-byte-aligned dst and lane row bases, dm a multiple of
+ * four, n4 = (hi-lo)/4.
+ */
+	.align	4
+	.global	nd_lanepre4w
+	.type	nd_lanepre4w,@function
+nd_lanepre4w:
+	entry	a1, 32
+	lsi	f8,  a4, 0				/* hpre may be a stack array: scalar */
+	lsi	f9,  a4, 4
+	lsi	f10, a4, 8
+	lsi	f11, a4, 12
+	mov.n	a8,  a3
+	add.n	a9,  a3,  a5
+	add.n	a10, a9,  a5
+	add.n	a11, a10, a5
+	loop	a6, .Llp_end
+.Llp:
+	movi	a7, 0
+	wfr	f0, a7
+	wfr	f1, a7
+	wfr	f2, a7
+	wfr	f3, a7
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a8,  16
+	madd.s	f0, f4, f8
+	madd.s	f1, f5, f8
+	madd.s	f2, f6, f8
+	madd.s	f3, f7, f8
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a9,  16
+	madd.s	f0, f4, f9
+	madd.s	f1, f5, f9
+	madd.s	f2, f6, f9
+	madd.s	f3, f7, f9
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a10, 16
+	madd.s	f0, f4, f10
+	madd.s	f1, f5, f10
+	madd.s	f2, f6, f10
+	madd.s	f3, f7, f10
+	ee.ldf.128.ip	f7,  f6,  f5,  f4,  a11, 16
+	madd.s	f0, f4, f11
+	madd.s	f1, f5, f11
+	madd.s	f2, f6, f11
+	madd.s	f3, f7, f11
+	ee.stf.128.ip	f3,  f2,  f1,  f0,  a2,  16
+.Llp_end:
+	retw
+	.size	nd_lanepre4w, .-nd_lanepre4w
+
+/* nd_lsx_probe2 - CV3W capability probe, CORRECTED.  The first probe passed indices
+ * 0,1,2 to LSX and concluded the instruction was absent; Espressif's own FIR kernels
+ * multiply the index by 4 BEFORE LSX, i.e. LSX takes a BYTE offset.  This version takes
+ * the byte offset directly, so a compliant core loads tab[off/4] for off = 0,4,8,60,64.
+ *
+ * float nd_lsx_probe2(const float *tab, uint32_t byte_off);   a2 tab, a3 byte offset
+ */
+	.align	4
+	.global	nd_lsx_probe2
+	.type	nd_lsx_probe2,@function
+nd_lsx_probe2:
+	entry	a1, 32
+	lsx	f0, a2, a3
+	ssi	f0, a1, 16
+	l32i	a2, a1, 16
+	retw
+	.size	nd_lsx_probe2, .-nd_lsx_probe2
+
+/* CV3W cost probe: the SAME eight lookups and eight adds per 32-bit weight word
+ * (four partials, two adds each, exactly the shipped W8D structure), with only the
+ * addressing changed:
+ *   nd_lsx_costA - extract each 4-bit index (extui), scale it (addx4) and load with
+ *                  lsi - three instructions per lookup, the shipped form;
+ *   nd_lsx_costB - read a predecoded uint16 BYTE offset (l16ui) and load with LSX -
+ *                  two instructions per lookup, the proposed form.
+ * Both return min cycles per word over `rounds` words; the caller compares.
+ *
+ * These price ADDRESSING ONLY. No LUT values are involved: the loads hit a small
+ * aligned table and the adds accumulate into four partials that are folded at the
+ * end and discarded, so a fast wrong answer is not mistaken for a win.
+ *
+ * uint32_t nd_lsx_costA(const uint8_t *packed, const float *lut, uint32_t rounds);
+ * uint32_t nd_lsx_costB(const uint16_t *offs,  const float *lut, uint32_t rounds);
+ * a2 packed/offs, a3 lut, a4 rounds
+ */
+	.align	4
+	.global	nd_lsx_costA
+	.type	nd_lsx_costA,@function
+nd_lsx_costA:
+	entry	a1, 32
+	movi	a5, 0
+	wfr	f0, a5
+	wfr	f1, a5
+	wfr	f2, a5
+	wfr	f3, a5
+	rsr.ccount	a6
+	loop	a4, .LcA_end
+.LcA:
+	l32i	a8, a2, 0
+	addi	a2, a2, 4
+	extui	a9, a8, 0, 4
+	addx4	a9, a9, a3
+	lsi	f4, a9, 0
+	extui	a10, a8, 4, 4
+	addx4	a10, a10, a3
+	lsi	f5, a10, 0
+	add.s	f0, f0, f4
+	add.s	f1, f1, f5
+	extui	a9, a8, 8, 4
+	addx4	a9, a9, a3
+	lsi	f4, a9, 0
+	extui	a10, a8, 12, 4
+	addx4	a10, a10, a3
+	lsi	f5, a10, 0
+	add.s	f2, f2, f4
+	add.s	f3, f3, f5
+	extui	a9, a8, 16, 4
+	addx4	a9, a9, a3
+	lsi	f4, a9, 0
+	extui	a10, a8, 20, 4
+	addx4	a10, a10, a3
+	lsi	f5, a10, 0
+	add.s	f0, f0, f4
+	add.s	f1, f1, f5
+	extui	a9, a8, 24, 4
+	addx4	a9, a9, a3
+	lsi	f4, a9, 0
+	extui	a10, a8, 28, 4
+	addx4	a10, a10, a3
+	lsi	f5, a10, 0
+	add.s	f2, f2, f4
+	add.s	f3, f3, f5
+.LcA_end:
+	rsr.ccount	a7
+	sub	a6, a7, a6
+	add.s	f0, f0, f1
+	add.s	f2, f2, f3
+	add.s	f0, f0, f2
+	ssi	f0, a1, 16
+	l32i	a8, a1, 16
+	xor	a8, a8, a6			/* fold the sink into the result so neither dies */
+	mov.n	a2, a6
+	retw
+	.size	nd_lsx_costA, .-nd_lsx_costA
+
+	.align	4
+	.global	nd_lsx_costB
+	.type	nd_lsx_costB,@function
+nd_lsx_costB:
+	entry	a1, 32
+	movi	a5, 0
+	wfr	f0, a5
+	wfr	f1, a5
+	wfr	f2, a5
+	wfr	f3, a5
+	rsr.ccount	a6
+	loop	a4, .LcB_end
+.LcB:
+	l16ui	a8, a2, 0
+	l16ui	a9, a2, 2
+	l16ui	a10, a2, 4
+	l16ui	a11, a2, 6
+	l16ui	a12, a2, 8
+	l16ui	a13, a2, 10
+	l16ui	a14, a2, 12
+	l16ui	a15, a2, 14
+	addi	a2, a2, 16
+	lsx	f4, a3, a8
+	lsx	f5, a3, a9
+	add.s	f0, f0, f4
+	add.s	f1, f1, f5
+	lsx	f4, a3, a10
+	lsx	f5, a3, a11
+	add.s	f2, f2, f4
+	add.s	f3, f3, f5
+	lsx	f4, a3, a12
+	lsx	f5, a3, a13
+	add.s	f0, f0, f4
+	add.s	f1, f1, f5
+	lsx	f4, a3, a14
+	lsx	f5, a3, a15
+	add.s	f2, f2, f4
+	add.s	f3, f3, f5
+.LcB_end:
+	rsr.ccount	a7
+	sub	a6, a7, a6
+	add.s	f0, f0, f1
+	add.s	f2, f2, f3
+	add.s	f0, f0, f2
+	ssi	f0, a1, 16
+	l32i	a8, a1, 16
+	xor	a8, a8, a6
+	mov.n	a2, a6
+	retw
+	.size	nd_lsx_costB, .-nd_lsx_costB

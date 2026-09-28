@@ -48,6 +48,9 @@ extern "C" {
  * SRAM instead of PSRAM matters far more than its size does. */
 #ifndef ND_ALLOC_FAST
 #define ND_ALLOC_FAST(n) heap_caps_malloc((n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#define ND_ALLOC_FAST16(n) heap_caps_aligned_alloc(16, (n), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+/* E55: a PSRAM allocation whose rows are read four floats at a time. */
+#define ND_ALLOC16(n) heap_caps_aligned_alloc(16, (n), MALLOC_CAP_SPIRAM)
 #endif
 #else
 #include <stdlib.h>
@@ -59,6 +62,8 @@ extern "C" {
 #endif
 #ifndef ND_ALLOC_FAST
 #define ND_ALLOC_FAST(n) malloc(n)
+#define ND_ALLOC_FAST16(n) malloc(n)
+#define ND_ALLOC16(n) malloc(n)
 #endif
 #endif
 
@@ -168,6 +173,17 @@ typedef struct {
     float        *eg_k, *eg_v;  /* [site][d_model] for the current token */
     uint8_t      *eg_vpsram;      /* PSRAM tier for the engram weight region */
     uint32_t      eg_vpsram_len, eg_region_lo, eg_region_hi;
+    /* E-engram1: the engram K/V pair that whole-tensor containment leaves out of the
+     * staged span streams from flash twice per site per token; it gets its own narrow
+     * PSRAM copy, served by nd_tier_ptr through the two ranges below. */
+    unsigned char *eg2_psram;
+    size_t        eg2_k_lo, eg2_k_hi, eg2_k_slot;
+    size_t        eg2_v_lo, eg2_v_hi, eg2_v_slot;
+    /* B3-eng: the engram key/value projections fall outside the staged span under
+     * whole-tensor containment, so each is copied into the span buffer's own unused
+     * tail (fixed relative slots). File-offset range and slot, one pair each. */
+    size_t        eg_k_lo, eg_k_hi, eg_k_slot;
+    size_t        eg_v_lo, eg_v_hi, eg_v_slot;
     float        *logits;       /* [vocab] */
     float        *row;          /* dequant scratch for engram table rows */
 } nd_model;

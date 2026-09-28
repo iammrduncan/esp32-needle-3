@@ -1898,6 +1898,138 @@ static void bench_e49(void)
 }
 
 
+/* ---- Experiment 50: corrected wide-load (ee.ldf.128.ip) for the phi kernel --
+ * #333 closed wide loads on a probe that was itself broken (mentor audit): the
+ * A-pattern fixture was overwritten by the B-pattern inside the same loop, and
+ * the register list order contradicted Espressif's documented fill. This run
+ * (1) measures the FILL ORDER directly (ldf reversed, stf forward: output is
+ * either the input or its reverse, one bit of ambiguity resolved empirically);
+ * (2) differentiates the wide kernel against the shipped scalar tie1 over the
+ * real phi geometry with INTERNAL 16-aligned xh (the E49 placement lesson);
+ * (3) times both forms warm on the field-shape sweep.
+ */
+extern void nd_kb_widetest(float *p);
+extern void nd_kb_gemv4_wide(void *vc);
+
+static void bench_e50(void)
+{
+    nd_tensor    tt[3];
+    uint32_t     ti[3], nt = 0, i;
+    uint8_t     *blob[3];
+    const uint8_t *packed[3];
+    const uint16_t *norms[3];
+    const float  *cb;
+    float        *xh = NULL, *yr = NULL, *yo = NULL;
+    uint32_t      in_pad = 0, ngroup = 0, rowbytes = 0;
+    uint32_t      r, li, rd, bad = 0, warmS = 0xFFFFFFFFu, warmW = 0xFFFFFFFFu;
+    uint32_t      weights;
+    nd_gemv4_ctx  a;
+    float         probe[8];
+
+    /* (1) fill-order probe */
+    for (i = 0; i < 8u; i++) probe[i] = 0.0f;
+    { float *pa = (float *)(((uintptr_t)probe + 15u) & ~(uintptr_t)15u);
+      pa[0] = 1001.0f; pa[1] = 1002.0f; pa[2] = 1003.0f; pa[3] = 1004.0f;
+      nd_kb_widetest(pa);
+      printf("KB E50 fill out=%g,%g,%g,%g %s\n", pa[0], pa[1], pa[2], pa[3],
+             (pa[0] == 1004.0f && pa[3] == 1001.0f) ? "REVERSED_FILL(f4=hi)" :
+             (pa[0] == 1001.0f && pa[3] == 1004.0f) ? "FWD_FILL(f4=lo)!" : "UNEXPECTED!"); }
+    /* heap alignment class of the field xh allocation */
+    { float *q0 = (float *)ND_ALLOC_FAST(4096);
+      float *q1 = (float *)ND_ALLOC_FAST(4096);
+      printf("KB E50 fastalloc alignbits=%u,%u\n",
+             (unsigned)((uintptr_t)q0 & 15u), (unsigned)((uintptr_t)q1 & 15u));
+      ND_FREE(q0); ND_FREE(q1); }
+
+    for (i = 0; i < s_c.n && nt < 3u; i++) {
+        nd_tensor t;
+        if (nd_cact_tensor(&s_c, i, &t) != 0) continue;
+        if (t.dtype != ND_DT_CQ || t.bits != 4u || t.group != 128u) continue;
+        if (t.shape[1] != 3072u || t.shape[0] < 8u) continue;
+        if (nd_cq_groups(&t) < 2u) continue;
+        tt[nt] = t; ti[nt] = i; nt++;
+    }
+    if (nt != 3u) { printf("KB E50 SKIP reason=tensors=%u\n", (unsigned)nt); return; }
+    in_pad = nd_cq_in_pad(&tt[0]); ngroup = nd_cq_groups(&tt[0]);
+    rowbytes = nd_cq_row_bytes(&tt[0]); cb = nd_cact_codebook(&s_c, 4u);
+    for (i = 0; i < 3u; i++) {
+        packed[i] = (const uint8_t *)nd_cact_data(&s_c, &tt[i]);
+        blob[i] = (uint8_t *)heap_caps_malloc((size_t)tt[i].nbytes, MALLOC_CAP_SPIRAM);
+        if (!blob[i]) { printf("KB E50 SKIP reason=alloc\n"); return; }
+        memcpy(blob[i], packed[i], tt[i].nbytes);
+        norms[i] = (const uint16_t *)(const void *)(blob[i] +
+                     (size_t)tt[i].shape[0] * rowbytes);
+    }
+    xh  = (float *)ND_ALLOC_FAST(sizeof(float) * in_pad + 16u);
+    yr  = (float *)ND_ALLOC(sizeof(float) * 192u);
+    yo  = (float *)ND_ALLOC(sizeof(float) * 192u);
+    if (!xh || !yr || !yo) { printf("KB E50 SKIP reason=alloc2\n"); return; }
+    { uint32_t s = 12345u;
+      for (i = 0; i < in_pad; i++) {
+          s = s * 1664525u + 1013904223u;
+          xh[i] = ((float)((s >> 8) & 0xFFFFu) / 32768.0f - 1.0f) * 0.25f;
+      } }
+    weights = 8u * (4u + 4u + 16u) * 3072u;
+    printf("KB E50 xh_align=%u\n", (unsigned)((uintptr_t)xh & 15u));
+
+    /* (2) differential: wide kernel vs shipped tie1, all slices + R sweep */
+    { const uint32_t rc[3] = { 4u, 4u, 16u };
+      /* distinct output windows per tensor (0/32/64): the first attempt let all
+       * three tensors share index space, so t2's 128 rows overwrote everything
+       * and the "mismatches" were the never-written tail (bookkeeping, not the
+       * kernel: every row actually written matched bit-exact). */
+      const uint32_t off[3] = { 0u, 32u, 64u };
+      memset(yr, 0x5a, sizeof(float) * 192u);
+      memset(yo, 0xa5, sizeof(float) * 192u);
+      for (li = 0; li < 8u; li++)
+          for (i = 0; i < 3u; i++) {
+              kb_row4(&a, blob[i], norms[i], xh, cb, yr, li * rc[i], rc[i], rowbytes, ngroup);
+              a.y0 = &yr[off[i] + li * rc[i]];
+              nd_kb_gemv4_wide(&a);
+              for (r = 0; r < rc[i]; r++) {
+                  kb_row4(&a, blob[i], norms[i], xh, cb, yo, li * rc[i] + r, 1u, rowbytes, ngroup);
+                  a.y0 = &yo[off[i] + li * rc[i] + r];
+                  nd_gemv4_rows_tie1(&a);
+              }
+          }
+      for (i = 0; i < 3u; i++)
+          for (r = 0; r < 32u; r++)
+              if (memcmp(&yr[off[i] + r], &yo[off[i] + r], 4) != 0) bad++;
+      printf("KB E50 diff rows=%u mismatch=%u ref0=%.9g got0=%.9g refL=%.9g gotL=%.9g\n",
+             96u, (unsigned)bad, yo[0], yr[0], yo[63], yr[63]);
+      if (bad) return;
+    }
+
+    /* (3) timing: field-shape sweep, scalar vs wide, warm, min of 25 */
+    { const uint32_t rc[3] = { 4u, 4u, 16u };
+      float *y0 = (float *)ND_ALLOC(sizeof(float) * 128u);
+      for (rd = 0; rd < KB_ROUNDS; rd++) {
+          uint32_t c0, cy;
+          c0 = esp_cpu_get_cycle_count();
+          for (li = 0; li < 8u; li++)
+              for (i = 0; i < 3u; i++) {
+                  kb_row4(&a, blob[i], norms[i], xh, cb, y0, li * rc[i], rc[i], rowbytes, ngroup);
+                  nd_gemv4_rows_tie1(&a);
+              }
+          cy = esp_cpu_get_cycle_count() - c0; if (cy < warmS) warmS = cy;
+          c0 = esp_cpu_get_cycle_count();
+          for (li = 0; li < 8u; li++)
+              for (i = 0; i < 3u; i++) {
+                  kb_row4(&a, blob[i], norms[i], xh, cb, y0, li * rc[i], rc[i], rowbytes, ngroup);
+                  nd_kb_gemv4_wide(&a);
+              }
+          cy = esp_cpu_get_cycle_count() - c0; if (cy < warmW) warmW = cy;
+      }
+      printf("KB E50 warm scalar=%u wide=%u gain_x100=%u cpwS=%u cpwW=%u\n",
+             (unsigned)warmS, (unsigned)warmW,
+             (unsigned)((uint64_t)warmS * 100u / warmW),
+             (unsigned)((uint64_t)warmS * 1000u / weights),
+             (unsigned)((uint64_t)warmW * 1000u / weights));
+      ND_FREE(y0);
+    }
+}
+
+
 /* ================= Experiment 29: fused/shared-activation CQ2 lanes =========
  *
  * Three questions, one per board, all about the mass the phase map puts in
@@ -4024,6 +4156,12 @@ int kbench_run(void)
     probes();          /* the ISA probes live in the assembly translation unit */
 #endif
     bench_div();
+    /* CQ2 differential FIRST: the experimental arm below can park in a bench that never
+     * returns, and bench_shape() is what prints the per-kernel `KB NUM ... bitexact=`
+     * line (including the asm 2-bit kernel) that this tree owes. */
+    for (i = 0; i < KB_NSHAPES; i++)
+        bench_shape(&SHAPES[i]);
+
 #if ND_KB_EXP38
     bench_log();
 #endif
@@ -4031,6 +4169,7 @@ int kbench_run(void)
     bench_wake();
     bench_rowrange();
     bench_e49();
+    bench_e50();
 #if ND_KB_EXP36
     bench_e36();
 #elif ND_KB_EXP37

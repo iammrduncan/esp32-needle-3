@@ -4,7 +4,8 @@ The autoresearch campaign that produced this engine (943 logged hardware runs,
 1.22 → 6.22 decode tok/s) worked in a research workspace that is not on this
 branch. Everything it produced is preserved at the tag
 [`research-archive-2026-09-27`](https://github.com/iammrduncan/esp32-needle-3/tree/research-archive-2026-09-27)
-(commit `443b6bd`, the tip of `autoresearch/decode-tps-2026-09-18`):
+(commit `443b6bd`; the same files are at `ce2b28f`, the current tip of
+`autoresearch/decode-tps-2026-09-18`, which was rebased onto `main`):
 
 | Path at the tag | Contents |
 | --- | --- |

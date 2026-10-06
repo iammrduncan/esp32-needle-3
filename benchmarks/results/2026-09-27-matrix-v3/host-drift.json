@@ -1,0 +1,1555 @@
+{
+  "depths": {
+    "1": {
+      "max_abs": 37835.999316,
+      "mean_abs": 3215.782247,
+      "model_sha256": "7248be0dff6afd18c5cf8d1b87a440a04bd153fd76228d8bfe8fb835c2ccc45a",
+      "rmse": 4833.186572,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 2,
+          "reference": 4,
+          "same": false,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 101,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 7,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 1288,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 140,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 4096,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 63,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 3,
+      "top1_total": 10
+    },
+    "10": {
+      "max_abs": 17.951489,
+      "mean_abs": 1.800502,
+      "model_sha256": "e606dc44884564e5b4dd524a9f1dad71c45d89ff122b59b07cf60d47d92ea22f",
+      "rmse": 2.507054,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 14,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 8110,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 8116,
+          "reference": 900,
+          "same": false,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 6,
+      "top1_total": 10
+    },
+    "11": {
+      "max_abs": 23.726181,
+      "mean_abs": 2.176176,
+      "model_sha256": "5c2d26962fe606817ecc5f8dda77895fa584c3b2e8fa14c559b42120883dd3f2",
+      "rmse": 3.573955,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 8116,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8116,
+          "reference": 8116,
+          "same": true,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 8116,
+          "reference": 900,
+          "same": false,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 8,
+      "top1_total": 10
+    },
+    "12": {
+      "max_abs": 15.44574,
+      "mean_abs": 1.681023,
+      "model_sha256": "c8653b50d2976eb368bfe261c720f2ee45f67cefddb351b84dfe1cf38ec1f808",
+      "rmse": 2.293222,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 101,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 5,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8116,
+          "reference": 8116,
+          "same": true,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 8116,
+          "reference": 900,
+          "same": false,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 7,
+      "top1_total": 10
+    },
+    "13": {
+      "max_abs": 17.306051,
+      "mean_abs": 2.40669,
+      "model_sha256": "8806af7aaf6b83e6c8831ca13a027d0bc3c75d842260b20aec11c599bba738a8",
+      "rmse": 3.262189,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 7889,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 8110,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 5,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 7,
+      "top1_total": 10
+    },
+    "14": {
+      "max_abs": 19.589897,
+      "mean_abs": 2.58654,
+      "model_sha256": "89a2068740b0de155d550d42b19b6bf20bdc41d3f7c92a0c50cd0e3501cb728d",
+      "rmse": 3.493113,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 1394,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 326,
+          "reference": 512,
+          "same": false,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 449,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 7063,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 8116,
+          "reference": 900,
+          "same": false,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 4,
+      "top1_total": 10
+    },
+    "15": {
+      "max_abs": 18.627514,
+      "mean_abs": 2.397416,
+      "model_sha256": "5ce584214ee01c5d06ea73da311260aa14de3242bb94ca053ed1ca4769594054",
+      "rmse": 3.297263,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 5031,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 449,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 7063,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 366,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 6,
+      "top1_total": 10
+    },
+    "16": {
+      "max_abs": 15.908981,
+      "mean_abs": 2.161008,
+      "model_sha256": "745bbd541a7941d4951b1189129e52e7ffc813f67efb16f58953cdddd942b82a",
+      "rmse": 2.978513,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 3206,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 449,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 512,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 7063,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 5,
+      "top1_total": 10
+    },
+    "17": {
+      "max_abs": 25396.483691,
+      "mean_abs": 1638.52635,
+      "model_sha256": "87b161dd61b96b95af1adbc6455a7fe1f58649e21943def1a6d2dd0822717a71",
+      "rmse": 3039.259242,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 2,
+          "reference": 4,
+          "same": false,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 101,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 7,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 1288,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 221,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 4096,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 221,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 3,
+      "top1_total": 10
+    },
+    "18": {
+      "max_abs": 16.864784,
+      "mean_abs": 2.322992,
+      "model_sha256": "105a4c67ad66c42ef73fffbb60d34fb1a372c84dd7c5111152b5e41cc2b07439",
+      "rmse": 3.006588,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 7889,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 8127,
+          "reference": 512,
+          "same": false,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 436,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 8127,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 4285,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 8116,
+          "reference": 900,
+          "same": false,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 3,
+      "top1_total": 10
+    },
+    "2": {
+      "max_abs": 36.632244,
+      "mean_abs": 4.61843,
+      "model_sha256": "aa3cd0936509486d3ca1bbb6a91f9eb0831eb51a17421330ea0326d40d99fb71",
+      "rmse": 6.617927,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 301,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 7,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 512,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 1506,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 1506,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 4,
+      "top1_total": 10
+    },
+    "3": {
+      "max_abs": 24.792694,
+      "mean_abs": 3.168821,
+      "model_sha256": "46f604953cd0820bf48c472a82a164933f8983c06b26b738774ab811782d550e",
+      "rmse": 4.327551,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 301,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 7,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 1506,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 1506,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 5,
+      "top1_total": 10
+    },
+    "4": {
+      "max_abs": 22.014037,
+      "mean_abs": 2.764909,
+      "model_sha256": "c50024d4ed8390bd5d4e2eb0d8540282bf85dc3563d4a076656fa7146f0d22cd",
+      "rmse": 3.625451,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 301,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 7,
+          "reference": 38,
+          "same": false,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 8108,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 3280,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 301,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 4,
+      "top1_total": 10
+    },
+    "5": {
+      "max_abs": 13.678307,
+      "mean_abs": 2.222682,
+      "model_sha256": "2545bb69cd2c941593cf5345b625fa345802b538323aa27b630f9823a0447464",
+      "rmse": 2.889602,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 301,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 291,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 8100,
+          "reference": 284,
+          "same": false,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 7040,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 7931,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 4,
+      "top1_total": 10
+    },
+    "6": {
+      "max_abs": 11.566325,
+      "mean_abs": 2.31214,
+      "model_sha256": "4b0abac508adff337c04ce1c33ccf8e0711abcff13aad359cfed732988b074a5",
+      "rmse": 2.758148,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 26,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 560,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 3206,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 26,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 5,
+      "top1_total": 10
+    },
+    "7": {
+      "max_abs": 11.415737,
+      "mean_abs": 1.675281,
+      "model_sha256": "83b2152ac76fd60e104a55870702580e619f3fa7ea4eabcd9b8b27b814f19bb2",
+      "rmse": 2.0614,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 3206,
+          "reference": 5579,
+          "same": false,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 560,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 26,
+          "reference": 5579,
+          "same": false,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8116,
+          "reference": 8116,
+          "same": true,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 26,
+          "reference": 5579,
+          "same": false,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 6,
+      "top1_total": 10
+    },
+    "8": {
+      "max_abs": 0.0,
+      "mean_abs": 0.0,
+      "model_sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16",
+      "rmse": 0.0,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 305,
+          "reference": 305,
+          "same": true,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8116,
+          "reference": 8116,
+          "same": true,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 10,
+      "top1_total": 10
+    },
+    "9": {
+      "max_abs": 21.95443,
+      "mean_abs": 1.917308,
+      "model_sha256": "f74a735697c030908ae4988edcc88bfb80501e27db419747fd4c88a60cc0faca",
+      "rmse": 3.127541,
+      "status": "completed",
+      "top1": [
+        {
+          "actual": 4,
+          "reference": 4,
+          "same": true,
+          "step": 0,
+          "token": 2
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 1,
+          "token": 101
+        },
+        {
+          "actual": 38,
+          "reference": 38,
+          "same": true,
+          "step": 2,
+          "token": 7
+        },
+        {
+          "actual": 512,
+          "reference": 512,
+          "same": true,
+          "step": 3,
+          "token": 512
+        },
+        {
+          "actual": 449,
+          "reference": 305,
+          "same": false,
+          "step": 4,
+          "token": 305
+        },
+        {
+          "actual": 284,
+          "reference": 284,
+          "same": true,
+          "step": 5,
+          "token": 1288
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 6,
+          "token": 42
+        },
+        {
+          "actual": 8110,
+          "reference": 8116,
+          "same": false,
+          "step": 7,
+          "token": 4096
+        },
+        {
+          "actual": 900,
+          "reference": 900,
+          "same": true,
+          "step": 8,
+          "token": 900
+        },
+        {
+          "actual": 5579,
+          "reference": 5579,
+          "same": true,
+          "step": 9,
+          "token": 63
+        }
+      ],
+      "top1_same": 8,
+      "top1_total": 10
+    }
+  },
+  "engine_sha256": "06b667e63c9148a8b3aa8fc645da4d341e6d1fe440eb47a6910835e4252b2ea9",
+  "frozen_golden": {
+    "max_abs": 5.4e-05,
+    "mean_abs": 5e-06,
+    "rmse": 7e-06,
+    "top1": [
+      {
+        "actual": 4,
+        "reference": 4,
+        "same": true,
+        "step": 0,
+        "token": 2
+      },
+      {
+        "actual": 5579,
+        "reference": 5579,
+        "same": true,
+        "step": 1,
+        "token": 101
+      },
+      {
+        "actual": 38,
+        "reference": 38,
+        "same": true,
+        "step": 2,
+        "token": 7
+      },
+      {
+        "actual": 512,
+        "reference": 512,
+        "same": true,
+        "step": 3,
+        "token": 512
+      },
+      {
+        "actual": 305,
+        "reference": 305,
+        "same": true,
+        "step": 4,
+        "token": 305
+      },
+      {
+        "actual": 284,
+        "reference": 284,
+        "same": true,
+        "step": 5,
+        "token": 1288
+      },
+      {
+        "actual": 5579,
+        "reference": 5579,
+        "same": true,
+        "step": 6,
+        "token": 42
+      },
+      {
+        "actual": 8116,
+        "reference": 8116,
+        "same": true,
+        "step": 7,
+        "token": 4096
+      },
+      {
+        "actual": 900,
+        "reference": 900,
+        "same": true,
+        "step": 8,
+        "token": 900
+      },
+      {
+        "actual": 5579,
+        "reference": 5579,
+        "same": true,
+        "step": 9,
+        "token": 63
+      }
+    ],
+    "top1_same": 10,
+    "top1_total": 10
+  },
+  "probe_ids": [
+    2,
+    101,
+    7,
+    512,
+    305,
+    1288,
+    42,
+    4096,
+    900,
+    63
+  ],
+  "reference_model_sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16"
+}

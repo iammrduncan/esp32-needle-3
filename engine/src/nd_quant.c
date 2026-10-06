@@ -36,15 +36,26 @@ float nd_f16_slow(uint16_t h)
     }
 }
 
+
 ND_HOT void nd_fwht(float *x, uint32_t n)
 {
     uint32_t len;
 
+        /* Butterflies inside one stage are disjoint pairs - j and j+len differ
+         * for every j - so grouping K of them reads and writes each element
+         * exactly as often, in the same per-element order. Bit-exact by
+         * construction, and this is the same lever run #362's rescale unroll
+         * shipped (+0.332 %), applied to the loop that precedes it. */
     for (len = 1; len < n; len <<= 1) {
         uint32_t i;
         for (i = 0; i < n; i += len << 1) {
-            uint32_t j;
-            for (j = i; j < i + len; j++) {
+            uint32_t j = i, jend = i + len;
+            for (; j + 1u < jend; j += 2u) {
+            float a0 = x[j + 0u], b0 = x[j + 0u + len];
+            float a1 = x[j + 1u], b1 = x[j + 1u + len];
+                x[j + 0u] = a0 + b0; x[j + 0u + len] = a0 - b0; x[j + 1u] = a1 + b1; x[j + 1u + len] = a1 - b1;
+            }
+            for (; j < jend; j++) {
                 float a = x[j];
                 float b = x[j + len];
                 x[j]       = a + b;
@@ -84,15 +95,259 @@ static ND_HOT void lutb_rows(void *vc, uint32_t p0, uint32_t p1)
 
 typedef struct { float *xh; uint32_t g; float scale; } fwht_ctx;
 
+/* Shared by both paths, so the rescale text here is the shipped one verbatim. */
+static __attribute__((noinline)) void fw_scale(float *restrict b4, uint32_t g, float scale)
+{
+    uint32_t j = 0u;
+
+    for (; j + 3u < g; j += 4u) {
+        float v0 = b4[j], v1 = b4[j + 1u], v2 = b4[j + 2u], v3 = b4[j + 3u];
+        b4[j] = v0 * scale; b4[j + 1u] = v1 * scale;
+        b4[j + 2u] = v2 * scale; b4[j + 3u] = v3 * scale;
+    }
+    for (; j < g; j++) b4[j] *= scale;
+}
+
+/* Two groups' transforms interleaved. nd_fwht's butterflies are a long serial
+ * chain of add/sub across stages and fwht_rows calls it once per group with
+ * nothing else in flight. Walking two groups together keeps each group's stages
+ * in its own order - stage k of a group still completes before stage k+1 of that
+ * same group - so every cell ends with the value nd_fwht would have produced:
+ * bit-exact by construction, the same disjointness argument run #378's
+ * within-stage unroll used, applied across groups instead of within one. */
+static __attribute__((noinline)) void nd_fwht2(float *x0, float *x1, uint32_t n)
+{
+    uint32_t len, step, base, j;
+
+    for (len = 1u; len < n; len <<= 1) {
+        step = len << 1;
+        for (base = 0u; base + step <= n; base += step) {
+            const uint32_t half = base + len;
+            for (j = base; j + 1u < half; j += 2u) {
+                float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+                float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+
+                x0[j] = a0 + b0;          x0[j + len] = a0 - b0;
+                x0[j + 1u] = a1 + b1;     x0[j + 1u + len] = a1 - b1;
+                x1[j] = c0 + d0;          x1[j + len] = c0 - d0;
+                x1[j + 1u] = c1 + d1;     x1[j + 1u + len] = c1 - d1;
+            }
+            if (j < half) {
+                float a = x0[j], b = x0[j + len];
+                float c = x1[j], d = x1[j + len];
+
+                x0[j] = a + b; x0[j + len] = a - b;
+                x1[j] = c + d; x1[j + len] = c - d;
+            }
+        }
+    }
+}
+
+
+/* Three groups per stage walk, rescale folded into the (peeled) final stage.
+ *
+ * Three is not an arbitrary width: ngroup is 6 and the device splits it 3+3, so a
+ * three-wide step is one call's entire workload and the paired and single paths below
+ * stop executing on device. It is also the width at which the transform's serial
+ * butterfly chains - the reason this phase responded to ILP at all (runs #378/#379),
+ * while the model's long reductions did not (runs #380/#381) - have three deep chains
+ * in flight instead of one.
+ *
+ * The rescale is folded into the final stage instead of run afterwards. n/2 butterflies
+ * cover all n elements exactly once, so `* scale` at the store is the same single
+ * rounding as the separate pass, and g loads plus g stores per group disappear.
+ * Earlier stages must NOT scale: their outputs feed the next stage.
+ *
+ * Valid for the same domain as nd_fwht2 (power-of-two n >= 2); n == 1 has no stage
+ * that writes anything in either form. */
+static __attribute__((noinline)) void nd_fwht3s(float *x0, float *x1, float *x2, uint32_t n, float scale)
+{
+    uint32_t len, step, base, j;
+
+    /* Every stage except the last: len runs 1, 2, ... while 2*len < n. */
+    for (len = 1u; len < (n >> 1); len <<= 1) {
+        step = len << 1;
+        for (base = 0u; base + step <= n; base += step) {
+            const uint32_t half = base + len;
+            for (j = base; j + 1u < half; j += 2u) {
+                float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+                float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+                float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
+
+                x0[j] = a0 + b0;          x0[j + len] = a0 - b0;
+                x0[j + 1u] = a1 + b1;     x0[j + 1u + len] = a1 - b1;
+                x1[j] = c0 + d0;          x1[j + len] = c0 - d0;
+                x1[j + 1u] = c1 + d1;     x1[j + 1u + len] = c1 - d1;
+                x2[j] = e0 + f0;          x2[j + len] = e0 - f0;
+                x2[j + 1u] = e1 + f1;     x2[j + 1u + len] = e1 - f1;
+            }
+            if (j < half) {
+                float a = x0[j], b = x0[j + len];
+                float c = x1[j], d = x1[j + len];
+                float e = x2[j], f = x2[j + len];
+
+                x0[j] = a + b; x0[j + len] = a - b;
+                x1[j] = c + d; x1[j + len] = c - d;
+                x2[j] = e + f; x2[j + len] = e - f;
+            }
+        }
+    }
+
+    /* The final stage, written once with no `last` flag anywhere in it: len == n/2,
+     * one base, and between the butterflies every element is stored exactly once. */
+    len = n >> 1;
+    for (j = 0u; j + 1u < len; j += 2u) {
+        float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+        float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+        float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
+
+        x0[j] = (a0 + b0) * scale;        x0[j + len] = (a0 - b0) * scale;
+        x0[j + 1u] = (a1 + b1) * scale;   x0[j + 1u + len] = (a1 - b1) * scale;
+        x1[j] = (c0 + d0) * scale;        x1[j + len] = (c0 - d0) * scale;
+        x1[j + 1u] = (c1 + d1) * scale;   x1[j + 1u + len] = (c1 - d1) * scale;
+        x2[j] = (e0 + f0) * scale;        x2[j + len] = (e0 - f0) * scale;
+        x2[j + 1u] = (e1 + f1) * scale;   x2[j + 1u + len] = (e1 - f1) * scale;
+    }
+    if (j < len) {                        /* only reachable when n/2 is odd, i.e. n == 2 */
+        float a = x0[j], b = x0[j + len];
+        float c = x1[j], d = x1[j + len];
+        float e = x2[j], f = x2[j + len];
+
+        x0[j] = (a + b) * scale; x0[j + len] = (a - b) * scale;
+        x1[j] = (c + d) * scale; x1[j + len] = (c - d) * scale;
+        x2[j] = (e + f) * scale; x2[j + len] = (e - f) * scale;
+    }
+}
+
+/* Radix-4 stage fusion on top of the three-group walk.
+ *
+ * Two adjacent stages (len, 2*len) touch exactly four elements per base - j,
+ * j+len, j+2len, j+3len - and the second stage consumes precisely what the first
+ * stored. Keeping p,q,r,s in registers removes a whole load/store round trip per
+ * pair of stages, which for the model's g == 128 is 3 of its 7 passes.
+ *
+ * Bit-exact by construction: p=a+b, q=a-b, r=c+d, s=c-d ARE stage len's four
+ * butterflies, and the four stores ARE stage 2*len's butterflies over those same
+ * values in the same order. Nothing is reassociated, and no multiply appears until
+ * the final scaled stage, so -ffp-contract cannot interfere. The three groups are
+ * written as three independent statements so the compiler decides interleaving;
+ * liveness is 8 floats per group, the same shape the accepted walk already runs.
+ */
+static ND_HOT void nd_fwht4s(float *x0, float *x1, float *x2, uint32_t n, float scale)
+{
+    uint32_t len, base, j;
+
+    /* Fused pairs (len, 2*len) while the SECOND stage is still below the final one:
+     * 2*len <= n/4, i.e. len <= n/8. For n = 128 that is len = 1, 4, 16, covering
+     * stages 1,2,4,8,16,32 in three passes. */
+    for (len = 1u; len <= (n >> 3); len <<= 2) {
+        const uint32_t l2 = len << 1, l3 = len + l2, st = len << 2;
+        for (base = 0u; base + st <= n; base += st) {
+            for (j = base; j < base + len; j++) {
+                float a = x0[j], b = x0[j + len], c = x0[j + l2], d = x0[j + l3];
+                float p = a + b, q = a - b, r = c + d, s = c - d;
+                x0[j] = p + r; x0[j + l2] = p - r; x0[j + len] = q + s; x0[j + l3] = q - s;
+
+                a = x1[j]; b = x1[j + len]; c = x1[j + l2]; d = x1[j + l3];
+                p = a + b; q = a - b; r = c + d; s = c - d;
+                x1[j] = p + r; x1[j + l2] = p - r; x1[j + len] = q + s; x1[j + l3] = q - s;
+
+                a = x2[j]; b = x2[j + len]; c = x2[j + l2]; d = x2[j + l3];
+                p = a + b; q = a - b; r = c + d; s = c - d;
+                x2[j] = p + r; x2[j + l2] = p - r; x2[j + len] = q + s; x2[j + l3] = q - s;
+            }
+        }
+    }
+
+    /* One plain stage when the non-final stage count is odd (n == 4, 16, ...). Never
+     * reached by the model, whose group size is 128, but it keeps every n correct. */
+    if (len < (n >> 1)) {
+        const uint32_t step = len << 1;
+        for (base = 0u; base + step <= n; base += step) {
+            const uint32_t half = base + len;
+            for (j = base; j < half; j++) {
+                float a = x0[j], b = x0[j + len], c = x1[j], d = x1[j + len];
+                float e = x2[j], f = x2[j + len];
+                x0[j] = a + b; x0[j + len] = a - b;
+                x1[j] = c + d; x1[j + len] = c - d;
+                x2[j] = e + f; x2[j + len] = e - f;
+            }
+        }
+    }
+
+    /* The final stage, rescale folded in, exactly as the accepted walk writes it. */
+    len = n >> 1;
+    for (j = 0u; j + 1u < len; j += 2u) {
+        float a0 = x0[j], b0 = x0[j + len], a1 = x0[j + 1u], b1 = x0[j + 1u + len];
+        float c0 = x1[j], d0 = x1[j + len], c1 = x1[j + 1u], d1 = x1[j + 1u + len];
+        float e0 = x2[j], f0 = x2[j + len], e1 = x2[j + 1u], f1 = x2[j + 1u + len];
+
+        x0[j] = (a0 + b0) * scale;        x0[j + len] = (a0 - b0) * scale;
+        x0[j + 1u] = (a1 + b1) * scale;   x0[j + 1u + len] = (a1 - b1) * scale;
+        x1[j] = (c0 + d0) * scale;        x1[j + len] = (c0 - d0) * scale;
+        x1[j + 1u] = (c1 + d1) * scale;   x1[j + 1u + len] = (c1 - d1) * scale;
+        x2[j] = (e0 + f0) * scale;        x2[j + len] = (e0 - f0) * scale;
+        x2[j + 1u] = (e1 + f1) * scale;   x2[j + 1u + len] = (e1 - f1) * scale;
+    }
+    if (j < len) {                        /* only when n/2 is odd, i.e. n == 2 */
+        float a = x0[j], b = x0[j + len];
+        float c = x1[j], d = x1[j + len];
+        float e = x2[j], f = x2[j + len];
+
+        x0[j] = (a + b) * scale; x0[j + len] = (a - b) * scale;
+        x1[j] = (c + d) * scale; x1[j + len] = (c - d) * scale;
+        x2[j] = (e + f) * scale; x2[j + len] = (e - f) * scale;
+    }
+}
+
 static ND_HOT void fwht_rows(void *vc, uint32_t g0, uint32_t g1)
 {
     const fwht_ctx *c = (const fwht_ctx *)vc;
-    uint32_t        gi, j;
-    for (gi = g0; gi < g1; gi++) {
-        float   *blk = c->xh + (size_t)gi * c->g;
-        nd_fwht(blk, c->g);
-        for (j = 0; j < c->g; j++)
-            blk[j] *= c->scale;
+    uint32_t        gi;
+    /* `const fwht_ctx *` is not `restrict`: the rescale below writes through
+     * blk, which the compiler cannot separate from c->g and c->scale, so both
+     * are loop-variant for it and `c->scale` is read once per element. Taking
+     * them once is the same values in the same order. */
+    const uint32_t g      = c->g;
+    const float    scale  = c->scale;
+    float         *xh     = c->xh;
+    /* Pairs of groups transformed together, then the shipped single-group path
+     * for an odd remainder. The remainder matters: the device splits ngroup
+     * 6+6-style as 3+3 across the two cores, so a per-core count of 3 reaches
+     * this code and a paired loop without a tail would silently drop a group -
+     * a defect the host cannot see, because its nd_parallel_rows is serial and
+     * therefore always hands one core an even count. That is the #333 class
+     * (a bug in the range form that no single-row test can reach), so the tail
+     * is written first and the odd split is exercised on the host separately. */
+    /* Three groups per stage walk for the whole per-core call: with ngroup 6 split
+     * 3+3, one three-wide step consumes everything this core was given, so the
+     * paired and single paths below run only in splits the field does not produce.
+     * The guard for an ng-wide step is `gi + ng-1 < g1`, never `gi + ng < g1` - the
+     * latter is never true when ng equals the per-core count, which is how a four-wide
+     * experiment once re-measured the accepted path without executing at all.
+     * No fw_scale() here: the final stage folded the rescale in. */
+    for (gi = g0; gi + 2u < g1; gi += 3u) {
+        float *blk  = xh + (size_t)gi * g;
+        float *blk2 = blk + g;
+        float *blk3 = blk2 + g;
+
+        /* n >= 8 is where two stages can be fused below the final one; below that
+         * the accepted walk already covers every stage in one or two passes. */
+        if (g >= 8u) nd_fwht4s(blk, blk2, blk3, g, scale);
+        else         nd_fwht3s(blk, blk2, blk3, g, scale);
+    }
+    for (; gi + 1u < g1; gi += 2u) {
+        float *blk  = xh + (size_t)gi * g;
+        float *blk2 = blk + g;
+
+        nd_fwht2(blk, blk2, g);
+        fw_scale(blk,  g, scale);
+        fw_scale(blk2, g, scale);
+    }
+    for (; gi < g1; gi++) {
+        float   *blk = xh + (size_t)gi * g;
+        nd_fwht(blk, g);
+        fw_scale(blk, g, scale);
     }
 }
 
@@ -103,7 +358,11 @@ void nd_cq_prepare(const nd_tensor *t, const float *x, float *xh)
     uint32_t ngroup = in_pad / g;
     float    scale  = 1.0f / sqrtf((float)g);
 
-    memcpy(xh, x, t->shape[1] * sizeof(float));
+    /* E68: x == xh is the in-place form - the caller already wrote the activation
+     * into the transform buffer - so the copy is skipped (memcpy onto itself is
+     * undefined and pointless). Pad and transform are unchanged. */
+    if (xh != x)
+        memcpy(xh, x, t->shape[1] * sizeof(float));
     if (in_pad > t->shape[1])
         memset(xh + t->shape[1], 0, (in_pad - t->shape[1]) * sizeof(float));
 
@@ -222,6 +481,112 @@ static ND_HOT void gemv_rows_offset(void *vc, uint32_t i0, uint32_t i1)
     }
 }
 
+#if ND_GEMV4_ASM
+/* The 4-bit kernel is specialised to group 128 (16 index words, 512-byte xh
+ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
+ * range may touch nd_f16_slow's subnormal/inf path - the same restriction
+ * nd_lut2_asm_ok() applies. bits must be 4: the body reads two nibbles per word. */
+int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
+                    const uint16_t *norms)
+{
+    uint32_t i, n = ngroup * rows;
+
+    if (bits != 4u || g != 128u || ngroup == 0u || rows == 0u)
+        return 0;
+    for (i = 0; i < n; i++) {
+        uint32_t e = ((const uint16_t *)norms)[i] >> 10 & 0x1fu;
+        if (e == 0u || e == 31u)
+            return 0;
+    }
+    return 1;
+}
+
+/* One split of a 4-bit projection through the handwritten row walker. All the
+ * cursor arithmetic the C walker does per row is resolved here once, which is why
+ * the kernel body itself only adds. */
+static void gemv_rows_offset_asm(void *vc, uint32_t i0, uint32_t i1)
+{
+    const gemv_ctx *c = (const gemv_ctx *)vc;
+    nd_gemv4_ctx    a;
+    uint32_t        r0 = c->base + i0;
+
+    a.packed0  = c->packed + (size_t)r0 * c->rowbytes;
+    a.norms0   = c->norms + (size_t)r0 * c->ngroup;
+    a.xh       = c->xh;
+    a.cb       = c->cb;
+    a.y0       = c->y + i0;
+    a.ngroup   = c->ngroup;
+    a.g        = c->g;
+    a.rowbytes = c->rowbytes;
+    a.normstep = c->ngroup * 2u;
+    a.nrows    = i1 - i0;
+    nd_gemv4_rows_tie1(&a);
+}
+
+static void gemv_rows_offset_asmW(void *vc, uint32_t i0, uint32_t i1)
+{
+    const gemv_ctx *c = (const gemv_ctx *)vc;
+    nd_gemv4_ctx    a;
+    uint32_t        r0 = c->base + i0;
+
+    a.packed0  = c->packed + (size_t)r0 * c->rowbytes;
+    a.norms0   = c->norms + (size_t)r0 * c->ngroup;
+    a.xh       = c->xh;
+    a.cb       = c->cb;
+    a.y0       = c->y + i0;
+    a.ngroup   = c->ngroup;
+    a.g        = c->g;
+    a.rowbytes = c->rowbytes;
+    a.normstep = c->ngroup * 2u;
+    a.nrows    = i1 - i0;
+    nd_gemv4_rows_tie1W(&a);
+}
+
+/* nd_gemv4_asm_ok() walks the tensor's norms and a projection runs once per token,
+ * so the answer is remembered per (blob, rows) like the 2-bit kernel's. Four
+ * entries, because the mHC phi stage sweeps three tensors back to back and a
+ * single-entry cache would re-walk all three every token. A 2-bit tensor's answer
+ * is not cached - it is rejected on the spot and costs three compares. */
+static struct { const void *blob; uint32_t rows; int ok; } s_g4[4];
+static uint32_t s_g4_next;
+
+static int gemv4_asm_usable(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    uint32_t i;
+    int      ok;
+
+    for (i = 0; i < 4; i++)
+        if (s_g4[i].blob == blob && s_g4[i].rows == rows)
+            return s_g4[i].ok;
+    if (c->bits != 4u)
+        return 0;
+    ok = nd_gemv4_asm_ok(c->bits, c->g, c->ngroup, rows, c->norms);
+    s_g4[s_g4_next].blob = blob;
+    s_g4[s_g4_next].rows = rows;
+    s_g4[s_g4_next].ok   = ok;
+    s_g4_next            = (s_g4_next + 1u) & 3u;
+    return ok;
+}
+
+static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    if (!gemv4_asm_usable(c, blob, rows)) return gemv_rows_offset;
+    return ((uintptr_t)c->xh & 15u) == 0u ? gemv_rows_offset_asmW
+                                          : gemv_rows_offset_asm;
+}
+static nd_row_fn gemv4_pick_unused_removed(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    return gemv4_asm_usable(c, blob, rows) ? gemv_rows_offset_asm
+                                          : gemv_rows_offset;
+}
+#else
+static nd_row_fn gemv4_pick(const gemv_ctx *c, const void *blob, uint32_t rows)
+{
+    (void)c; (void)blob; (void)rows;
+    return gemv_rows_offset;
+}
+#endif
+
 ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *blob,
                      const float *xh, uint32_t r0, uint32_t nrows, float *y)
 {
@@ -242,8 +607,9 @@ ND_HOT void nd_cq_gemv_rows(const nd_cact *c, const nd_tensor *t, const void *bl
     ctx.rowbytes = rowbytes;
     ctx.base     = r0;
 
-    nd_parallel_rows(gemv_rows_offset, &ctx, nrows);
+    nd_parallel_rows(gemv4_pick(&ctx, blob, nrows), &ctx, nrows);
 }
+
 
 
 
@@ -284,8 +650,18 @@ ND_HOT void nd_cq_gemv_prepared(const nd_cact *c, const nd_tensor *t, const void
     ctx.g        = t->group;
     ctx.bits     = t->bits;
     ctx.rowbytes = rowbytes;
-
+#if ND_GEMV4_ASM
+    /* The all-rows path (the full-vocabulary head, once per request) satisfies the same
+     * guard the phi projections pass, so ask it. `base` is explicit because the generic
+     * walker ignores it while the assembly walker resolves i -> tensor row through it;
+     * anything the guard rejects keeps the generic walker, unchanged. */
+    ctx.base = 0u;
+    nd_parallel_rows(gemv4_asm_usable(&ctx, blob, out) ? gemv_rows_offset_asm
+                                                      : gemv_rows_generic,
+                     &ctx, out);
+#else
     nd_parallel_rows(gemv_rows_generic, &ctx, out);
+#endif
 }
 
 ND_HOT void nd_cq_lut_build(const nd_cact *c, const float *xh, uint32_t in_pad,
@@ -387,23 +763,46 @@ ND_HOT void nd_lut2_rows_c(void *vc, uint32_t r0, uint32_t r1)
     }
 }
 
-#if ND_LUT2_ASM
-/* nd_lut2_asm_ok() walks every norm in the row range, and a projection runs once
- * per token, so asking it on every call would cost more than the kernel saves.
- * Its answer depends only on the geometry and on the packed/norm blob - both set
- * in stone once the model is mapped - so it is remembered per (blob, rows). */
-static const void *s_asm_blob;
-static uint32_t    s_asm_rows;
-static int         s_asm_ok;
+/* One verdict per TENSOR, not per call (kept outside the ND_LUT2_ASM guard because
+ * nd_model_close() clears it, and the host build of the engine has the asm off): 64 slots for the at-most-46 CQ2 blobs a decode
+ * token visits, so the norm walk runs once per tensor per open instead of once per projection.
+ * Keyed on blob + rows + ngroup + g, which is strictly stronger identity than the single entry
+ * replaced here, and a probe that finds no free slot recomputes the verdict instead of guessing.
+ * Written only from the core that runs the dispatch - the row split happens after this returns. */
+#define ND_ASM_MEMO_SLOTS 64u
+typedef struct { const void *blob; uint32_t rows, ngroup, g; int ok; } asm_memo;
+static asm_memo s_asm_memo[ND_ASM_MEMO_SLOTS];
 
+void nd_cq_asmemo_reset(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < ND_ASM_MEMO_SLOTS; i++)
+        s_asm_memo[i].blob = 0;       /* the blob pointer is the validity tag */
+}
+
+#if ND_LUT2_ASM
 static int lut2_asm_usable(const nd_lut2_ctx *c, const void *blob, uint32_t rows)
 {
-    if (blob != s_asm_blob || rows != s_asm_rows) {
-        s_asm_ok   = nd_lut2_asm_ok(c, 0, rows);
-        s_asm_blob = blob;
-        s_asm_rows = rows;
+    uint32_t h = (uint32_t)((((uintptr_t)blob >> 4) * 2654435761u) >> 26)
+                 & (ND_ASM_MEMO_SLOTS - 1u);
+    uint32_t p;
+
+    for (p = 0u; p < ND_ASM_MEMO_SLOTS; p++, h = (h + 1u) & (ND_ASM_MEMO_SLOTS - 1u)) {
+        asm_memo *m = &s_asm_memo[h];
+
+        if (m->blob == blob && m->rows == rows && m->ngroup == c->ngroup && m->g == c->g)
+            return m->ok;
+        if (m->blob == 0) {
+            m->blob   = blob;
+            m->rows   = rows;
+            m->ngroup = c->ngroup;
+            m->g      = c->g;
+            m->ok     = nd_lut2_asm_ok(c, 0, rows);
+            return m->ok;
+        }
     }
-    return s_asm_ok;
+    return nd_lut2_asm_ok(c, 0, rows);   /* full table: recompute, never guess */
 }
 #endif
 
@@ -448,11 +847,22 @@ int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1)
     if ((((uintptr_t)c->packed) & 3u) != 0u)
         return 0;
     /* nd_f16()'s inline path cannot see subnormals or inf/nan; the C kernel
-     * calls nd_f16_slow() for those, so the blob has to be free of them. */
+     * calls nd_f16_slow() for those, so the blob has to be free of them.
+     *
+     * The sign is checked here too, and it is load-bearing rather than
+     * defensive: the kernel's norm conversion (NF16V in lut2_tie728.S) moves
+     * exponent and mantissa with ONE shift and adds the bias difference in the
+     * exponent field, which is exact for a positive ordinary halfword
+     * ((h<<13) + 0x38000000) but would push a negative halfword's sign bit into
+     * the exponent. So the fast conversion is only ever selected for a blob
+     * whose norms are all positive and ordinary, and this walk is the single
+     * place that decides it. Every needle3.cact norm passes: 351,744 of them
+     * across 46 CQ2 tensors are positive normal (census, run #439). */
     for (r = r0; r < r1; r++)
         for (gi = 0; gi < c->ngroup; gi++) {
-            uint32_t e = (c->norms[(size_t)r * c->ngroup + gi] >> 10) & 0x1Fu;
-            if (e == 0u || e == 0x1Fu)
+            uint32_t h = c->norms[(size_t)r * c->ngroup + gi];
+            uint32_t e = (h >> 10) & 0x1Fu;
+            if (e == 0u || e == 0x1Fu || (h & 0x8000u) != 0u)
                 return 0;
         }
     return 1;
@@ -552,5 +962,10 @@ void nd_cq_dequant_row(const nd_cact *c, const nd_tensor *t, const void *blob,
         for (j = 0; j < g; j++)
             blk[j] *= scale;
     }
-    memcpy(w, scratch, t->shape[1] * sizeof(float));
+    /* E69: when the caller hands the destination as the scratch (the field call
+     * sites do), the transform already ran there and this copy is pure waste - the
+     * same lifetime defect E68 removed in the phi path. The dequant's inner loop
+     * only writes blk[], so running it in the destination is exactly equivalent. */
+    if (w != scratch)
+        memcpy(w, scratch, t->shape[1] * sizeof(float));
 }

@@ -4,8 +4,37 @@
   "source_file": "needle3.cact",
   "source_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
   "source_bytes": 35335380,
-  "layers": 8,
+  "license": "Apache-2.0",
   "context": 384,
-  "output_bytes": 16155796,
-  "output_sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16"
+  "default_layers": 8,
+  "outputs": {
+    "2": {
+      "sha256": "aa3cd0936509486d3ca1bbb6a91f9eb0831eb51a17421330ea0326d40d99fb71",
+      "bytes": 8606036
+    },
+    "3": {
+      "sha256": "46f604953cd0820bf48c472a82a164933f8983c06b26b738774ab811782d550e",
+      "bytes": 9184276
+    },
+    "4": {
+      "sha256": "c50024d4ed8390bd5d4e2eb0d8540282bf85dc3563d4a076656fa7146f0d22cd",
+      "bytes": 9762644
+    },
+    "5": {
+      "sha256": "2545bb69cd2c941593cf5345b625fa345802b538323aa27b630f9823a0447464",
+      "bytes": 10340948
+    },
+    "6": {
+      "sha256": "4b0abac508adff337c04ce1c33ccf8e0711abcff13aad359cfed732988b074a5",
+      "bytes": 10919316
+    },
+    "7": {
+      "sha256": "83b2152ac76fd60e104a55870702580e619f3fa7ea4eabcd9b8b27b814f19bb2",
+      "bytes": 15577364
+    },
+    "8": {
+      "sha256": "bcf34a7aced455cfc0ee5c466e264211994a6d1e8dfd4bae8dee25e210305b16",
+      "bytes": 16155796
+    }
+  }
 }

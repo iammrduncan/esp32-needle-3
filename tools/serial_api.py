@@ -3,15 +3,25 @@
 
 import argparse
 import json
+import os
 import re
 import threading
 import time
+import uuid
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import serial
 
 CATALOG = json.loads((Path(__file__).with_name('model-catalog.json')).read_text())
+# The firmware compiles these two schemas in (esp32/main/CMakeLists.txt); a
+# request cannot change them at run time.
+SCHEMAS = {
+    "tools": json.loads((Path(__file__).with_name('demo-tools.json')).read_text()),
+    "route": json.loads((Path(__file__).with_name('model-routes.json')).read_text()),
+}
+# OpenAI-compatible model ids, each bound to one firmware phase.
+OPENAI_MODELS = {"needle3": "tools", "needle3-router": "route"}
 
 # Printed when the startup log turns out to be interleaved with echoed console
 # probes: past this point it must not be parsed as boot output.
@@ -54,6 +64,11 @@ class Device:
         self._warned_noisy_log = False
         self._open(port, baud)
         self._handshake(boot_timeout)
+        # The baseline identity, so a later WARN line is a comparison and not a guess.
+        try:
+            print("ATTACH_DEVICE %s" % self._dev_identity())
+        except Exception:                        # pragma: no cover - diagnostic only
+            pass
 
     def _open(self, port, baud):
         # Both of this board's ports are USB-Serial/JTAG, and a DTR/RTS edge
@@ -74,6 +89,27 @@ class Device:
         self.serial.open()
         self.serial.dtr = False
         self.serial.rts = False
+
+    def _dev_identity(self):
+        """Identify the kernel node behind the path we were handed.
+
+        Every 'the board stopped answering' investigation here has assumed firmware, and the
+        failures are engine-independent (the accepted image reproduces them at the same case).
+        The console is a USB-UART bridge on UART0, so it can drop off USB by itself while the
+        ESP32 keeps running - which is what the thermal instrument showed: logs still streaming
+        on the other leg, model open, heap and PSRAM CRC clean. Resolving the alias chain makes a
+        stall readable as 'the console leg re-enumerated at case N'. Never raises: a diagnostic
+        that breaks a rescue is worse than the blind spot it closes.
+        """
+        try:
+            import os
+            real = os.path.realpath(self.port)
+            st = os.stat(real)
+            return "path=%s real=%s rdev=%d.%d" % (
+                self.port, real, os.major(st.st_rdev), os.minor(st.st_rdev))
+        except Exception as exc:                       # pragma: no cover - diagnostic only
+            return "path=%s identity_unavailable=%s" % (
+                getattr(self, "port", "?"), type(exc).__name__)
 
     def _handshake(self, boot_timeout):
         """Attach, then re-attach quietly if the board was busy on arrival.
@@ -218,6 +254,46 @@ class Device:
             print(line, flush=True)
         return line
 
+    def drain_stale(self, window=1.0):
+        """Discard console bytes that arrived before we asked anything.
+
+        The firmware has no request/response framing (see _request_state), so any
+        line still sitting in the queue when a request or toggle is written will be
+        read back as the START of this reply - or, for a toggle, echoed as a torn
+        line the REPL never answers. bench.py runs its whole suite on one attach, so
+        one extra/missing `END` shifts EVERY later case by one: measured in run #345
+        a route prompt came back answered with tools-schema calls its own grammar
+        forbids, and with this drain the same three prompts answered their own schema
+        (run #346). Draining with reads - not reset_input_buffer, which only clears
+        bytes nobody has read yet - before the write cannot touch our own answer,
+        because it has not been asked for yet. Returns the lines it removed from the
+        queue, and echoes them through the log: excluded from THIS reply's parsing,
+        never silently thrown away. The caller warns when nonzero so a desync cannot
+        pass as a clean run.
+
+        A fixed window, deliberately: settle-to-quiet (quiet=1.5 s, budget=8 s) was
+        tried on the same suite in run #346 and regressed it - 17 cases and a request
+        timeout instead of 20/20 - so keep this short and let the toggle pay it.
+        """
+        dropped, deadline = [], time.monotonic() + window
+        while time.monotonic() < deadline:
+            # Read through _line(), not the raw port: these are real firmware
+            # output (the boot bench and the `EVT prof` block live here, and
+            # bench.py parses them), so DROPPING them would be a second bug -
+            # the idle-board startup-log test exists precisely because of that.
+            # Excluded from reply parsing, surfaced to the log: both properties,
+            # not one at the cost of the other.
+            line = self._line()
+            if not line:
+                break
+            # Same classifier the attach path uses: if a drained line can only be
+            # the answer to a probe, the startup log is interleaved and bench.py
+            # must stop reading it as boot output - whether the line was read by
+            # the attach reader or by this drain.
+            self._is_echo_reply(line)
+            dropped.append(line)
+        return dropped
+
     def _line_quiet(self):
         """A read whose reply is ours, not the caller's boot log."""
         log_open, self._log_open = self._log_open, False
@@ -227,6 +303,14 @@ class Device:
             self._log_open = log_open
 
     def _set_think(self):
+        # Same reason complete() drains: the toggle's ack is read by a DIFFERENT
+        # reader (bench.py's switch_think waits for `EVT think=`), and an undrained
+        # tail from the previous answer is what made that ack "missing" (run #345's
+        # enlarged suite) - so the mode never got set and the think number silently
+        # measured the constrained path instead. One guard here covers every caller.
+        stale = self.drain_stale()
+        if stale:
+            print(f"WARN drained {len(stale)} stale line(s) before the think toggle")
         self.serial.write(f"!think {int(self.think)}\n".encode())
         self.serial.flush()
 
@@ -243,17 +327,133 @@ class Device:
                 raise TimeoutError("ESP32 status request timed out")
             return state
 
+    def _hard_reset(self):
+        """Pulse the chip's EN line through the USB-JTAG (flash) port.
+
+        The soft rescue is not enough when the board stops answering a fresh
+        attach at all - which is what run #390's canonical run died on ("board did
+        not answer after one reconnect"), and what had already cost four gated
+        verdicts on 2026-09-23. A reconnect only replaces the host's file
+        descriptor; a wedge behind the CDC bridge needs the chip restarted.
+
+        On the S3's USB-Serial-JTAG the modem lines ARE the boot straps: RTS is EN
+        and DTR is IO0, so asserting RTS with DTR low and releasing it restarts the
+        app into normal boot - the same two transitions esptool uses, without
+        needing esptool importable inside the bench's own venv. The console is the
+        separate CDC port, which cannot reset anything, and the ledger's fact holds:
+        reset with the console CLOSED, or the strap is sampled wrong and the chip
+        sits in DOWNLOAD mode. Cost is the ~5 min prefix re-priming, which is why
+        this is the second stage, never the first.
+
+        Refuses to reset unless the flash node is identifiable as the same board as
+        the console: under the pool both paths carry `boardN-`, and a mismatch would
+        mean rebooting somebody else's measurement.
+        """
+        flash = os.environ.get("FLASH_PORT") or "/dev/ttyACM0"
+        con, fl = self.port, flash
+        if "/needle-pi/" in con and "board" in con:
+            cb = con.split("board")[-1][:1]
+            fb = fl.split("board")[-1][:1] if "board" in fl else ""
+            if cb != fb:
+                raise TimeoutError(f"console {con} and flash {fl} are different boards; "
+                                   "refusing to reset one of them")
+        try:
+            self.serial.close()
+        except Exception:
+            pass
+        rst = serial.Serial()
+        rst.port = fl
+        rst.baudrate = 115200
+        rst.timeout = 0.5
+        rst.dtr = False                 # IO0 high  -> normal boot, not download
+        rst.rts = True                  # EN low    -> hold in reset
+        rst.open()
+        time.sleep(0.10)
+        rst.rts = False                 # EN high   -> release into boot
+        time.sleep(0.10)
+        rst.close()
+        self.available = False
+        self._open(self.port, self.baud)
+        self._handshake(max(self.request_timeout, 600.0))   # two model caches re-warm
+
     def complete(self, prompt, phase="tools"):
+        """Run one request, rescuing a stalled console by re-sending it once.
+
+        Run #345's open defect, reproduced three times on 2026-09-23: late in a long
+        attached session a request goes unanswered - the same console fatigue that
+        makes `!think` stop acking - and `bench.py` loses the rest of the suite, which
+        loses the *device* byte-exact gate for whatever candidate was being measured
+        (the host gate cannot cover a two-core defect, #298). The rescue is the one
+        #346 proved for the think ack: reconnect without resetting the chip (DTR/RTS
+        are pinned through the open) and re-establish readiness.
+
+        The request is re-sent, never skipped, and a second failure propagates: a run
+        that quietly drops a case measures nothing while reporting as a pass. The
+        `retried` marker plus the WARN line keep it visible in the lane log.
+        """
+        try:
+            return METRICS.observe(self._complete_once(prompt, phase))
+        except TimeoutError:
+            if getattr(self, "port", None) is None:
+                # Nothing to reconnect to: this Device was never attached (the
+                # framing tests build a bare one to test response pairing). Without
+                # this the rescue raised AttributeError out of _reconnect and hid
+                # the TimeoutError the caller needed - measured, make test has been
+                # red on exactly this since the rescue landed in run #389.
+                raise
+            # Which tty is actually behind the path? The console leg is a USB-UART bridge on
+            # UART0, so it can leave USB on its own while the ESP32 keeps computing; printing the
+            # resolved node turns 'the board hung at case 17' into 'the console leg re-enumerated
+            # at case 17', which is a rig fault rather than a firmware one. Diagnostic only, and
+            # it must never be able to break the rescue.
+            try:
+                print("WARN stalled_device_identity %s" % self._dev_identity())
+            except Exception as _exc:                  # pragma: no cover
+                print("WARN stalled_device_identity_unavailable %s" % type(_exc).__name__)
+            print("WARN request timed out; reconnecting and re-sending this case "
+                  "(not skipping it)")
+            self.available = False
+            self._reconnect()
+            if self._request_state(min(self.request_timeout, 30.0)) is None:
+                if not os.environ.get("AUTO_HARD_RESET"):
+                    raise TimeoutError(
+                        "board did not answer after one reconnect; case was not skipped, "
+                        "and no chip reset was attempted (AUTO_HARD_RESET unset)")
+                # A mid-suite reset restarts the firmware's demo timer and sampling
+                # counters, and two held-out cases (`heldout_interval_one`,
+                # `heldout_long_tools_note_only`) depend on that state: measured on
+                # run #391's canonical session, exactly the two cases after a reset
+                # diverged. So a gated run must not mix pre- and post-reset context -
+                # opt in only for speed-only or diagnostic runs.
+                print("WARN reconnect got no answer; resetting the chip and re-sending "
+                      "this case (not skipping it)")
+                self._hard_reset()          # re-establishes readiness or raises
+                result = METRICS.observe(self._complete_once(prompt, phase))
+                result["retried"] = 1
+                result["hard_reset"] = 1
+                return result
+            self.available = True
+            result = METRICS.observe(self._complete_once(prompt, phase))
+            result["retried"] = 1
+            return result
+
+    def _complete_once(self, prompt, phase="tools"):
         validate_prompt(prompt)
         if phase not in ("tools", "route"):
             raise ValueError("unknown inference phase")
         with self.lock:
             self._require_ready()
+            stale = self.drain_stale()
+            if stale:
+                # Loud, not silent: a nonzero count means the last response was not
+                # drained, which is exactly how run #345's cases answered the wrong
+                # schema. Surfaces in bench.py's log instead of shifting the suite.
+                print(f"WARN drained {len(stale)} stale line(s) before this request")
             start = time.monotonic()
             self.serial.write((b"!route " if phase == "route" else b"") + prompt.encode() + b"\n")
             self.serial.flush()
             output, calls, results = [], None, None
-            prefill_ms = decode_ms = prefill_tps = decode_tps = None
+            prefill_ms = decode_ms = prefill_tps = decode_tps = prefill_tokens = None
             tokens = confidence = error = None
             done = False
             try:
@@ -270,6 +470,7 @@ class Device:
                     elif line.startswith("EVT prefill "):
                         prefill_ms = metric(line, "ms")
                         prefill_tps = metric(line, "tps")
+                        prefill_tokens = metric(line, "tokens")
                     elif line.startswith("EVT done "):
                         decode_ms = metric(line, "ms")
                         decode_tps = metric(line, "tps")
@@ -293,6 +494,7 @@ class Device:
                 "function_calls": calls or [], "results": results or [],
                 "raw": "".join(output), "confidence": confidence,
                 "prefill_ms": prefill_ms, "prefill_tps": prefill_tps,
+                "prefill_tokens": int(prefill_tokens) if prefill_tokens is not None else None,
                 "decode_ms": decode_ms, "decode_tps": decode_tps,
                 "decode_tokens": int(tokens) if tokens is not None else None,
                 "latency_ms": round((time.monotonic() - start) * 1000, 1),
@@ -332,6 +534,159 @@ class Device:
             return result
 
 
+class Metrics:
+    """Firmware timings from `EVT prefill` / `EVT done`, as Prometheus text."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.counters = {"requests": 0, "failures": 0, "http_errors": 0,
+                         "prefill_tokens": 0, "prefill_ms": 0.0,
+                         "decode_tokens": 0, "decode_ms": 0.0}
+        self.last_decode_tps = None
+        self.last_prefill_tps = None
+
+    def observe(self, result):
+        with self.lock:
+            c = self.counters
+            c["requests"] += 1
+            if not result.get("success"):
+                c["failures"] += 1
+            for key in ("prefill_tokens", "prefill_ms", "decode_tokens", "decode_ms"):
+                if result.get(key) is not None:
+                    c[key] += result[key]
+            if result.get("decode_tps") is not None:
+                self.last_decode_tps = result["decode_tps"]
+            if result.get("prefill_tps") is not None:
+                self.last_prefill_tps = result["prefill_tps"]
+        return result
+
+    def error(self):
+        with self.lock:
+            self.counters["http_errors"] += 1
+
+    def render(self):
+        with self.lock:
+            c = dict(self.counters)
+            last = (self.last_prefill_tps, self.last_decode_tps)
+        rows = [
+            ("needle_requests_total", "counter", "Device inference passes", c["requests"]),
+            ("needle_request_failures_total", "counter", "Passes the firmware reported as failed", c["failures"]),
+            ("needle_http_errors_total", "counter", "HTTP requests answered with an error status", c["http_errors"]),
+            ("needle_prefill_tokens_total", "counter", "Prompt tokens prefilled on the device", c["prefill_tokens"]),
+            ("needle_prefill_milliseconds_total", "counter", "Device prefill time from EVT prefill", c["prefill_ms"]),
+            ("needle_decode_tokens_total", "counter", "Tokens generated on the device", c["decode_tokens"]),
+            ("needle_decode_milliseconds_total", "counter", "Device decode time from EVT done", c["decode_ms"]),
+        ]
+        if last[0] is not None:
+            rows.append(("needle_last_prefill_tokens_per_second", "gauge", "Prefill rate of the latest pass", last[0]))
+        if last[1] is not None:
+            rows.append(("needle_last_decode_tokens_per_second", "gauge", "Decode rate of the latest pass", last[1]))
+        out = []
+        for name, kind, help_text, value in rows:
+            out += [f"# HELP {name} {help_text}", f"# TYPE {name} {kind}", f"{name} {value:g}"]
+        return "\n".join(out) + "\n"
+
+
+METRICS = Metrics()
+
+
+class RequestError(ValueError):
+    """An OpenAI-style request the device cannot serve (HTTP 400)."""
+
+    def __init__(self, message, code="invalid_request"):
+        super().__init__(message)
+        self.code = code
+
+
+def openai_models():
+    return {"object": "list", "data": [
+        {"id": model, "object": "model", "created": 0, "owned_by": "needle3-esp32",
+         "phase": phase, "tools": [tool["name"] for tool in SCHEMAS[phase]]}
+        for model, phase in OPENAI_MODELS.items()]}
+
+
+def parse_chat_request(body):
+    """Map a /v1/chat/completions body onto (phase, prompt, offered tool names)."""
+    if not isinstance(body, dict):
+        raise RequestError("body must be a JSON object")
+    if body.get("stream"):
+        raise RequestError("streaming is not supported by this device bridge", "unsupported")
+    model = body.get("model") or "needle3"
+    if model not in OPENAI_MODELS:
+        raise RequestError(f"unknown model {model!r}; available: {', '.join(OPENAI_MODELS)}", "model_not_found")
+    phase = OPENAI_MODELS[model]
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise RequestError("messages must be a nonempty list")
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in ("system", "developer", "user"):
+            raise RequestError("only system and user messages are supported; the device keeps no "
+                               "conversation state, so assistant and tool turns cannot be replayed", "unsupported")
+    content = next((m.get("content") for m in reversed(messages) if m["role"] == "user"), None)
+    if isinstance(content, list):
+        content = "".join(part.get("text", "") for part in content
+                          if isinstance(part, dict) and part.get("type") == "text")
+    if not isinstance(content, str):
+        raise RequestError("a user message with text content is required")
+    known = [tool["name"] for tool in SCHEMAS[phase]]
+    tools = body.get("tools")
+    if tools is None:
+        offered = known
+    else:
+        if not isinstance(tools, list) or not tools:
+            raise RequestError("tools must be a nonempty list when given")
+        offered = []
+        for tool in tools:
+            fn = tool.get("function") if isinstance(tool, dict) else None
+            if not isinstance(fn, dict) or tool.get("type", "function") != "function" or not fn.get("name"):
+                raise RequestError("each tool must be {\"type\": \"function\", \"function\": {\"name\": ...}}")
+            offered.append(fn["name"])
+        unknown = [name for name in offered if name not in known]
+        if unknown:
+            raise RequestError(
+                f"tool(s) {', '.join(unknown)} are not in the {model} firmware schema. Tool schemas are "
+                f"compiled into the firmware at build time and cannot be supplied per request; "
+                f"available tools: {', '.join(known)}", "unsupported_tool")
+    if body.get("tool_choice") not in (None, "auto", "required"):
+        raise RequestError("tool_choice must be omitted, \"auto\" or \"required\"", "unsupported")
+    return model, phase, content, offered
+
+
+def chat_completion(model, result, offered):
+    """Shape a device result as an OpenAI chat.completion."""
+    calls = result.get("function_calls") or []
+    outside = [call.get("name") for call in calls if call.get("name") not in offered]
+    if outside:
+        raise RuntimeError(f"model called tool(s) outside the requested set: {', '.join(outside)}")
+    tool_calls = [{"id": f"call_{uuid.uuid4().hex[:24]}", "type": "function",
+                   "function": {"name": call.get("name"),
+                                "arguments": json.dumps(call.get("arguments") or {}, separators=(",", ":"))}}
+                  for call in calls]
+    prompt_tokens = result.get("prefill_tokens")
+    completion_tokens = result.get("decode_tokens")
+    usage = None
+    if prompt_tokens is not None and completion_tokens is not None:
+        usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+                 "total_tokens": prompt_tokens + completion_tokens}
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": None if tool_calls else result.get("raw", ""),
+                        "tool_calls": tool_calls or None},
+            "finish_reason": "tool_calls" if tool_calls else "stop",
+        }],
+        "usage": usage,
+        # Device-side detail: local tools already ran on the ESP32 in this request.
+        "needle": {k: result.get(k) for k in (
+            "phase", "results", "confidence", "prefill_ms", "prefill_tps",
+            "decode_ms", "decode_tps", "latency_ms", "retried")},
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     device = None
 
@@ -343,6 +698,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/models":
             self._json(200, CATALOG)
             return
+        if self.path == "/v1/models":
+            self._json(200, openai_models())
+            return
+        if self.path == "/metrics":
+            payload = METRICS.render().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path not in ("/health", "/state"):
             self._json(404, {"error": "not found"})
             return
@@ -353,6 +719,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(503, {"ready": False, "error": str(exc)})
 
     def do_POST(self):
+        if self.path == "/v1/chat/completions":
+            self._chat()
+            return
         if self.path not in ("/complete", "/agent", "/route"):
             self._json(404, {"error": "not found"})
             return
@@ -375,7 +744,39 @@ class Handler(BaseHTTPRequestHandler):
         except (ConnectionError, serial.SerialException, OSError) as exc:
             self._json(503, {"error": str(exc)})
 
+    def _chat(self):
+        def fail(status, message, code):
+            self._json(status, {"error": {"message": message, "type": code, "code": code}})
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 65536:
+                raise RequestError("request body must be 1..65536 bytes")
+            try:
+                body = json.loads(self.rfile.read(length))
+            except (ValueError, UnicodeError) as exc:
+                raise RequestError(f"invalid JSON: {exc}") from exc
+            model, phase, prompt, offered = parse_chat_request(body)
+            try:
+                validate_prompt(prompt)
+            except ValueError as exc:
+                raise RequestError(str(exc)) from exc
+            result = self.device.complete(prompt, phase=phase)
+            if not result["success"]:
+                fail(502, f"device reported {result.get('error')}", "device_error")
+                return
+            self._json(200, chat_completion(model, result, offered))
+        except RequestError as exc:
+            fail(400, str(exc), exc.code)
+        except (RuntimeError, ValueError) as exc:
+            fail(502, str(exc), "device_error")
+        except TimeoutError as exc:
+            fail(504, str(exc), "timeout")
+        except (ConnectionError, serial.SerialException, OSError) as exc:
+            fail(503, str(exc), "unavailable")
+
     def _json(self, status, data):
+        if status >= 400:
+            METRICS.error()
         payload = json.dumps(data, separators=(",", ":")).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")

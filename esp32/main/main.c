@@ -23,11 +23,51 @@
 #include "router.h"
 #include "freertos/semphr.h"
 
-#define MAX_NEW        128
+#define MAX_NEW        256
+/* MAX_NEW was 128 and was the ONLY generation limit, which silently corrupted
+ * long answers: the extended case `heldout_long_tools` (a 252-byte request whose
+ * answer is 132 tokens) measured produced=128 with the JSON cut mid-key
+ * (`..."set_timer","arguments":{"seconds":300}},{"n`) and the host-side parser
+ * then saw `calls=[]` / BAD incomplete_call, while the same prompt on the host
+ * engine produced a valid 132-token call list. A truncated tool call is worse
+ * than a slow one because nothing says it happened. The frozen set never exceeded
+ * 99 generated tokens, which is why this survived the whole campaign. The cap is
+ * now a backstop only: run_inference() clamps it to the model's own remaining
+ * context and says so out loud when it stops early. */
 #define ND_LINE_MAX    272   /* not LINE_MAX: that is taken by limits.h */
 
 #include "tools_schema.h"
 #include "routes_schema.h"
+
+#include "driver/uart.h"
+#include "esp_vfs_dev.h"
+
+/* The default console VFS is POLLED: stdin reads a 128-byte software FIFO and
+ * getchar() sleeps 20 ms on EOF. At 115200 8N1 a 20 ms window admits ~230 wire
+ * bytes, so a request longer than the FIFO loses characters, the terminating
+ * newline never arrives, and the reader waits for the rest of a line that has
+ * already been dropped. The frozen suite's cases 1-16 are all <= 89 bytes; case
+ * 17 is the FIRST request over 128 bytes (232), and the note-only tools case is
+ * 135 - which is exactly the observed 16-17 requests-per-boot ceiling, and why
+ * no amount of reconnecting recovered it.
+ *
+ * Installing the UART driver replaces that FIFO with an ISR-fed ring, and
+ * esp_vfs_dev_uart_use_driver() routes stdin through it. Bytes are retained
+ * rather than dropped, so this is lossless rather than a bigger drop window. */
+static void console_rx_ring_enable(void)
+{
+    uart_config_t cfg = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &cfg));
+    esp_vfs_dev_uart_use_driver(UART_NUM_0);
+}
 
 /* The schema is generated from tools/demo-tools.json at build time; see
  * main/CMakeLists.txt. Edit that JSON, not this file. */
@@ -52,17 +92,63 @@ static nd_prefix *s_prefixes[2];
  * read disjoint weight slices and write disjoint outputs, so no locking is
  * needed beyond the start/done handshake. */
 
-static SemaphoreHandle_t s_go, s_done;
-static nd_row_fn         s_fn;
-static void             *s_ctx;
-static uint32_t          s_r0, s_r1;
+static TaskHandle_t s_worker;
+static TaskHandle_t s_waiter;
+/* Run #452: the semaphore is kept for the SLEEPING case only. Measured on device
+ * (one nd_parallel_rows split, helper really is rows_dual_core, board 1, boot
+ * capture): a give/take round trip costs 3,973 cycles with the peer already
+ * running and 4,428 with it parked - a flat ~16.6 us toll, ~170x the void #344
+ * figure, and the engine pays it 150+ times per token. Two plain DRAM counters
+ * replace the wake-up on the common path: the worker spins briefly for a new
+ * sequence number before it blocks, and the caller spins briefly for the
+ * completion number before it waits. On this part internal DRAM is write-through
+ * and the cache does not route it the way PSRAM is, so a volatile load sees the
+ * peer's store - which is what FreeRTOS spinlocks rely on.
+ *
+ * Ordering is the whole hazard, so the payload is published BEFORE the sequence
+ * number and everything the peer reads is volatile; a compiler barrier keeps the
+ * stores on that side. Correctness does not depend on the spin at all: the worker
+ * still gives s_done after every job, and the caller drains any stale token
+ * before publishing so a binary semaphore can never be pre-accounted. */
+static volatile nd_row_fn s_fn;
+static volatile void     *s_ctx;
+static volatile uint32_t  s_r0, s_r1;
+static volatile uint32_t  s_seq, s_done_seq;
+
+/* Spin budgets in iterations of the empty poll loop. The worker's is the larger:
+ * core 1 runs nothing else, so an idle spin there is free, while the caller's
+ * has to stay well under the toll it is trying to avoid paying. */
+#define ND_WORKER_SPIN 20000u
+#define ND_CALLER_SPIN 600u
 
 static void worker_task(void *arg)
 {
+    uint32_t seen = 0;
     for (;;) {
-        xSemaphoreTake(s_go, portMAX_DELAY);
-        s_fn(s_ctx, s_r0, s_r1);
-        xSemaphoreGive(s_done);
+        uint32_t spin = 0;
+        while (s_seq == seen && spin++ < ND_WORKER_SPIN)
+            ;
+        if (s_seq != seen) {
+            seen = s_seq;
+            s_fn((void *)s_ctx, s_r0, s_r1);
+            s_done_seq = seen;
+            xTaskNotifyGive(s_waiter);
+            /* The caller always posts s_go, so a job taken by the spin path
+             * leaves a token behind. Drain it: otherwise the next blocking Take
+             * returns at once, and the sequence-number guard below is the only
+             * thing stopping a re-run of a job whose stack ctx is long gone. */
+        } else {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            if (s_seq != seen) {          /* a spurious wake does no work: the
+                                           * descriptor is a single slot, and
+                                           * re-running one would read a ctx the
+                                           * caller has already returned from. */
+                seen = s_seq;
+                s_fn((void *)s_ctx, s_r0, s_r1);
+                s_done_seq = seen;
+            }
+            xTaskNotifyGive(s_waiter);
+        }
     }
 }
 
@@ -73,28 +159,35 @@ static void rows_dual_core(nd_row_fn fn, void *ctx, uint32_t nrows)
     /* Below this the handshake costs more than the work it saves. Attention
      * splits only 8 heads at a time, but each head is ~10K MACs, far above the
      * ~15 us handshake. */
-    if (half < 2 || !s_go) {
+    if (half < 2 || !s_worker) {
         fn(ctx, 0, nrows);
         return;
     }
-    s_fn  = fn;
+    const uint32_t job = s_seq + 1u;
+    s_waiter = xTaskGetCurrentTaskHandle();
+    s_fn  = fn;                           /* payload first, ... */
     s_ctx = ctx;
     s_r0  = half;
     s_r1  = nrows;
-    xSemaphoreGive(s_go);
+    __asm__ volatile("" ::: "memory");
+    s_seq = job;                          /* ... then the publication */
+    if (s_worker) xTaskNotifyGive(s_worker);
     fn(ctx, 0, half);
-    xSemaphoreTake(s_done, portMAX_DELAY);
+    uint32_t spin = 0;
+    while (s_done_seq != job && spin++ < ND_CALLER_SPIN)
+        ;
+    while (s_done_seq != job)
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
 static void worker_start(void)
 {
-    s_go   = xSemaphoreCreateBinary();
-    s_done = xSemaphoreCreateBinary();
     /* 8 kB, not the 4 kB this ran on before attn_heads learned to stage a KV
      * pair: the staged rows put 1.4 kB of frame on whichever core attends, and
      * at 4 kB the profiled build overflowed it and never reached EVT ready. */
-    xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
-                            configMAX_PRIORITIES - 2, NULL, 1);
+    if (xTaskCreatePinnedToCore(worker_task, "nd_worker", 8192, NULL,
+                                configMAX_PRIORITIES - 2, &s_worker, 1) != pdPASS) return;
+    s_waiter = xTaskGetCurrentTaskHandle();
     nd_parallel_rows = rows_dual_core;
 }
 
@@ -104,6 +197,9 @@ static int s_show_think = 1;   /* toggled from the host with "!think" */
 
 #ifdef ND_KBENCH
 int kbench_run(void);           /* esp32/main/kbench.c */
+#endif
+#ifdef ND_THERMAL_DIAG
+void nd_thermal_diag_start(void);   /* esp32/main/thermal_diag.c */
 #endif
 
 /* Prefill the constant part of the prompt once and snapshot it. Every request
@@ -190,7 +286,9 @@ static void run_inference(const char *query, int phase)
     nd_sampler      smp;
     const float    *lg = NULL;
     int             n;
+    int             out_full = 0;   /* set when out[], not the model, stopped the answer */
     uint32_t        i, produced = 0, w = 0;
+    static uint16_t seg_off[MAX_NEW], seg_len[MAX_NEW];   /* eW78: deferred echo */
     int64_t         t0;
     double          pre_ms;
 
@@ -212,12 +310,15 @@ static void run_inference(const char *query, int phase)
     }
 
     t0 = esp_timer_get_time();
-    for (i = 0; i < (uint32_t)n; i++) {
+    for (i = 0; i < (uint32_t)n; i++)
         lg = nd_model_step_hidden(&s_model, ids[i]);
-        printf("EVT reading %u/%d\n", (unsigned)(i + 1), n);
-        fflush(stdout);
-    }
     pre_ms = (esp_timer_get_time() - t0) / 1000.0;
+    /* eW79: the per-token "EVT reading i/n" progress line used to be printed INSIDE
+     * this timed window - about 18 bytes per prefilled token on a 115200-baud console,
+     * roughly 20 ms of the ~2 s prefill for a 13-token suffix. The window now times the
+     * model alone and the same information is in the summary line below, which is
+     * emitted after the clock stops. */
+
 
     printf("EVT prefill tokens=%d ms=%.0f tps=%.2f sink=%u\n",
            n, pre_ms, n / (pre_ms / 1000.0), (unsigned)s_model.n_sink);
@@ -254,8 +355,16 @@ static void run_inference(const char *query, int phase)
         }
     }
 
+    /* Generate to the model's own limit, not past it: pos is absolute and the
+     * archive's context is max_seq_len, so a fixed 128 could both truncate a long
+     * answer and (with a long primed prefix) walk pos past the trained context. */
+    int cap = MAX_NEW;
+    if ((int64_t)s_model.pos + cap > (int64_t)s_model.c.h.max_seq_len)
+        cap = (int)s_model.c.h.max_seq_len - (int)s_model.pos;
+    if (cap < 1) cap = 1;
+
     t0 = esp_timer_get_time();
-    for (i = 0; i < MAX_NEW; i++) {
+    for (i = 0; i < (uint32_t)cap; i++) {
 #ifdef ND_PROFILE
         uint64_t s_t0 = esp_timer_get_time();
 #endif
@@ -277,25 +386,48 @@ static void run_inference(const char *query, int phase)
         nd_sample_accept(&smp, id);
 
         nd_tok_decode_ex(&s_model.tok, &id, 1, piece, sizeof(piece), 0);
-        printf("TOK ");
-        for (k = 0; piece[k]; k++) {
-            if (piece[k] == '\n')      printf("\\n");
-            else if (piece[k] != '\r') putchar(piece[k]);
-        }
-        printf("\n");
-        fflush(stdout);
+        /* eW78: the console echo is DELAYED past the timed region - the device's own
+         * decode clock covers this loop, so a per-token printf+fflush to a 115200-baud
+         * console was charged to decode time (~8 bytes per token, ~0.4 % of a request).
+         * The pieces are recorded and emitted identically once the clock stops. */
+        seg_off[produced] = (uint16_t)w;
+        seg_len[produced] = (uint16_t)strlen(piece);
 
         if (w + strlen(piece) < sizeof(out) - 1) {
             strcpy(out + w, piece);
             w += strlen(piece);
+        } else {
+            out_full = 1;     /* the text buffer, not the model, stopped the answer */
         }
         produced++;
         lg = nd_model_step_hidden(&s_model, id);
     }
     out[w] = '\0';
 
+    /* An answer that stopped because it ran out of room is not an answer: say so,
+     * so a host cannot mistake a half-written tool call for a complete one. */
+    if (i >= (uint32_t)cap || out_full)
+        printf("ERR generation_truncated produced=%u bytes=%u reason=%s\n",
+               (unsigned)produced, (unsigned)w,
+               out_full ? "text_buffer" : "token_limit");
+
     {
         double dec_ms = (esp_timer_get_time() - t0) / 1000.0;
+        /* eW78: byte-identical echo, now outside the decode clock. */
+        {
+            uint32_t si;
+            for (si = 0; si < produced; si++) {
+                uint32_t k2;
+                printf("TOK ");
+                for (k2 = 0; k2 < seg_len[si]; k2++) {
+                    char ch = out[seg_off[si] + k2];
+                    if (ch == '\n')      printf("\\n");
+                    else if (ch != '\r') putchar(ch);
+                }
+                printf("\n");
+            }
+            fflush(stdout);
+        }
         float  conf   = nd_model_confidence(&s_model);
         if (conf >= 0.0f)
             printf("CONF %.4f\n", conf);
@@ -342,6 +474,7 @@ static size_t model_length(const esp_partition_t *part)
 
 void app_main(void)
 {
+
     const esp_partition_t     *part;
     esp_partition_mmap_handle_t handle;
     const void                *blob = NULL;
@@ -394,6 +527,9 @@ void app_main(void)
         printf("ERR model_open\n");
         return;
     }
+#ifdef ND_THERMAL_DIAG
+    nd_thermal_diag_start();   /* Experiment 21 soak witness, diagnostic only */
+#endif
     if (nd_grammar_compile(&s_grammars[0], TOOLS_JSON, strlen(TOOLS_JSON), &gerr) != 0) {
         printf("ERR grammar %s\n", gerr ? gerr : "?");
         return;
@@ -420,7 +556,8 @@ void app_main(void)
     /* Startup benchmark: a fixed number of steps with the KV cache cold, so
      * kernel changes can be measured in seconds instead of running a whole
      * 9-minute request. */
-    {
+
+    console_rx_ring_enable();  /* LATE (#495): after model open + prefix allocations, before the timed boot loop - the placement that measured 5.596 boot bench vs 5.546 early */    {
         const int N = 6;
         int64_t   t;
         int       i;
@@ -451,6 +588,7 @@ void app_main(void)
 
     for (;;) {
         char line[ND_LINE_MAX];
+        unsigned rx_drop = 0;   /* #494: characters the reader could not store = RX loss */
         int  len = 0;
 
         /* Read one request line from the console. */
@@ -466,10 +604,29 @@ void app_main(void)
                 break;
             if (len < ND_LINE_MAX - 1)
                 line[len++] = (char)c;
+            else
+                rx_drop++;   /* counted, never silently discarded (defect #155) */
         }
         line[len] = '\0';
+
         if (len == 0)
             continue;
+
+        /* Defect #155, fixed: the reader stores ND_LINE_MAX-1 characters and counts
+         * what it could not store (rx_drop). Previously the counter was never
+         * reported and the truncated remainder was handed to run_inference as if
+         * the request were complete, so a host that sent a long request got an
+         * answer to its first 271 characters and no error of any kind. Now the
+         * reader refuses the line explicitly and consumes nothing further from it:
+         * the caller learns the request was too long instead of acting on a
+         * silently shortened one. The frozen prompts are all <= 89 bytes, so this
+         * path never fires in the benchmark. */
+        if (rx_drop) {
+            printf("ERR line_too_long max=%d got=%u\nEND\n",
+                   ND_LINE_MAX - 1, (unsigned)(len + rx_drop));
+            fflush(stdout);
+            continue;
+        }
 
         /* Reasoning control. "!think 0" / "!think 1" set it explicitly so a
          * reconnecting client is never at the mercy of the current state;

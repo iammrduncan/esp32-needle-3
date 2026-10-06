@@ -15,6 +15,177 @@ shows real recorded inference with waits condensed and actual timings displayed.
 The HTTP bridge on the computer orchestrates both passes; both model inferences
 and all local tool handlers execute on the ESP32. No external LLM is called.
 
+This repository is an **inference engine in the
+[inference-engines](https://github.com/Hackers-in-the-Loop/inference-engines) native
+format**: every step is a non-interactive make target driven by `IE_*`
+variables, and the bridge serves an OpenAI-compatible endpoint.
+
+## Quick start
+
+You need an **ESP32-S3 with 32 MB flash and 16 MB PSRAM** and its two USB serial
+ports: the USB-Serial/JTAG port for flashing and the UART console. Use the
+stable `/dev/serial/by-id/` names where you can.
+
+```sh
+export IE_PORT_FLASH=/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_…
+export IE_PORT_SERIAL=/dev/serial/by-id/usb-1a86_USB_Single_Serial_…
+export IE_PARAM_LAYERS=8      # 2–8; fewer layers are faster and less accurate
+export IE_HTTP_PORT=8081
+
+scripts/ie-step.sh check      # report prerequisites; installs nothing
+scripts/ie-step.sh setup      # Python venv for the bridge
+scripts/ie-step.sh model      # download the pinned archive, verify, slice to IE_PARAM_LAYERS
+scripts/ie-step.sh build      # firmware (ESP-IDF 5.5.2)
+scripts/ie-step.sh flash      # ERASES AND WRITES the board: bootloader, app, model at 0x210000
+scripts/ie-step.sh serve      # foreground bridge on 127.0.0.1:$IE_HTTP_PORT; stop with Ctrl-C
+scripts/ie-step.sh health     # in another shell
+scripts/ie-step.sh fidelity   # host engine vs frozen golden logits (max |delta| <= 0.002)
+```
+
+`scripts/ie-step.sh <target>` runs `make <target>` on the host when make, a Python
+with `venv` and an activated ESP-IDF are present. Otherwise it runs the same
+target inside `docker.io/espressif/idf:v5.5.2` with podman or docker. In that
+mode it mounts this checkout at the same path, passes the serial devices and
+`IE_*` variables through, and shares the host network so the bridge port is
+reachable. The mode is recorded in `.ie-mode` at `setup`, so `serve` and `test`
+use the same Python environment; delete it and rerun `setup` to switch. Plain
+`make <target>` works too, with the same variables or `FLASH_PORT`,
+`SERIAL_PORT`, `HTTP_PORT` and `LAYERS`.
+
+A cold boot caches two schema prefixes (143 tool tokens and 213 routing
+tokens) and takes roughly five minutes; the bridge waits up to ten. Stop the
+bridge and any serial monitor before flashing.
+
+## Launching from inference-engines
+
+The recipe `needle3/esp32-s3/8-layer` in inference-engines links this repository
+at a pinned commit and calls `scripts/ie-step.sh` for each step:
+
+| Step | Target | Inputs |
+| --- | --- | --- |
+| setup | `setup` | — |
+| fetch | `model` | `IE_PARAM_LAYERS` (2–8, default 8) |
+| build | `build` | — |
+| deploy | `flash` | `IE_PORT_FLASH` |
+| serve | `serve` (foreground) | `IE_PORT_SERIAL`, `IE_HTTP_PORT` (default 8081) |
+| health | `health` | `IE_HTTP_PORT` |
+| fidelity check | `fidelity` | writes `$IE_OUT/harness-summary.json` |
+
+Stopping is SIGTERM to the step's process group; in container mode the named
+container is stopped as well. The runtime disclosure for this engine: it runs
+on the host or in the ESP-IDF container, needs serial device access, **erases
+and writes the board's flash**, downloads a 35 MB model archive from Hugging
+Face, and serves HTTP on loopback without authentication.
+
+## API
+
+OpenAI-compatible routes:
+
+```sh
+curl -sS http://127.0.0.1:8081/v1/models
+curl -sS --max-time 600 -H 'Content-Type: application/json' http://127.0.0.1:8081/v1/chat/completions -d '{
+  "model": "needle3",
+  "messages": [{"role": "user", "content": "Start a 60 second timer"}],
+  "tools": [{"type": "function", "function": {"name": "set_timer"}}]
+}'
+curl -sS http://127.0.0.1:8081/metrics
+```
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /v1/models` | `needle3` (device-tool schema) and `needle3-router` (model-route schema) |
+| `POST /v1/chat/completions` | One inference on the model's schema; `tool_calls` in OpenAI shape, `usage` from the firmware's token counts |
+| `GET /metrics` | Prometheus counters for passes, failures, prefill/decode tokens and milliseconds, and the latest rates |
+
+`tools` may be omitted (the full compiled schema is used) or name a subset of
+it. Tool definitions are compiled into the firmware, so a request naming any
+other tool gets a 400 that says so; parameter schemas in the request are not
+used. Only the last user message is sent to the device.
+
+Native routes:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /models` | Configured model labels, policies and capability mappings |
+| `GET /health` | Readiness and live device state |
+| `GET /state` | Read current device state without inference |
+| `POST /agent` | Select model; stop if external, or make a second local inference and execute |
+| `POST /route` | One routing inference only; return the selected capability |
+| `POST /complete` | Bypass routing and run the device-tool inference directly |
+
+All POST endpoints accept `{"input":"your request"}`. `/agent` returns
+`selected_model`, `outcome`, `inference_passes`, `remote_called: false`,
+`routing` (the first pass), `execution` (the second pass or `null`), and total
+`latency_ms`. Each pass includes generated `function_calls`, raw model text,
+execution results, and prefill/decode timing. Outcomes are `external_selected`,
+`local_executed`, `route_failed`, or `local_failed`.
+
+Inputs must be single lines of at most 255 UTF-8 bytes and fit the remaining model
+context. Control characters and serial command prefixes are rejected. Errors use
+400 for invalid requests, 502 for firmware/tool failures, 503 for unavailable
+hardware, and 504 for inference timeout. After a serial timeout, finish/reset the
+board and restart the bridge to restore synchronization. Reasoning is disabled
+by default; `tools/serial_api.py --think` enables it.
+
+## Autoresearch result
+
+[![Needle 3 progress poster: 1.22 to 6.22 tokens per second across 943 logged hardware runs](media/progress/needle-progress-poster.png)](media/progress/needle-progress.mp4)
+
+[Watch the progress film](media/progress/needle-progress.mp4) · [View the animated GIF](media/progress/needle-progress.gif) · [See how it was rendered](media/progress/README.md)
+
+The full eight-layer Needle 3 moved from a measured **1.2217 decode tok/s**
+baseline to a fastest verified **6.2200 tok/s** on the same class of ESP32-S3
+hardware: **5.09× the starting throughput**, or about **818 ms → 161 ms per token**.
+The campaign closed after **943 logged hardware runs**.
+
+The largest breakthroughs were open-time FP16→FP32 weight staging (1.22→2.44
+tok/s in one change), dual-core scheduling (3.86), hot-weight placement in
+PSRAM (4.18), hand-written TIE728 SIMD (4.74), the grammar first-byte index
+(4.88), Bundle 5 (5.30), KV staging (5.81), wide lane delivery (5.96), and the
+final QK/W3 composition (6.22).
+
+The 6.22 tree is fully host-gated at 23/23 with the frozen fidelity threshold.
+It remains deliberately unpromoted: two device cases associated with the known
+run-647 transport-sensitive golden issue still report 22/24. The evidence,
+last in-flight results, preserved candidates, and owner decisions are recorded
+in the [shutdown handoff](docs/engine-bible/appendices/shutdown-handoff.md).
+The firmware this branch builds is the **matrix** image measured below (6.15
+tok/s at eight layers): B1w3 plus one archive-bound fix so shallower models
+load. A from-source build matches the benchmarked image outside build metadata
+([details](docs/matrix-firmware.md)). The 6.22 candidate, every other source
+variant, and the complete 943-run ledger are in the
+[research archive](docs/research-archive.md).
+
+## Three-board layer benchmark
+
+![Needle 3 layer matrix poster: layers 1–8 with decode tokens per second, exact calls, a downward accuracy arrow and an upward speed arrow](media/benchmarks/needle3-layer-matrix-poster.png)
+
+On a matched 12-request tool-routing workload on the same board, the historical
+eight-layer image measured **1.2142 decode tok/s** and the optimized eight-layer
+matrix image measured **6.1492 tok/s** (**5.06×**). Both made the same 11/12
+exact calls and produced byte-identical raw outputs on all 12 requests. The
+optimized image was then held fixed across depths 2–8 on three identical
+ESP32-S3 boards; the eight-layer matrix repeat measured 6.1508 tok/s:
+
+| Firmware / layers | Decode tok/s | Prefill tok/s | Successful | Exact calls |
+| --- | ---: | ---: | ---: | ---: |
+| Historical / 8 | 1.214 | 1.247 | 12/12 | 11/12 |
+| Optimized / 1 diagnostic | 9.755† | 55.577† | 0/12 | 0/12 |
+| Optimized / 2 | 20.313 | 23.427 | 12/12 | 4/12 |
+| Optimized / 3 | 14.972 | 16.658 | 12/12 | 3/12 |
+| Optimized / 4 | 11.704 | 12.927 | 12/12 | 9/12 |
+| Optimized / 5 | 9.717 | 10.558 | 12/12 | 9/12 |
+| Optimized / 6 | 8.293 | 8.923 | 12/12 | 9/12 |
+| Optimized / 7 | 6.908 | 7.342 | 12/12 | 8/12 |
+| Optimized / 8 | 6.151 | 6.513 | 12/12 | 11/12 |
+
+† The one-layer slice needed a separate zero-site allocation image and every
+response truncated, so its rates are not usable throughput. Eight layers was
+the deepest device-verified rung: depth 9 flashed but could not be mapped into
+the ESP32-S3's MMU space. The [full benchmark report](docs/benchmarks.md)
+includes raw results, host logit drift, memory headroom and limitations; the
+[rerunnable package](benchmarks/README.md) pins images, models and tasks.
+
 ## Scenarios
 
 | Request | Configured model | What happens next |
@@ -86,12 +257,17 @@ both schemas fit with room for the request and generation.
 - The computer serves HTTP through USB UART; this build does not serve HTTP over
   ESP32 Wi-Fi. The API is bound to localhost without authentication. The bridge
   serializes each entire two-pass transaction, including state reads.
+- The OpenAI-compatible route serves the two compiled schemas only. Requests
+  naming other tools get a 400; the device keeps no conversation state, so
+  assistant and tool turns cannot be replayed; streaming is not supported. Local
+  tools execute on the ESP32 as part of the request, and their results are
+  returned in the response's `needle` field.
 - External selections stop at the model label. No credentials, remote endpoints,
   provider responses or simulated cloud answers are involved.
 
 ## Measured capture
 
-Recorded on 2026-09-18 with the eight-layer ESP32 model. Routing and
+Recorded on 2026-09-18 with the eight-layer ESP32 model and the firmware of that date, which predates the matrix image. Routing and
 execution times include the USB/HTTP bridge. External scenarios do not include
 a larger-model inference because they end at selection.
 
@@ -112,55 +288,25 @@ all second-pass tool calls matched. These are curated examples, not an accuracy 
 ## Hardware and dependencies
 
 Tested with an **ESP32-S3, 32 MB octal flash, 16 MB octal PSRAM, 240 MHz** and
-ESP-IDF **5.5.2**. The 16,155,796-byte model is mapped from a dedicated flash
-partition. This partition layout does not fit a 16 MB flash board.
+ESP-IDF **5.5.2**. The 16,155,796-byte eight-layer model is mapped from a
+dedicated flash partition. This partition layout does not fit a 16 MB flash
+board. Your user must have serial access (typically the `dialout` group on Linux).
 
-The tested board exposes `/dev/ttyACM0` for flashing and `/dev/ttyACM1` for its
-UART console. Port names vary: use your device's actual ports, preferably stable
-`/dev/serial/by-id/` names. Your user must have serial access (typically the
-`dialout` group on Linux).
+Host mode needs Git, Python 3.11+ with `venv`, GNU Make, CMake, a C compiler
+and an activated
+[ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/get-started/index.html).
+Container mode needs only Git, curl and podman or docker; the ESP-IDF image
+provides the rest. VHS, ttyd and FFmpeg are needed only to render the demo.
 
-Host prerequisites: Git, Python 3.11+, `venv` (or `virtualenv`), GNU Make,
-CMake and a C compiler for host tests. Install and activate
-[ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32s3/get-started/index.html)
-for firmware builds. VHS, ttyd and FFmpeg are needed only to render the demo.
+`make model` slices the already quantized tensors of the pinned 20-layer
+archive to the requested depth and 384 tokens, and verifies the result against
+[`model/manifest.json`](model/manifest.json), which records the revision and the
+hash of every supported depth. Model archives and build outputs are not in Git.
+For firmware-only changes, `make flash-app` skips the model write.
 
-## Build and run
+### Optional systemd service
 
-From the repository root:
-
-```sh
-make setup
-make model
-make verify-model
-```
-
-`make model` downloads the pinned public archive, verifies its SHA-256, slices
-the already quantized tensors to **8 layers / 384 tokens**, and verifies the
-result. [`model/manifest.json`](model/manifest.json) records the revision and
-hashes. Model archives and generated build files are excluded from Git.
-Upgrading from the earlier tool-only demo requires both `make model` and a full
-`make flash`: the model context changed from 256 to 384 tokens.
-
-In a shell with ESP-IDF activated (`. /path/to/esp-idf/export.sh`):
-
-```sh
-make flash FLASH_PORT=/dev/ttyACM0
-```
-
-This builds and flashes the application, then writes the model at `0x210000`.
-For later firmware-only changes, use `make flash-app`. Stop the API service and
-any serial monitor before flashing. Two schema prefixes are cached at boot
-(143 tool tokens and 213 routing tokens);
-a cold start takes roughly five minutes. The bridge waits up to ten minutes.
-
-Run the bridge in the foreground:
-
-```sh
-make serve SERIAL_PORT=/dev/ttyACM1
-```
-
-Or install it as a Linux systemd **user service** after closing the foreground bridge:
+The bridge can also run as a Linux systemd **user service**. This is outside the launch path; stop any foreground bridge first:
 
 ```sh
 make install-service SERIAL_PORT=/dev/ttyACM1
@@ -174,45 +320,12 @@ the checkout. It starts with your user session. Uninstall with
 `~/.config/systemd/user/needle3-api.service`, and run
 `systemctl --user daemon-reload`.
 
-## API
+## Tests, capture and demo
 
 ```sh
-curl -sS http://127.0.0.1:8081/models
-curl -sS http://127.0.0.1:8081/health
-curl -sS --max-time 600 -H 'Content-Type: application/json' \
-  -d '{"input":"Sample every 10 seconds and start a 30 second timer"}' \
-  http://127.0.0.1:8081/agent
-```
-
-| Endpoint | Behavior |
-| --- | --- |
-| `GET /models` | Configured model labels, policies and capability mappings |
-| `GET /health` | Readiness and live device state |
-| `GET /state` | Read current device state without inference |
-| `POST /agent` | Select model; stop if external, or make a second local inference and execute |
-| `POST /route` | One routing inference only; return the selected capability |
-| `POST /complete` | Bypass routing and run the device-tool inference directly |
-
-All POST endpoints accept `{"input":"your request"}`. `/agent` returns
-`selected_model`, `outcome`, `inference_passes`, `remote_called: false`,
-`routing` (the first pass), `execution` (the second pass or `null`), and total
-`latency_ms`. Each pass includes generated `function_calls`, raw model text,
-execution results, and prefill/decode timing. Outcomes are `external_selected`,
-`local_executed`, `route_failed`, or `local_failed`.
-
-Inputs must be single lines of at most 255 UTF-8 bytes and fit the remaining model
-context. Control characters and serial command prefixes are rejected. Errors use
-400 for invalid requests, 502 for firmware/tool failures, 503 for unavailable
-hardware, and 504 for inference timeout. After a serial timeout, finish/reset the
-board and restart the bridge to restore synchronization. Reasoning is disabled
-by default; `tools/serial_api.py --think` enables it.
-
-## Capture, render and test
-
-```sh
-make test        # host grammar, prefix isolation, and bridge protocol tests
-make capture     # seven real end-to-end scenarios; requires board + API
-make demo        # render MP4 + GIF with VHS from the saved recording
+scripts/ie-step.sh test   # host grammar, prefix isolation, bridge and OpenAI-route tests
+make capture              # seven real end-to-end scenarios; requires board + API
+make demo                 # render MP4 + GIF with VHS from the saved recording
 ```
 
 See [demo instructions](demo/README.md). The capture saves expected routes,
@@ -225,11 +338,21 @@ Tests verify that external selections stop after one inference and local
 selections submit the original request for a second inference. C tests verify
 single-selection grammar and bit-identical logits after alternating prefix caches
 (the latter runs when the model archive is present). Protocol tests also cover
-multiple tool calls, stream boundaries, firmware errors and timeout recovery.
+multiple tool calls, stream boundaries, firmware errors and timeout recovery,
+and the OpenAI routes and metrics are tested over HTTP against a simulated device.
 
 Optional NumPy reference checks use `requirements-dev.txt` and
 [`tools/reference_forward.py`](tools/reference_forward.py). Profiling is disabled
 by default; enable it with `idf.py -C esp32 -DNEEDLE_PROFILE=ON build`.
+
+## Research archive
+
+The autoresearch workspace behind these results (run ledger, experiment
+directories, source snapshots, the Podman campaign recipe and board-pool
+tooling) is preserved at the `research-archive-2026-09-27` tag. The
+[research archive guide](docs/research-archive.md) lists what is there and how
+to restore a research tree. The [engine bible](docs/engine-bible/README.md) is
+the durable engineering record.
 
 ## Implementation and provenance
 

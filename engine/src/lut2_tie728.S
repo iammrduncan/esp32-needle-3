@@ -77,15 +77,31 @@
  * separate stream from the index stream, and NF16 sits at the bottom of every
  * group, so its load latency lands as a bubble between groups. */
 	.macro	NF16V v, fpd, t1, t2
-	extui	\t1, \v, 10, 5
-	extui	\t2, \v, 15, 1
-	extui	\v,  \v, 0, 10
-	slli	\v,  \v, 13
-	addi	\t1, \t1, 112
+	/* FP16 -> FP32 for a POSITIVE ORDINARY halfword, five instructions instead
+	 * of ten. Moving exponent and mantissa together with one shift and adding
+	 * exact: adding the bias difference (127 - 15 = 112, i.e. 0x38000000) into
+	 * the exponent field gives (h<<13) + 0x38000000 == ((e+112)<<23)|(m<<13),
+	 * i.e. the value 2^(e-15) * 1.m that the halfword means. Exact because m<<13
+	 * cannot carry into the exponent field, and e+112 stays in 113..142 - clear
+	 * of the 255 that would be infinity.
+	 * The sign bit must be zero or it lands in the exponent - nd_lut2_asm_ok()
+	 * checks that, plus exponent 1..30, per tensor, once, memoised. Verified
+	 * over all 65,536 encodings in .auto/exp80/test_rebias.c: on the 30,720
+	 * in-domain halfwords these bits equal the old ten-instruction result and
+	 * the true IEEE value (h=0x3c00 -> 0x3f800000); everywhere they differ the
+	 * predicate rejects the halfword. The old form split the fields
+	 * (extui/extui/extui) and rejoined them with two ors, which is where the
+	 * five extra instructions went.
+ *
+ * Hoisting the 0x38000000 into a whole-kernel register - three instructions
+ * per norm instead of five - was measured and is EXACTLY NULL (run #452, board 3,
+ * decode 5.4883 for both forms, and the metric is deterministic to the digit on
+ * these trees). The conversion is off the critical path at five instructions, so
+ * the self-contained form stays and no address register is committed to it. */
+	movi	\t1, 112
 	slli	\t1, \t1, 23
-	slli	\t2, \t2, 31
-	or	\v,  \v, \t1
-	or	\v,  \v, \t2
+	slli	\v,  \v, 13
+	add.n	\v,  \v, \t1
 	wfr	\fpd, \v
 	.endm
 
@@ -130,6 +146,43 @@
 	add.s	\s1, \s1, f9
 	add.s	\s2, \s2, f10
 	add.s	\s3, \s3, f11
+	add.s	\s0, \s0, f12
+	add.s	\s1, \s1, f13
+	add.s	\s2, \s2, f14
+	add.s	\s3, \s3, f15
+	.endm
+	/* B1: first W8D of a group seeds its partials from f6 (+0.0f). The add.s is kept
+	 * (not a move) so signed-zero and rounding stay bit-identical; that makes the
+	 * per-group reset mov.s dead inside nd_lut2_rows_tie1n only. */
+	.macro	W8D0 wd, off, s0, s1, s2, s3
+	extui	a12, \wd, 0,  4
+	extui	a13, \wd, 4,  4
+	extui	a14, \wd, 8,  4
+	extui	a15, \wd, 12, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f8,  a12, \off + 0
+	lsi	f9,  a13, \off + 64
+	lsi	f10, a14, \off + 128
+	lsi	f11, a15, \off + 192
+	extui	a12, \wd, 16, 4
+	extui	a13, \wd, 20, 4
+	extui	a14, \wd, 24, 4
+	extui	a15, \wd, 28, 4
+	addx4	a12, a12, a4
+	addx4	a13, a13, a4
+	addx4	a14, a14, a4
+	addx4	a15, a15, a4
+	lsi	f12, a12, \off + 256
+	lsi	f13, a13, \off + 320
+	lsi	f14, a14, \off + 384
+	lsi	f15, a15, \off + 448
+	add.s	\s0, f6, f8
+	add.s	\s1, f6, f9
+	add.s	\s2, f6, f10
+	add.s	\s3, f6, f11
 	add.s	\s0, \s0, f12
 	add.s	\s1, \s1, f13
 	add.s	\s2, \s2, f14
@@ -620,18 +673,21 @@ nd_lut2_rows_tie1n:
 	add.n	a7, a7, a14			/* y += r0 */
 	mov.n	a3, a15			/* a3 = row counter */
 	mov.s	f5, f6				/* row total = +0.0f */
-	mov.s	f0, f6				/* group partials: the group loop */
-	mov.s	f1, f6				/* resets them at its bottom, so */
-	mov.s	f2, f6				/* the first group needs the seed  */
-	mov.s	f3, f6				/* here or it folds in garbage.    */
-.Ltn_row:
-	l32i	a2, a1, 20
-	l32i	a4, a1, 16
+	l32i	a2, a1, 20			/* ngroup once per call */
+	l32i	a4, a1, 16			/* first row's LUT base, before LBEG */
+/* Hardware group loop: `loop` owns the count a2 (it is not touched inside the
+	 * body) and LEND lands on .Ltn_gend, so the group tail loses its
+	 * decrement + branch + jump - three instructions per group, six groups per
+	 * row on the dense CQ2 tensors. The body is longer than a conditional branch
+	 * can reach, so this compiles to the long-loop form; the expansion's scratch
+	 * register is inspected in the built ELF before the screen. W8D, every
+	 * partial, the norm conversion, FOLD and both cursors are unchanged. */
+	loop	a2, .Ltn_gend
 .Ltn_group:
 	l16ui	a8, a6, 0			/* this group's norm, loaded early */
 	l32i	a10, a5, 0
 	l32i	a11, a5, 4
-	W8D	a10, 0,   f0, f1, f2, f3
+	W8D0	a10, 0,   f0, f1, f2, f3
 	W8D	a11, 512, f0, f1, f2, f3
 	addi	a4, a4, 0x400
 	l32i	a10, a5, 8
@@ -651,22 +707,19 @@ nd_lut2_rows_tie1n:
 	addi	a4, a4, 0x400
 	NF16V	a8, f4, a10, a11
 	FOLD	f0, f1, f2, f3, f5, f4
-	mov.s	f0, f6				/* the next group starts from 0 */
-	mov.s	f1, f6
-	mov.s	f2, f6
-	mov.s	f3, f6
 	addi	a5, a5, 32			/* gbytes */
 	addi	a6, a6, 2			/* one FP16 norm */
-	addi.n	a2, a2, -1
-	beqz	a2, .Ltn_gend
-	j	.Ltn_group			/* j reaches; bnez cannot (>.5 kB) */
-.Ltn_gend:
+.Ltn_gend:			/* fall-through: `loop` exhausted LCOUNT for this row */
 	ssi	f5, a7, 0
 	addi	a7, a7, 4
 	mov.s	f5, f6
-	addi.n	a3, a3, -1
+	addi.n	a3, a3, -1		/* rows first: the last row exits with LCOUNT == 0 */
 	beqz	a3, .Ltn_ret
-	j	.Ltn_row
+	l32i	a4, a1, 16		/* remaining rows: reload the LUT base */
+	addi.n	a10, a2, -1		/* re-arm LCOUNT = ngroup-1, then synchronise */
+	wsr.lcount a10
+	isync
+	j	.Ltn_group		/* straight back into the group body */
 .Ltn_ret:
 	/* Poor man's core dump: the fault lands in retw, which the panic printout
 	 * cannot describe (it reports a double exception). RTC memory survives the

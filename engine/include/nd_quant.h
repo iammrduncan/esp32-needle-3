@@ -70,6 +70,26 @@ static inline float nd_f16(uint16_t h)
  * software-emulated and measurable. Range-reduce to 2^k * 2^f with f in
  * [-0.5, 0.5], evaluate 2^f with a degree-5 polynomial, and apply 2^k by
  * assembling the exponent field directly. */
+/* Put an assembled 32-bit pattern into a float register.
+ *
+ * On Xtensa this is a single register transfer. The plain 4-byte copy - even as an explicit
+ * builtin, which is what run #424 needs for the -fno-builtin-memcpy flag - is lowered to a stack
+ * store plus an FP load (`s32i.n` + `lsi`), and that round trip, not the arithmetic, is what the
+ * board-1 kbench screen measured at ~50 cycles per conversion. Same bits in, same float out; the
+ * host build (the correctness oracle) keeps the portable copy. */
+static inline float nd_f32_from_bits(uint32_t bits)
+{
+#if defined(__XTENSA__)
+    float f;
+    __asm__ __volatile__("wfr %0, %1" : "=f"(f) : "r"(bits));
+    return f;
+#else
+    float f;
+    __builtin_memcpy(&f, &bits, 4);
+    return f;
+#endif
+}
+
 static inline float nd_expf(float x)
 {
     float    z, f, p;
@@ -92,8 +112,59 @@ static inline float nd_expf(float x)
     p = p * f + 1.0f;
 
     bits = (uint32_t)(k + 127) << 23;  /* 2^k */
-    memcpy(&scale, &bits, 4);
+    scale = nd_f32_from_bits(bits);
     return p * scale;
+}
+
+/* exp() for two independent arguments at once.
+ *
+ * The attention online softmax evaluates `w0 = exp(s0 - m)` and
+ * `w1 = exp(s1 - m)` back to back for the two KV positions of a pair: 12
+ * heads x ~half the context x 8 layers, so ~10K pairs and two thirds of all
+ * exponential calls in a decode token. Each scalar expansion is a degree-5
+ * Horner chain with a strict serial dependency (~5 x FP-add latency of pure
+ * latency, nothing to issue in between), and disassembly of attn_heads showed
+ * GCC scheduling the two expansions one after the other and spilling live
+ * floats to the stack to do it. Interleaving the two chains gives the
+ * scheduler two independent operands per slot and lets both stay in
+ * registers.
+ *
+ * Each chain performs exactly the operations nd_expf() performs, in the same
+ * order with the same constants, so the pair is bit-identical to two scalar
+ * calls - this is not an approximation swap. Out-of-range arguments take the
+ * scalar path, which is the only place the two clamps live. */
+static inline void nd_expf_pair(float x0, float x1, float *r0, float *r1)
+{
+    float    z0, z1, f0, f1, p0, p1, sc0, sc1;
+    int      k0, k1;
+    uint32_t b0, b1;
+
+    if (x0 > 88.0f || x0 < -88.0f || x1 > 88.0f || x1 < -88.0f) {
+        *r0 = nd_expf(x0);
+        *r1 = nd_expf(x1);
+        return;
+    }
+
+    z0 = x0 * 1.44269504f;
+    z1 = x1 * 1.44269504f;
+    k0 = (int)(z0 + (z0 >= 0.0f ? 0.5f : -0.5f));
+    k1 = (int)(z1 + (z1 >= 0.0f ? 0.5f : -0.5f));
+    f0 = z0 - (float)k0;
+    f1 = z1 - (float)k1;
+
+    p0 = 0.0013333f;  p1 = 0.0013333f;
+    p0 = p0 * f0 + 0.0096181f;  p1 = p1 * f1 + 0.0096181f;
+    p0 = p0 * f0 + 0.0555041f;  p1 = p1 * f1 + 0.0555041f;
+    p0 = p0 * f0 + 0.2402265f;  p1 = p1 * f1 + 0.2402265f;
+    p0 = p0 * f0 + 0.6931472f;  p1 = p1 * f1 + 0.6931472f;
+    p0 = p0 * f0 + 1.0f;        p1 = p1 * f1 + 1.0f;
+
+    b0 = (uint32_t)(k0 + 127) << 23;
+    b1 = (uint32_t)(k1 + 127) << 23;
+    sc0 = nd_f32_from_bits(b0);
+    sc1 = nd_f32_from_bits(b1);
+    *r0 = p0 * sc0;
+    *r1 = p1 * sc1;
 }
 
 /* In-place unnormalised fast Walsh-Hadamard transform. `n` must be a power
@@ -145,7 +216,16 @@ static inline uint32_t nd_cq_lut_floats(uint32_t in_pad)
  * reads its own slice of weights and writes one output. The engine stays
  * single-threaded and portable by default; a platform can install a splitter
  * (the ESP32 build hands half the rows to the second core) and every matvec
- * picks it up. */
+ * picks it up.
+ *
+ * CONTRACT for an installed fn: it runs on two cores at once, over disjoint row
+ * ranges, with NO barrier between the halves - the caller only waits for both to
+ * finish. So fn may write its output rows and nothing else shared. Scratch
+ * belongs on the stack or in the ctx (see attn_heads' staging arrays); a static
+ * or global buffer is a data race, and one that mixes values silently will not
+ * reliably show up in byte-exact goldens, because the halves are equal-sized and
+ * usually stay in phase. The host splitter is serial, so the host build cannot
+ * catch this at all. */
 typedef void (*nd_row_fn)(void *ctx, uint32_t r0, uint32_t r1);
 extern void (*nd_parallel_rows)(nd_row_fn fn, void *ctx, uint32_t nrows);
 
@@ -191,6 +271,28 @@ void nd_lut2_rows_tie1m(void *vc, uint32_t r0, uint32_t r1);
  * and do the inline FP16->FP32 conversion only, so no norm in the range may
  * touch nd_f16_slow's subnormal/inf path. */
 int nd_lut2_asm_ok(const nd_lut2_ctx *c, uint32_t r0, uint32_t r1);
+
+/* Context for the handwritten 4-bit row walker in engine/src/gemv4_tie728.S,
+ * which hard-codes these offsets. C resolves every cursor - packed0/norms0/y0 are
+ * already stepped to the first row of the split and rowbytes/normstep step them
+ * on - so the kernel body needs no integer multiply, only adds. */
+typedef struct {
+    const uint8_t  *packed0;
+    const uint16_t *norms0;
+    const float    *xh, *cb;
+    float          *y0;
+    uint32_t        ngroup, g, rowbytes, normstep, nrows;
+} nd_gemv4_ctx;
+
+void nd_gemv4_rows_tie1(void *vc);
+void nd_gemv4_rows_tie1W(void *vc);   /* ee.ldf.128.ip xh, 16-aligned */
+
+/* The 4-bit kernel is specialised to group 128 (16 index words and a 512-byte xh
+ * stride per group) and does the inline FP16->FP32 conversion only, so no norm in
+ * range may touch nd_f16_slow's path - the same restriction nd_lut2_asm_ok()
+ * applies. bits must be 4: this body reads two nibbles per 32-bit word. */
+int nd_gemv4_asm_ok(uint32_t bits, uint32_t g, uint32_t ngroup, uint32_t rows,
+                    const uint16_t *norms);
 
 /* A quad table (one byte -> one lookup -> four weights) was tried and removed:
  * it issues fewer instructions but forces group-outer iteration, which uses

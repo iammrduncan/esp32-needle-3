@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1152" viewBox="0 0 2048 1152" role="img" aria-labelledby="title desc">
+  <title id="title">Needle 3 layer-depth benchmark matrix</title>
+  <desc id="desc">Layers one through eight with decode tokens per second and exact tool calls. A downward arrow on the left marks the overall accuracy trend; an upward arrow on the right marks usable speed, which peaks at two layers. One layer produced only truncated responses.</desc>
+  <defs>
+    <pattern id="graph" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" fill="none" stroke="#c9cdc6" stroke-opacity=".045" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="coral" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#c8321e"/>
+      <stop offset="1" stop-color="#ff553d"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#1b2020"/>
+      <stop offset="1" stop-color="#151919"/>
+    </linearGradient>
+    <style>
+      .display { font-family: "Noto Sans", "Arial Narrow", sans-serif; font-weight: 800; letter-spacing: -3px; }
+      .label { font-family: "DejaVu Sans Mono", monospace; font-weight: 700; letter-spacing: 2px; }
+      .mono { font-family: "DejaVu Sans Mono", monospace; font-variant-numeric: tabular-nums; }
+      .cream { fill: #f4f2ea; }
+      .muted { fill: #aeb3b0; }
+      .orange { fill: #ff553d; }
+    </style>
+  </defs>
+
+  <rect width="2048" height="1152" fill="#111315"/>
+  <rect width="2048" height="1152" fill="url(#graph)"/>
+  <path d="M0 0H2048V18H0Z" fill="#ff553d"/>
+
+  <g fill="none" stroke="#ff553d" stroke-width="6" opacity=".9">
+    <path d="M145 88C179 58 212 58 246 88C212 118 179 118 145 88Z"/>
+    <path d="M246 88C280 58 313 58 347 88C313 118 280 118 246 88Z"/>
+  </g>
+  <circle cx="348" cy="88" r="8" fill="#ff553d"/>
+  <text x="390" y="98" class="label cream" font-size="28">NEEDLE 3 / ESP32-S3</text>
+  <text x="1904" y="99" class="label muted" font-size="24" text-anchor="end">HACKERS IN THE LOOP / LAB NOTE</text>
+
+  <text x="144" y="209" class="display cream" font-size="96">THE DEPTH MATRIX</text>
+  <text x="147" y="253" class="label muted" font-size="25">THREE IDENTICAL BOARDS · 12 FROZEN TOOL-ROUTING CASES</text>
+  <line x1="144" y1="278" x2="1904" y2="278" stroke="#555b58" stroke-width="2"/>
+
+  <text x="69" y="351" class="label orange" font-size="25">ACCURACY</text>
+  <line x1="157" y1="403" x2="157" y2="884" stroke="#ff553d" stroke-width="7" stroke-linecap="round"/>
+  <polygon points="138,883 176,883 157,916" fill="#ff553d"/>
+  <text x="1852" y="351" class="label orange" font-size="25">SPEED</text>
+  <line x1="1901" y1="885" x2="1901" y2="477" stroke="#ff553d" stroke-width="7" stroke-linecap="round"/>
+  <polygon points="1882,477 1920,477 1901,444" fill="#ff553d"/>
+
+  <rect x="242" y="302" width="1564" height="640" rx="20" fill="url(#panel)" stroke="#484e4b" stroke-width="2"/>
+  <text x="301" y="352" class="label muted" font-size="24">LAYERS</text>
+  <text x="509" y="352" class="label muted" font-size="24">DECODE TOK/S</text>
+  <text x="880" y="352" class="label muted" font-size="24">SPEED PROFILE</text>
+  <text x="1575" y="352" class="label muted" font-size="24">EXACT CALLS</text>
+
+  <g class="mono" font-size="36">
+    <!-- Layer 1 is diagnostic only: every device generation truncated. -->
+    <rect x="266" y="372" width="1516" height="62" rx="9" fill="#202323" stroke="#555b58" stroke-width="1.5" stroke-dasharray="8 7"/>
+    <text x="329" y="416" class="muted" font-weight="700">1</text>
+    <text x="510" y="416" class="muted" font-weight="700">9.755†</text>
+    <rect x="880" y="401" width="526" height="12" rx="6" fill="#353a3a"/>
+    <text x="1114" y="415" class="label muted" font-size="23">TRUNCATED</text>
+    <text x="1601" y="416" class="muted" font-weight="700">0/12</text>
+
+    <rect x="266" y="442" width="1516" height="62" rx="9" fill="#292421" stroke="#ff553d" stroke-width="2.5"/>
+    <rect x="266" y="442" width="9" height="62" rx="4" fill="#ff553d"/>
+    <text x="329" y="486" class="cream" font-weight="700">2</text>
+    <text x="510" y="486" class="cream" font-weight="700">20.313</text>
+    <rect x="880" y="471" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="471" width="526" height="12" rx="6" fill="url(#coral)"/>
+    <text x="1601" y="486" class="cream" font-weight="700">4/12</text>
+
+    <rect x="266" y="512" width="1516" height="62" rx="9" fill="#1c2020"/>
+    <text x="329" y="556" class="cream" font-weight="700">3</text>
+    <text x="510" y="556" class="cream" font-weight="700">14.972</text>
+    <rect x="880" y="541" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="541" width="388" height="12" rx="6" fill="#aeb3b0"/>
+    <text x="1601" y="556" class="cream" font-weight="700">3/12</text>
+
+    <rect x="266" y="582" width="1516" height="62" rx="9" fill="#202424"/>
+    <text x="329" y="626" class="cream" font-weight="700">4</text>
+    <text x="510" y="626" class="cream" font-weight="700">11.704</text>
+    <rect x="880" y="611" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="611" width="303" height="12" rx="6" fill="#aeb3b0"/>
+    <text x="1601" y="626" class="cream" font-weight="700">9/12</text>
+
+    <rect x="266" y="652" width="1516" height="62" rx="9" fill="#1c2020"/>
+    <text x="329" y="696" class="cream" font-weight="700">5</text>
+    <text x="510" y="696" class="cream" font-weight="700">9.717</text>
+    <rect x="880" y="681" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="681" width="252" height="12" rx="6" fill="#aeb3b0"/>
+    <text x="1601" y="696" class="cream" font-weight="700">9/12</text>
+
+    <rect x="266" y="722" width="1516" height="62" rx="9" fill="#202424"/>
+    <text x="329" y="766" class="cream" font-weight="700">6</text>
+    <text x="510" y="766" class="cream" font-weight="700">8.293</text>
+    <rect x="880" y="751" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="751" width="215" height="12" rx="6" fill="#aeb3b0"/>
+    <text x="1601" y="766" class="cream" font-weight="700">9/12</text>
+
+    <rect x="266" y="792" width="1516" height="62" rx="9" fill="#1c2020"/>
+    <text x="329" y="836" class="cream" font-weight="700">7</text>
+    <text x="510" y="836" class="cream" font-weight="700">6.908</text>
+    <rect x="880" y="821" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="821" width="179" height="12" rx="6" fill="#aeb3b0"/>
+    <text x="1601" y="836" class="cream" font-weight="700">8/12</text>
+
+    <rect x="266" y="862" width="1516" height="62" rx="9" fill="#292421" stroke="#ff553d" stroke-width="2.5"/>
+    <rect x="1773" y="862" width="9" height="62" rx="4" fill="#ff553d"/>
+    <text x="329" y="906" class="cream" font-weight="700">8</text>
+    <text x="510" y="906" class="cream" font-weight="700">6.151</text>
+    <rect x="880" y="891" width="526" height="12" rx="6" fill="#353a3a"/>
+    <rect x="880" y="891" width="159" height="12" rx="6" fill="url(#coral)"/>
+    <text x="1601" y="906" class="cream" font-weight="700">11/12</text>
+  </g>
+
+  <text x="147" y="1000" class="label orange" font-size="26">† ONE LAYER: 0/12 SUCCESSFUL · 9.755 TOK/S WAS TRUNCATED, NOT USABLE THROUGHPUT</text>
+  <text x="147" y="1044" class="mono muted" font-size="25">Arrows show the overall tradeoff, not a monotonic accuracy or speed curve.</text>
+  <line x1="144" y1="1077" x2="1904" y2="1077" stroke="#555b58" stroke-width="2"/>
+  <text x="146" y="1119" class="label muted" font-size="22">OPTIMIZED DEPTH SWEEP · FULL DATA AND METHODS IN DOCS/BENCHMARKS.MD</text>
+  <text x="1903" y="1119" class="label orange" font-size="22" text-anchor="end">HARDWARE VERIFIED / DEPTHS 2–8</text>
+</svg>

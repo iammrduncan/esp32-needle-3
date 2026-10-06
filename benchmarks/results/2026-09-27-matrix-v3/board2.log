@@ -1,0 +1,3353 @@
+FLASH /opt/esp/python_env/idf5.5_py3.12_env/bin/python -m esptool --chip esp32s3 --port /dev/needle-pi/board2-flash --baud 921600 --before default_reset --after hard_reset write_flash --flash_mode dout --flash_size 32MB --flash_freq 80m 0x0 /workspace/esp32-needle-3/benchmarks/assets/bootloader-current.bin 0x8000 /workspace/esp32-needle-3/benchmarks/assets/partition-table.bin 0x10000 /workspace/esp32-needle-3/benchmarks/assets/needle-matrix.bin 0x210000 /workspace/esp32-needle-3/.runtime/benchmarks/models/depth-01.cact
+esptool.py v4.11.dev1
+Serial port /dev/needle-pi/board2-flash
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 16MB (AP_1v8)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: 90:e5:b1:d1:be:b8
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 921600
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x00010000 to 0x0005cfff...
+Flash will be erased from 0x00210000 to 0x005d3fff...
+SHA digest in image updated
+Compressed 21520 bytes to 13703...
+Writing at 0x00000000... (100 %)
+Wrote 21520 bytes (13703 compressed) at 0x00000000 in 0.3 seconds (effective 596.6 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 120...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (120 compressed) at 0x00008000 in 0.0 seconds (effective 655.5 kbit/s)...
+Hash of data verified.
+Compressed 312880 bytes to 188970...
+Writing at 0x00010000... (8 %)
+Writing at 0x0001bcdc... (16 %)
+Writing at 0x00023e95... (25 %)
+Writing at 0x000299ed... (33 %)
+Writing at 0x0002ee78... (41 %)
+Writing at 0x00034042... (50 %)
+Writing at 0x00039595... (58 %)
+Writing at 0x0003fdfc... (66 %)
+Writing at 0x00047ec6... (75 %)
+Writing at 0x0004d5c9... (83 %)
+Writing at 0x00053345... (91 %)
+Writing at 0x0005913d... (100 %)
+Wrote 312880 bytes (188970 compressed) at 0x00010000 in 2.8 seconds (effective 896.2 kbit/s)...
+Hash of data verified.
+Compressed 3947860 bytes to 3612716...
+Writing at 0x00210000... (0 %)
+Writing at 0x00219424... (0 %)
+Writing at 0x002220f8... (1 %)
+Writing at 0x002266ae... (1 %)
+Writing at 0x0022b5ed... (2 %)
+Writing at 0x0022f942... (2 %)
+Writing at 0x00233ca3... (3 %)
+Writing at 0x0023800e... (3 %)
+Writing at 0x0023c382... (4 %)
+Writing at 0x0024068c... (4 %)
+Writing at 0x002449f9... (4 %)
+Writing at 0x00248d5c... (5 %)
+Writing at 0x0024d0cc... (5 %)
+Writing at 0x00251431... (6 %)
+Writing at 0x0025579d... (6 %)
+Writing at 0x00259b07... (7 %)
+Writing at 0x0025de71... (7 %)
+Writing at 0x002621d5... (8 %)
+Writing at 0x0026653d... (8 %)
+Writing at 0x0026a89a... (9 %)
+Writing at 0x0026ec04... (9 %)
+Writing at 0x00272f5f... (9 %)
+Writing at 0x002772c1... (10 %)
+Writing at 0x0027b62d... (10 %)
+Writing at 0x0027f991... (11 %)
+Writing at 0x00283cf4... (11 %)
+Writing at 0x00288053... (12 %)
+Writing at 0x0028c3b8... (12 %)
+Writing at 0x0029071e... (13 %)
+Writing at 0x00294a26... (13 %)
+Writing at 0x00298d94... (14 %)
+Writing at 0x0029d0fb... (14 %)
+Writing at 0x002a1463... (14 %)
+Writing at 0x002a57d1... (15 %)
+Writing at 0x002a9b3b... (15 %)
+Writing at 0x002adea8... (16 %)
+Writing at 0x002b21ff... (16 %)
+Writing at 0x002b6561... (17 %)
+Writing at 0x002ba8c2... (17 %)
+Writing at 0x002bec32... (18 %)
+Writing at 0x002c2f99... (18 %)
+Writing at 0x002c7301... (19 %)
+Writing at 0x002cb65d... (19 %)
+Writing at 0x002cf9c3... (19 %)
+Writing at 0x002d3d2d... (20 %)
+Writing at 0x002d808a... (20 %)
+Writing at 0x002dc3f3... (21 %)
+Writing at 0x002e074c... (21 %)
+Writing at 0x002e4ab7... (22 %)
+Writing at 0x002e8db5... (22 %)
+Writing at 0x002ed11a... (23 %)
+Writing at 0x002f1481... (23 %)
+Writing at 0x002f57e9... (23 %)
+Writing at 0x002f9b5c... (24 %)
+Writing at 0x002fdebb... (24 %)
+Writing at 0x0030222b... (25 %)
+Writing at 0x00306594... (25 %)
+Writing at 0x0030a909... (26 %)
+Writing at 0x0030ec71... (26 %)
+Writing at 0x00312fda... (27 %)
+Writing at 0x00317346... (27 %)
+Writing at 0x0031b6a4... (28 %)
+Writing at 0x0031fa16... (28 %)
+Writing at 0x00323d80... (28 %)
+Writing at 0x003280e4... (29 %)
+Writing at 0x0032c443... (29 %)
+Writing at 0x003307af... (30 %)
+Writing at 0x00334b1d... (30 %)
+Writing at 0x00338e17... (31 %)
+Writing at 0x0033d176... (31 %)
+Writing at 0x003414e4... (32 %)
+Writing at 0x00345844... (32 %)
+Writing at 0x00349bab... (33 %)
+Writing at 0x0034df0f... (33 %)
+Writing at 0x0035226f... (33 %)
+Writing at 0x003565d5... (34 %)
+Writing at 0x0035a944... (34 %)
+Writing at 0x0035eca7... (35 %)
+Writing at 0x00363015... (35 %)
+Writing at 0x00367387... (36 %)
+Writing at 0x0036b6f5... (36 %)
+Writing at 0x0036fa63... (37 %)
+Writing at 0x00373dc2... (37 %)
+Writing at 0x00378136... (38 %)
+Writing at 0x0037c4a1... (38 %)
+Writing at 0x003807fd... (38 %)
+Writing at 0x00384b5e... (39 %)
+Writing at 0x00388ec2... (39 %)
+Writing at 0x0038d1c8... (40 %)
+Writing at 0x00391531... (40 %)
+Writing at 0x0039588c... (41 %)
+Writing at 0x00399bef... (41 %)
+Writing at 0x0039df5c... (42 %)
+Writing at 0x003a22c3... (42 %)
+Writing at 0x003a662d... (42 %)
+Writing at 0x003aa99f... (43 %)
+Writing at 0x003aed05... (43 %)
+Writing at 0x003b3076... (44 %)
+Writing at 0x003b73db... (44 %)
+Writing at 0x003bb742... (45 %)
+Writing at 0x003bfaa1... (45 %)
+Writing at 0x003c3e10... (46 %)
+Writing at 0x003c8171... (46 %)
+Writing at 0x003cc4d6... (47 %)
+Writing at 0x003d0833... (47 %)
+Writing at 0x003d4ba7... (47 %)
+Writing at 0x003d8f06... (48 %)
+Writing at 0x003dd26c... (48 %)
+Writing at 0x003e1575... (49 %)
+Writing at 0x003e58dc... (49 %)
+Writing at 0x003e9c3e... (50 %)
+Writing at 0x003edfa1... (50 %)
+Writing at 0x003f2304... (51 %)
+Writing at 0x003f6667... (51 %)
+Writing at 0x003fa9d9... (52 %)
+Writing at 0x003fed44... (52 %)
+Writing at 0x004030ab... (52 %)
+Writing at 0x00407416... (53 %)
+Writing at 0x0040b778... (53 %)
+Writing at 0x0040fad8... (54 %)
+Writing at 0x00413e2a... (54 %)
+Writing at 0x0041818b... (55 %)
+Writing at 0x0041c4ff... (55 %)
+Writing at 0x00420857... (56 %)
+Writing at 0x00424bc5... (56 %)
+Writing at 0x00428f26... (57 %)
+Writing at 0x0042d28a... (57 %)
+Writing at 0x004315f1... (57 %)
+Writing at 0x004358e7... (58 %)
+Writing at 0x00439c51... (58 %)
+Writing at 0x0043dfb9... (59 %)
+Writing at 0x00442322... (59 %)
+Writing at 0x00446690... (60 %)
+Writing at 0x0044a9f2... (60 %)
+Writing at 0x0044ed69... (61 %)
+Writing at 0x004530d6... (61 %)
+Writing at 0x0045743c... (61 %)
+Writing at 0x0045b7a9... (62 %)
+Writing at 0x0045fb0c... (62 %)
+Writing at 0x00463e6d... (63 %)
+Writing at 0x004681db... (63 %)
+Writing at 0x0046c550... (64 %)
+Writing at 0x004708b2... (64 %)
+Writing at 0x00474c15... (65 %)
+Writing at 0x00478f8f... (65 %)
+Writing at 0x0047d2f2... (66 %)
+Writing at 0x00481657... (66 %)
+Writing at 0x00485964... (66 %)
+Writing at 0x00489ccf... (67 %)
+Writing at 0x0048e036... (67 %)
+Writing at 0x0049239a... (68 %)
+Writing at 0x00496702... (68 %)
+Writing at 0x0049aa63... (69 %)
+Writing at 0x0049edcd... (69 %)
+Writing at 0x004a313f... (70 %)
+Writing at 0x004a74a6... (70 %)
+Writing at 0x004ab80f... (71 %)
+Writing at 0x004afb82... (71 %)
+Writing at 0x004b3ee8... (71 %)
+Writing at 0x004b8248... (72 %)
+Writing at 0x004bc5b8... (72 %)
+Writing at 0x004c0916... (73 %)
+Writing at 0x004c4c7b... (73 %)
+Writing at 0x004c8fed... (74 %)
+Writing at 0x004cd358... (74 %)
+Writing at 0x004d16be... (75 %)
+Writing at 0x004d5a29... (75 %)
+Writing at 0x004d9d30... (76 %)
+Writing at 0x004de09f... (76 %)
+Writing at 0x004e2409... (76 %)
+Writing at 0x004e6775... (77 %)
+Writing at 0x004eaad6... (77 %)
+Writing at 0x004eee44... (78 %)
+Writing at 0x004f31aa... (78 %)
+Writing at 0x004f7510... (79 %)
+Writing at 0x004fb878... (79 %)
+Writing at 0x004ffbe5... (80 %)
+Writing at 0x00503f4c... (80 %)
+Writing at 0x005082ad... (80 %)
+Writing at 0x0050c611... (81 %)
+Writing at 0x00510859... (81 %)
+Writing at 0x00515e31... (82 %)
+Writing at 0x0051b79e... (82 %)
+Writing at 0x005211db... (83 %)
+Writing at 0x00526bad... (83 %)
+Writing at 0x0052b5dd... (84 %)
+Writing at 0x0052f818... (84 %)
+Writing at 0x00533a59... (85 %)
+Writing at 0x00537c78... (85 %)
+Writing at 0x0053beaa... (85 %)
+Writing at 0x005400e6... (86 %)
+Writing at 0x00544231... (86 %)
+Writing at 0x005487a0... (87 %)
+Writing at 0x0054c9b6... (87 %)
+Writing at 0x00550b86... (88 %)
+Writing at 0x00554d0f... (88 %)
+Writing at 0x00558f3d... (89 %)
+Writing at 0x0055d16d... (89 %)
+Writing at 0x005613bd... (90 %)
+Writing at 0x005655d4... (90 %)
+Writing at 0x00569806... (90 %)
+Writing at 0x0056da37... (91 %)
+Writing at 0x00571c73... (91 %)
+Writing at 0x00575e72... (92 %)
+Writing at 0x0057a5dc... (92 %)
+Writing at 0x0057e800... (93 %)
+Writing at 0x005829cd... (93 %)
+Writing at 0x00586c1f... (94 %)
+Writing at 0x0058ae64... (94 %)
+Writing at 0x0058f08b... (95 %)
+Writing at 0x005932bd... (95 %)
+Writing at 0x005974fc... (95 %)
+Writing at 0x0059b68d... (96 %)
+Writing at 0x005a027e... (96 %)
+Writing at 0x005a4d4e... (97 %)
+Writing at 0x005a91d0... (97 %)
+Writing at 0x005afc25... (98 %)
+Writing at 0x005b7f94... (98 %)
+Writing at 0x005bf297... (99 %)
+Writing at 0x005c75c8... (99 %)
+Writing at 0x005cfa38... (100 %)
+Wrote 3947860 bytes (3612716 compressed) at 0x00210000 in 37.0 seconds (effective 852.7 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+I (168) esp_image: segment 4: paddr=00048404 vaddr=4037839c size=141d8h ( 82392) load
+I (197) esp_image: segment 5: paddr=0005c5e4 vaddr=50000000 size=00020h (    32) load
+I (205) boot: Loaded app from partition at offset 0x10000
+I (205) boot: Disabling RNG early entropy source...
+I (216) MSPI Timing: Enter flash timing tuning
+I (217) octal_psram: vendor id    : 0x0d (AP)
+I (217) octal_psram: dev id       : 0x03 (generation 4)
+I (218) octal_psram: density      : 0x05 (128 Mbit)
+I (223) octal_psram: good-die     : 0x01 (Pass)
+I (227) octal_psram: Latency      : 0x01 (Fixed)
+I (231) octal_psram: VCC          : 0x00 (1.8V)
+I (235) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (240) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (245) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (250) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (255) octal_psram: DriveStrength: 0x00 (1/1)
+I (259) MSPI Timing: Enter psram timing tuning
+I (264) esp_psram: Found 16MB PSRAM device
+I (267) esp_psram: Speed: 80MHz
+I (270) cpu_start: Multicore app
+I (837) esp_psram: SPI SRAM memory test OK
+I (845) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (845) cpu_start: Pro cpu start user code
+I (845) cpu_start: cpu freq: 240000000 Hz
+I (847) app_init: Application information:
+I (851) app_init: Project name:     needle_demo
+I (855) app_init: App version:      7cf8a6f-dirty
+I (860) app_init: Compile time:     Sep 25 2026 15:54:41
+I (865) app_init: ELF file SHA256:  8b0e5a483...
+I (869) app_init: ESP-IDF:          v5.5.2
+I (873) efuse_init: Min chip rev:     v0.0
+I (877) efuse_init: Max chip rev:     v0.99 
+I (881) efuse_init: Chip rev:         v0.2
+I (885) heap_init: Initializing. RAM available for dynamic allocation:
+I (891) heap_init: At 3FCC9C38 len 0001FAD8 (126 KiB): RAM
+I (896) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (901) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (907) esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+I (913) spi_flash: detected chip: mxic (opi)
+I (917) spi_flash: flash io: opi_dtr
+I (920) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (927) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (933) main_task: Started on CPU0
+I (963) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (963) main_task: Calling app_main()
+EVT mapped model=3947860 bytes at 0x3d040000
+WARN drained 46 stale line(s) before the think toggle
+EG2 ok=0 found=0 bytes=0
+ERR model_open
+WARN boot_log_interleaved
+SKIP known one-layer diagnostic failure
+CONTINUE after requested 1-layer diagnostic failure
+ARCHIVE incomplete current3 -> /workspace/esp32-needle-3/benchmarks/results/2026-09-27-matrix-v3/attempts/current3-20260927T044200Z.json
+FLASH /opt/esp/python_env/idf5.5_py3.12_env/bin/python -m esptool --chip esp32s3 --port /dev/needle-pi/board2-flash --baud 921600 --before default_reset --after hard_reset write_flash --flash_mode dout --flash_size 32MB --flash_freq 80m 0x0 /workspace/esp32-needle-3/benchmarks/assets/bootloader-current.bin 0x8000 /workspace/esp32-needle-3/benchmarks/assets/partition-table.bin 0x10000 /workspace/esp32-needle-3/benchmarks/assets/needle-matrix.bin 0x210000 /workspace/esp32-needle-3/.runtime/benchmarks/models/depth-03.cact
+esptool.py v4.11.dev1
+Serial port /dev/needle-pi/board2-flash
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 16MB (AP_1v8)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: 90:e5:b1:d1:be:b8
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 921600
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x00010000 to 0x0005cfff...
+Flash will be erased from 0x00210000 to 0x00ad2fff...
+SHA digest in image updated
+Compressed 21520 bytes to 13703...
+Writing at 0x00000000... (100 %)
+Wrote 21520 bytes (13703 compressed) at 0x00000000 in 0.3 seconds (effective 593.0 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 120...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (120 compressed) at 0x00008000 in 0.0 seconds (effective 658.5 kbit/s)...
+Hash of data verified.
+Compressed 312880 bytes to 188970...
+Writing at 0x00010000... (8 %)
+Writing at 0x0001bcdc... (16 %)
+Writing at 0x00023e95... (25 %)
+Writing at 0x000299ed... (33 %)
+Writing at 0x0002ee78... (41 %)
+Writing at 0x00034042... (50 %)
+Writing at 0x00039595... (58 %)
+Writing at 0x0003fdfc... (66 %)
+Writing at 0x00047ec6... (75 %)
+Writing at 0x0004d5c9... (83 %)
+Writing at 0x00053345... (91 %)
+Writing at 0x0005913d... (100 %)
+Wrote 312880 bytes (188970 compressed) at 0x00010000 in 2.8 seconds (effective 891.3 kbit/s)...
+Hash of data verified.
+Compressed 9184276 bytes to 8608257...
+Writing at 0x00210000... (0 %)
+Writing at 0x00219886... (0 %)
+Writing at 0x002229a7... (0 %)
+Writing at 0x00226f5d... (0 %)
+Writing at 0x0022be9f... (0 %)
+Writing at 0x002301ef... (1 %)
+Writing at 0x0023454e... (1 %)
+Writing at 0x002388b9... (1 %)
+Writing at 0x0023cc2b... (1 %)
+Writing at 0x00240f35... (1 %)
+Writing at 0x002452a3... (2 %)
+Writing at 0x00249606... (2 %)
+Writing at 0x0024d977... (2 %)
+Writing at 0x00251cdd... (2 %)
+Writing at 0x00256046... (2 %)
+Writing at 0x0025a3b0... (3 %)
+Writing at 0x0025e720... (3 %)
+Writing at 0x00262a83... (3 %)
+Writing at 0x00266de8... (3 %)
+Writing at 0x0026b146... (3 %)
+Writing at 0x0026f4b4... (3 %)
+Writing at 0x00273808... (4 %)
+Writing at 0x00277b6e... (4 %)
+Writing at 0x0027bedd... (4 %)
+Writing at 0x0028023c... (4 %)
+Writing at 0x002845a1... (4 %)
+Writing at 0x002888fe... (5 %)
+Writing at 0x0028cc64... (5 %)
+Writing at 0x00290fca... (5 %)
+Writing at 0x002952d2... (5 %)
+Writing at 0x0029963d... (5 %)
+Writing at 0x0029d9a7... (6 %)
+Writing at 0x002a1d0f... (6 %)
+Writing at 0x002a607a... (6 %)
+Writing at 0x002aa3e4... (6 %)
+Writing at 0x002ae751... (6 %)
+Writing at 0x002b2aa8... (7 %)
+Writing at 0x002b6e09... (7 %)
+Writing at 0x002bb171... (7 %)
+Writing at 0x002bf4e5... (7 %)
+Writing at 0x002c384b... (7 %)
+Writing at 0x002c7bb3... (7 %)
+Writing at 0x002cbf0e... (8 %)
+Writing at 0x002d0272... (8 %)
+Writing at 0x002d45de... (8 %)
+Writing at 0x002d893c... (8 %)
+Writing at 0x002dcca9... (8 %)
+Writing at 0x002e1001... (9 %)
+Writing at 0x002e536a... (9 %)
+Writing at 0x002e966b... (9 %)
+Writing at 0x002ed9cf... (9 %)
+Writing at 0x002f1d33... (9 %)
+Writing at 0x002f609b... (10 %)
+Writing at 0x002fa40b... (10 %)
+Writing at 0x002fe76e... (10 %)
+Writing at 0x00302add... (10 %)
+Writing at 0x00306e43... (10 %)
+Writing at 0x0030b1b3... (11 %)
+Writing at 0x0030f521... (11 %)
+Writing at 0x00313888... (11 %)
+Writing at 0x00317bf4... (11 %)
+Writing at 0x0031bf4d... (11 %)
+Writing at 0x003202c4... (11 %)
+Writing at 0x00324629... (12 %)
+Writing at 0x00328991... (12 %)
+Writing at 0x0032ccee... (12 %)
+Writing at 0x0033105c... (12 %)
+Writing at 0x003353ca... (12 %)
+Writing at 0x00339720... (13 %)
+Writing at 0x0033da24... (13 %)
+Writing at 0x00341d92... (13 %)
+Writing at 0x003460f3... (13 %)
+Writing at 0x0034a457... (13 %)
+Writing at 0x0034e7ba... (14 %)
+Writing at 0x00352b14... (14 %)
+Writing at 0x00356e7a... (14 %)
+Writing at 0x0035b1e8... (14 %)
+Writing at 0x0035f549... (14 %)
+Writing at 0x003638b6... (15 %)
+Writing at 0x00367c28... (15 %)
+Writing at 0x0036bf98... (15 %)
+Writing at 0x00370304... (15 %)
+Writing at 0x00374668... (15 %)
+Writing at 0x003789d7... (15 %)
+Writing at 0x0037cd42... (16 %)
+Writing at 0x0038109e... (16 %)
+Writing at 0x003853fc... (16 %)
+Writing at 0x00389762... (16 %)
+Writing at 0x0038da63... (16 %)
+Writing at 0x00391dce... (17 %)
+Writing at 0x0039612a... (17 %)
+Writing at 0x0039a48d... (17 %)
+Writing at 0x0039e7f9... (17 %)
+Writing at 0x003a2b5e... (17 %)
+Writing at 0x003a6ecd... (18 %)
+Writing at 0x003ab23c... (18 %)
+Writing at 0x003af5a5... (18 %)
+Writing at 0x003b3913... (18 %)
+Writing at 0x003b7c73... (18 %)
+Writing at 0x003bbfde... (19 %)
+Writing at 0x003c033b... (19 %)
+Writing at 0x003c46a3... (19 %)
+Writing at 0x003c8a04... (19 %)
+Writing at 0x003ccd6c... (19 %)
+Writing at 0x003d10c8... (19 %)
+Writing at 0x003d543c... (20 %)
+Writing at 0x003d979e... (20 %)
+Writing at 0x003ddb03... (20 %)
+Writing at 0x003e1e09... (20 %)
+Writing at 0x003e616e... (20 %)
+Writing at 0x003ea4d4... (21 %)
+Writing at 0x003ee836... (21 %)
+Writing at 0x003f2b96... (21 %)
+Writing at 0x003f6efc... (21 %)
+Writing at 0x003fb26a... (21 %)
+Writing at 0x003ff5d8... (22 %)
+Writing at 0x00403941... (22 %)
+Writing at 0x00407cab... (22 %)
+Writing at 0x0040c00c... (22 %)
+Writing at 0x0041036e... (22 %)
+Writing at 0x004146c3... (23 %)
+Writing at 0x00418a24... (23 %)
+Writing at 0x0041cd98... (23 %)
+Writing at 0x004210ed... (23 %)
+Writing at 0x0042545b... (23 %)
+Writing at 0x004297be... (23 %)
+Writing at 0x0042db1f... (24 %)
+Writing at 0x00431e87... (24 %)
+Writing at 0x0043617c... (24 %)
+Writing at 0x0043a4e7... (24 %)
+Writing at 0x0043e84d... (24 %)
+Writing at 0x00442bb7... (25 %)
+Writing at 0x00446f25... (25 %)
+Writing at 0x0044b288... (25 %)
+Writing at 0x0044f5fe... (25 %)
+Writing at 0x00453968... (25 %)
+Writing at 0x00457ccd... (26 %)
+Writing at 0x0045c03a... (26 %)
+Writing at 0x00460399... (26 %)
+Writing at 0x004646fd... (26 %)
+Writing at 0x00468a6a... (26 %)
+Writing at 0x0046cddd... (26 %)
+Writing at 0x00471140... (27 %)
+Writing at 0x0047549f... (27 %)
+Writing at 0x00479817... (27 %)
+Writing at 0x0047db7b... (27 %)
+Writing at 0x00481edd... (27 %)
+Writing at 0x00486235... (28 %)
+Writing at 0x0048a555... (28 %)
+Writing at 0x0048e8bb... (28 %)
+Writing at 0x00492c20... (28 %)
+Writing at 0x00496f86... (28 %)
+Writing at 0x0049b2e8... (29 %)
+Writing at 0x0049f650... (29 %)
+Writing at 0x004a39bd... (29 %)
+Writing at 0x004a7d23... (29 %)
+Writing at 0x004ac08f... (29 %)
+Writing at 0x004b0404... (30 %)
+Writing at 0x004b4769... (30 %)
+Writing at 0x004b8acd... (30 %)
+Writing at 0x004bce3c... (30 %)
+Writing at 0x004c1198... (30 %)
+Writing at 0x004c5501... (30 %)
+Writing at 0x004c9872... (31 %)
+Writing at 0x004cdbe0... (31 %)
+Writing at 0x004d1f44... (31 %)
+Writing at 0x004d62ac... (31 %)
+Writing at 0x004da5b5... (31 %)
+Writing at 0x004de924... (32 %)
+Writing at 0x004e2c8d... (32 %)
+Writing at 0x004e6ff7... (32 %)
+Writing at 0x004eb35e... (32 %)
+Writing at 0x004ef6c9... (32 %)
+Writing at 0x004f3a32... (33 %)
+Writing at 0x004f7d97... (33 %)
+Writing at 0x004fc0ff... (33 %)
+Writing at 0x0050046b... (33 %)
+Writing at 0x005047d1... (33 %)
+Writing at 0x00508b37... (34 %)
+Writing at 0x0050ce9d... (34 %)
+Writing at 0x005110e9... (34 %)
+Writing at 0x00516659... (34 %)
+Writing at 0x0051bfbd... (34 %)
+Writing at 0x005219f7... (34 %)
+Writing at 0x005273da... (35 %)
+Writing at 0x0052be95... (35 %)
+Writing at 0x005300d2... (35 %)
+Writing at 0x00534313... (35 %)
+Writing at 0x0053852c... (35 %)
+Writing at 0x0053c765... (36 %)
+Writing at 0x005409a4... (36 %)
+Writing at 0x00544ab4... (36 %)
+Writing at 0x0054905a... (36 %)
+Writing at 0x0054d26f... (36 %)
+Writing at 0x0055143b... (37 %)
+Writing at 0x005555b9... (37 %)
+Writing at 0x005597e5... (37 %)
+Writing at 0x0055da16... (37 %)
+Writing at 0x00561c64... (37 %)
+Writing at 0x00565e7b... (38 %)
+Writing at 0x0056a0af... (38 %)
+Writing at 0x0056e2e5... (38 %)
+Writing at 0x0057251d... (38 %)
+Writing at 0x00576753... (38 %)
+Writing at 0x0057ae8a... (38 %)
+Writing at 0x0057f0aa... (39 %)
+Writing at 0x00583277... (39 %)
+Writing at 0x005874c5... (39 %)
+Writing at 0x0058b70d... (39 %)
+Writing at 0x0058f936... (39 %)
+Writing at 0x00593b62... (40 %)
+Writing at 0x00597da4... (40 %)
+Writing at 0x0059bf3f... (40 %)
+Writing at 0x005a0b0c... (40 %)
+Writing at 0x005a55f2... (40 %)
+Writing at 0x005a9a8f... (41 %)
+Writing at 0x005adf22... (41 %)
+Writing at 0x005b2141... (41 %)
+Writing at 0x005b6388... (41 %)
+Writing at 0x005ba5c2... (41 %)
+Writing at 0x005be7f1... (42 %)
+Writing at 0x005c2a18... (42 %)
+Writing at 0x005c6bc1... (42 %)
+Writing at 0x005cb09a... (42 %)
+Writing at 0x005cf2a2... (42 %)
+Writing at 0x005d348f... (42 %)
+Writing at 0x005d761f... (43 %)
+Writing at 0x005db822... (43 %)
+Writing at 0x005dfa62... (43 %)
+Writing at 0x005e3c98... (43 %)
+Writing at 0x005e7ec8... (43 %)
+Writing at 0x005ec0f4... (44 %)
+Writing at 0x005f032e... (44 %)
+Writing at 0x005f4558... (44 %)
+Writing at 0x005f879a... (44 %)
+Writing at 0x005fcf93... (44 %)
+Writing at 0x00601150... (45 %)
+Writing at 0x0060538a... (45 %)
+Writing at 0x006095d2... (45 %)
+Writing at 0x0060d812... (45 %)
+Writing at 0x00611a78... (45 %)
+Writing at 0x00615cbe... (46 %)
+Writing at 0x00619ef5... (46 %)
+Writing at 0x0061e140... (46 %)
+Writing at 0x00622a6a... (46 %)
+Writing at 0x00627664... (46 %)
+Writing at 0x0062bc47... (46 %)
+Writing at 0x006301aa... (47 %)
+Writing at 0x006343aa... (47 %)
+Writing at 0x006385dd... (47 %)
+Writing at 0x0063c818... (47 %)
+Writing at 0x00640a52... (47 %)
+Writing at 0x00644c7d... (48 %)
+Writing at 0x00648e82... (48 %)
+Writing at 0x0064d2ae... (48 %)
+Writing at 0x00651497... (48 %)
+Writing at 0x0065568c... (48 %)
+Writing at 0x00659812... (49 %)
+Writing at 0x0065d9ff... (49 %)
+Writing at 0x00661c3c... (49 %)
+Writing at 0x00665e7a... (49 %)
+Writing at 0x0066a0c3... (49 %)
+Writing at 0x0066e329... (50 %)
+Writing at 0x0067256b... (50 %)
+Writing at 0x006767d5... (50 %)
+Writing at 0x0067aa0e... (50 %)
+Writing at 0x0067f11c... (50 %)
+Writing at 0x0068337c... (50 %)
+Writing at 0x006875bf... (51 %)
+Writing at 0x0068b81b... (51 %)
+Writing at 0x0068fa75... (51 %)
+Writing at 0x00693cbe... (51 %)
+Writing at 0x00697f0c... (51 %)
+Writing at 0x0069c156... (52 %)
+Writing at 0x006a03b4... (52 %)
+Writing at 0x006a4739... (52 %)
+Writing at 0x006a986a... (52 %)
+Writing at 0x006adf15... (52 %)
+Writing at 0x006b238d... (53 %)
+Writing at 0x006b74e1... (53 %)
+Writing at 0x006bcf3f... (53 %)
+Writing at 0x006c4945... (53 %)
+Writing at 0x006c8ca9... (53 %)
+Writing at 0x006ccf8e... (53 %)
+Writing at 0x006d1dbf... (54 %)
+Writing at 0x006d5fbe... (54 %)
+Writing at 0x006da1ef... (54 %)
+Writing at 0x006de427... (54 %)
+Writing at 0x006e25f3... (54 %)
+Writing at 0x006e6836... (55 %)
+Writing at 0x006eaa70... (55 %)
+Writing at 0x006eec9f... (55 %)
+Writing at 0x006f2ec4... (55 %)
+Writing at 0x006f70ef... (55 %)
+Writing at 0x006fb334... (56 %)
+Writing at 0x006ff56d... (56 %)
+Writing at 0x007037a0... (56 %)
+Writing at 0x007079d9... (56 %)
+Writing at 0x0070bc1e... (56 %)
+Writing at 0x0070fe3c... (57 %)
+Writing at 0x00714073... (57 %)
+Writing at 0x007182a3... (57 %)
+Writing at 0x0071c4cc... (57 %)
+Writing at 0x007206e8... (57 %)
+Writing at 0x00724916... (57 %)
+Writing at 0x00728b56... (58 %)
+Writing at 0x0072cd80... (58 %)
+Writing at 0x00730fa0... (58 %)
+Writing at 0x007351b0... (58 %)
+Writing at 0x007393d8... (58 %)
+Writing at 0x0073d5f5... (59 %)
+Writing at 0x00741814... (59 %)
+Writing at 0x00745a3a... (59 %)
+Writing at 0x00749c62... (59 %)
+Writing at 0x0074de9a... (59 %)
+Writing at 0x007520d7... (60 %)
+Writing at 0x007562fd... (60 %)
+Writing at 0x0075a548... (60 %)
+Writing at 0x0075e772... (60 %)
+Writing at 0x0076293e... (60 %)
+Writing at 0x00766b79... (61 %)
+Writing at 0x0076ad9f... (61 %)
+Writing at 0x0076efd4... (61 %)
+Writing at 0x00773203... (61 %)
+Writing at 0x0077742e... (61 %)
+Writing at 0x0077b670... (61 %)
+Writing at 0x0077f8a3... (62 %)
+Writing at 0x00783ad7... (62 %)
+Writing at 0x00787d08... (62 %)
+Writing at 0x0078bf3a... (62 %)
+Writing at 0x0079016a... (62 %)
+Writing at 0x0079439a... (63 %)
+Writing at 0x007985d0... (63 %)
+Writing at 0x0079c804... (63 %)
+Writing at 0x007a0a3f... (63 %)
+Writing at 0x007a4c5a... (63 %)
+Writing at 0x007a8e82... (64 %)
+Writing at 0x007ad0ae... (64 %)
+Writing at 0x007b12e1... (64 %)
+Writing at 0x007b5521... (64 %)
+Writing at 0x007b974f... (64 %)
+Writing at 0x007bd9a8... (65 %)
+Writing at 0x007c1be4... (65 %)
+Writing at 0x007c5e2a... (65 %)
+Writing at 0x007ca058... (65 %)
+Writing at 0x007ce288... (65 %)
+Writing at 0x007d24a8... (65 %)
+Writing at 0x007d66dc... (66 %)
+Writing at 0x007da913... (66 %)
+Writing at 0x007deb4d... (66 %)
+Writing at 0x007e2d10... (66 %)
+Writing at 0x007e6f5b... (66 %)
+Writing at 0x007eb19b... (67 %)
+Writing at 0x007ef3db... (67 %)
+Writing at 0x007f3620... (67 %)
+Writing at 0x007f7855... (67 %)
+Writing at 0x007fba87... (67 %)
+Writing at 0x007ffcc0... (68 %)
+Writing at 0x00803f17... (68 %)
+Writing at 0x00808145... (68 %)
+Writing at 0x0080c38f... (68 %)
+Writing at 0x008105ca... (68 %)
+Writing at 0x00814809... (69 %)
+Writing at 0x00818a5c... (69 %)
+Writing at 0x0081cc9f... (69 %)
+Writing at 0x00820ed4... (69 %)
+Writing at 0x00825103... (69 %)
+Writing at 0x00829369... (69 %)
+Writing at 0x0082d599... (70 %)
+Writing at 0x008317d8... (70 %)
+Writing at 0x00835a1d... (70 %)
+Writing at 0x00839c5a... (70 %)
+Writing at 0x0083de99... (70 %)
+Writing at 0x008420f1... (71 %)
+Writing at 0x00846331... (71 %)
+Writing at 0x0084a54f... (71 %)
+Writing at 0x0084e78c... (71 %)
+Writing at 0x008529ba... (71 %)
+Writing at 0x00856bdc... (72 %)
+Writing at 0x0085ae0f... (72 %)
+Writing at 0x0085efe8... (72 %)
+Writing at 0x00863219... (72 %)
+Writing at 0x00867459... (72 %)
+Writing at 0x0086b690... (73 %)
+Writing at 0x0086f8cd... (73 %)
+Writing at 0x00873b21... (73 %)
+Writing at 0x00877d64... (73 %)
+Writing at 0x0087bf9d... (73 %)
+Writing at 0x008801bb... (73 %)
+Writing at 0x008843f3... (74 %)
+Writing at 0x0088862e... (74 %)
+Writing at 0x0088c851... (74 %)
+Writing at 0x00890a9a... (74 %)
+Writing at 0x00894ce0... (74 %)
+Writing at 0x00898efe... (75 %)
+Writing at 0x0089d13f... (75 %)
+Writing at 0x008a1374... (75 %)
+Writing at 0x008a55b2... (75 %)
+Writing at 0x008a97db... (75 %)
+Writing at 0x008ada20... (76 %)
+Writing at 0x008b1c68... (76 %)
+Writing at 0x008b5ea6... (76 %)
+Writing at 0x008ba0e2... (76 %)
+Writing at 0x008be31d... (76 %)
+Writing at 0x008c255b... (76 %)
+Writing at 0x008c6787... (77 %)
+Writing at 0x008ca9b7... (77 %)
+Writing at 0x008cebf0... (77 %)
+Writing at 0x008d2e3e... (77 %)
+Writing at 0x008d7075... (77 %)
+Writing at 0x008db2a3... (78 %)
+Writing at 0x008df47e... (78 %)
+Writing at 0x008e36bf... (78 %)
+Writing at 0x008e78ea... (78 %)
+Writing at 0x008ebb20... (78 %)
+Writing at 0x008efd3c... (79 %)
+Writing at 0x008f3f6c... (79 %)
+Writing at 0x008f81a3... (79 %)
+Writing at 0x008fc3da... (79 %)
+Writing at 0x00900600... (79 %)
+Writing at 0x00904846... (80 %)
+Writing at 0x00908a75... (80 %)
+Writing at 0x0090ccb8... (80 %)
+Writing at 0x00910ed9... (80 %)
+Writing at 0x00915115... (80 %)
+Writing at 0x0091935a... (80 %)
+Writing at 0x0091d59a... (81 %)
+Writing at 0x009217cd... (81 %)
+Writing at 0x009259fa... (81 %)
+Writing at 0x00929c49... (81 %)
+Writing at 0x0092de7d... (81 %)
+Writing at 0x009320b6... (82 %)
+Writing at 0x009362f6... (82 %)
+Writing at 0x0093a544... (82 %)
+Writing at 0x0093e788... (82 %)
+Writing at 0x009429c7... (82 %)
+Writing at 0x00946bf1... (83 %)
+Writing at 0x0094ae38... (83 %)
+Writing at 0x0094f07d... (83 %)
+Writing at 0x009532b9... (83 %)
+Writing at 0x009574ef... (83 %)
+Writing at 0x0095b728... (84 %)
+Writing at 0x0095f91c... (84 %)
+Writing at 0x00963b61... (84 %)
+Writing at 0x00967da9... (84 %)
+Writing at 0x0096bffd... (84 %)
+Writing at 0x0097022e... (84 %)
+Writing at 0x00974478... (85 %)
+Writing at 0x009786be... (85 %)
+Writing at 0x0097c8e3... (85 %)
+Writing at 0x00980b1f... (85 %)
+Writing at 0x00984d5b... (85 %)
+Writing at 0x00988f8f... (86 %)
+Writing at 0x0098d1c4... (86 %)
+Writing at 0x009913f2... (86 %)
+Writing at 0x00995631... (86 %)
+Writing at 0x0099987e... (86 %)
+Writing at 0x0099dac3... (87 %)
+Writing at 0x009a1cfe... (87 %)
+Writing at 0x009a5f4c... (87 %)
+Writing at 0x009aa174... (87 %)
+Writing at 0x009ae3b0... (87 %)
+Writing at 0x009b25eb... (88 %)
+Writing at 0x009b6820... (88 %)
+Writing at 0x009baa4f... (88 %)
+Writing at 0x009bec70... (88 %)
+Writing at 0x009c2e9d... (88 %)
+Writing at 0x009c70c5... (88 %)
+Writing at 0x009cb2fc... (89 %)
+Writing at 0x009cf512... (89 %)
+Writing at 0x009d374b... (89 %)
+Writing at 0x009d797c... (89 %)
+Writing at 0x009dbb4a... (89 %)
+Writing at 0x009dfd93... (90 %)
+Writing at 0x009e3fc6... (90 %)
+Writing at 0x009e81fd... (90 %)
+Writing at 0x009ec435... (90 %)
+Writing at 0x009f064f... (90 %)
+Writing at 0x009f487b... (91 %)
+Writing at 0x009f8aa4... (91 %)
+Writing at 0x009fcce6... (91 %)
+Writing at 0x00a00f03... (91 %)
+Writing at 0x00a05131... (91 %)
+Writing at 0x00a0936c... (92 %)
+Writing at 0x00a0d599... (92 %)
+Writing at 0x00a117d6... (92 %)
+Writing at 0x00a15a2c... (92 %)
+Writing at 0x00a19c6e... (92 %)
+Writing at 0x00a1de93... (92 %)
+Writing at 0x00a220d6... (93 %)
+Writing at 0x00a2631a... (93 %)
+Writing at 0x00a2a550... (93 %)
+Writing at 0x00a2e77e... (93 %)
+Writing at 0x00a32e7e... (93 %)
+Writing at 0x00a3801e... (94 %)
+Writing at 0x00a3d1d6... (94 %)
+Writing at 0x00a42375... (94 %)
+Writing at 0x00a47532... (94 %)
+Writing at 0x00a4c6fb... (94 %)
+Writing at 0x00a51e73... (95 %)
+Writing at 0x00a57653... (95 %)
+Writing at 0x00a5ce0f... (95 %)
+Writing at 0x00a625dd... (95 %)
+Writing at 0x00a67860... (95 %)
+Writing at 0x00a6ba51... (96 %)
+Writing at 0x00a6fc8a... (96 %)
+Writing at 0x00a73eb9... (96 %)
+Writing at 0x00a780f8... (96 %)
+Writing at 0x00a7c31e... (96 %)
+Writing at 0x00a8055a... (96 %)
+Writing at 0x00a8478d... (97 %)
+Writing at 0x00a889cd... (97 %)
+Writing at 0x00a8d239... (97 %)
+Writing at 0x00a91354... (97 %)
+Writing at 0x00a95589... (97 %)
+Writing at 0x00a997d2... (98 %)
+Writing at 0x00a9da02... (98 %)
+Writing at 0x00aa1c4d... (98 %)
+Writing at 0x00aa5e79... (98 %)
+Writing at 0x00aaa0b8... (98 %)
+Writing at 0x00aae2f7... (99 %)
+Writing at 0x00ab279c... (99 %)
+Writing at 0x00ab6b3e... (99 %)
+Writing at 0x00abe51b... (99 %)
+Writing at 0x00ac69e8... (99 %)
+Writing at 0x00aceec0... (100 %)
+Wrote 9184276 bytes (8608257 compressed) at 0x00210000 in 86.8 seconds (effective 846.3 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+Octal Flash Mode Enabled
+For OPI Flash, Use Default Flash Boot Mode
+mode:SLOW_RD, clock div:1
+load:0x3fce2820,len:0x15bc
+load:0x403c8700,len:0xe2c
+load:0x403cb700,len:0x2fcc
+entry 0x403c8944
+I (32) boot: ESP-IDF v5.5.2 2nd stage bootloader
+I (33) boot: compile time Sep 23 2026 00:49:23
+I (33) boot: Multicore bootloader
+I (33) boot: chip revision: v0.2
+I (36) boot: efuse block revision: v1.3
+I (39) boot.esp32s3: Boot SPI Speed : 80MHz
+I (43) boot.esp32s3: SPI Mode       : SLOW READ
+I (47) boot.esp32s3: SPI Flash Size : 32MB
+I (51) boot: Enabling RNG early entropy source...
+I (56) boot: Partition Table:
+I (58) boot: ## Label            Usage          Type ST Offset   Length
+I (65) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (78) boot:  2 factory          factory app      00 00 00010000 00200000
+I (84) boot:  3 model            Unknown data     01 40 00210000 01df0000
+I (91) boot: End of partition table
+I (94) esp_image: segment 0: paddr=00010020 vaddr=3c030020 size=0cd3ch ( 52540) map
+I (114) esp_image: segment 1: paddr=0001cd64 vaddr=3fc9c600 size=02f10h ( 12048) load
+I (118) esp_image: segment 2: paddr=0001fc7c vaddr=40378000 size=0039ch (   924) load
+I (118) esp_image: segment 3: paddr=00020020 vaddr=42000020 size=283dch (164828) map
+I (165) esp_image: segment 4: paddr=00048404 vaddr=4037839c size=141d8h ( 82392) load
+I (189) esp_image: segment 5: paddr=0005c5e4 vaddr=50000000 size=00020h (    32) load
+I (202) boot: Loaded app from partition at offset 0x10000
+I (202) boot: Disabling RNG early entropy source...
+I (213) MSPI Timing: Enter flash timing tuning
+I (214) octal_psram: vendor id    : 0x0d (AP)
+I (214) octal_psram: dev id       : 0x03 (generation 4)
+I (215) octal_psram: density      : 0x05 (128 Mbit)
+I (219) octal_psram: good-die     : 0x01 (Pass)
+I (224) octal_psram: Latency      : 0x01 (Fixed)
+I (228) octal_psram: VCC          : 0x00 (1.8V)
+I (232) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (237) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (242) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (247) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (252) octal_psram: DriveStrength: 0x00 (1/1)
+I (256) MSPI Timing: Enter psram timing tuning
+I (261) esp_psram: Found 16MB PSRAM device
+I (266) esp_psram: Speed: 80MHz
+I (267) cpu_start: Multicore app
+I (834) esp_psram: SPI SRAM memory test OK
+I (842) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (842) cpu_start: Pro cpu start user code
+I (842) cpu_start: cpu freq: 240000000 Hz
+I (844) app_init: Application information:
+I (848) app_init: Project name:     needle_demo
+I (852) app_init: App version:      7cf8a6f-dirty
+I (857) app_init: Compile time:     Sep 25 2026 15:54:41
+I (862) app_init: ELF file SHA256:  8b0e5a483...
+I (866) app_init: ESP-IDF:          v5.5.2
+I (870) efuse_init: Min chip rev:     v0.0
+I (874) efuse_init: Max chip rev:     v0.99 
+I (878) efuse_init: Chip rev:         v0.2
+I (881) heap_init: Initializing. RAM available for dynamic allocation:
+I (888) heap_init: At 3FCC9C38 len 0001FAD8 (126 KiB): RAM
+I (893) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (898) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (903) esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+I (910) spi_flash: detected chip: mxic (opi)
+I (914) spi_flash: flash io: opi_dtr
+I (917) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (924) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (930) main_task: Started on CPU0
+I (960) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (960) main_task: Calling app_main()
+EVT mapped model=9184276 bytes at 0x3d040000
+WARN drained 77 stale line(s) before the think toggle
+EG2 ok=0 found=0 bytes=0
+LSXCOST fixture_bad=0 cpwA=34 cpwB=25 ratioB_x100=73
+LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000
+PV8W selftest trials=128 bad=0 canaries=ok
+KRON1W selftest trials=64 bad=0
+LANEMIX selftest trials=64 bad=0
+LANEMIXROW selftest trials=64 bad=0
+LANEPRE selftest trials=64 bad=0
+KRON1W pool_align=0 kron1=1 lanemix=1 lanemix_row=1 lanepre=1
+EVT ready model=needle3 layers=3 d_model=768 vocab=8192 window=384 tools=3 psram_free=9806816 internal_free=9335
+EVT priming tokens=143 (one-time; every later request reuses this)
+EVT priming 8/143  6%  elapsed=1s  eta=10s
+EVT priming 16/143  11%  elapsed=1s  eta=8s
+EVT priming 24/143  17%  elapsed=1s  eta=7s
+EVT priming 32/143  22%  elapsed=2s  eta=6s
+EVT priming 40/143  28%  elapsed=2s  eta=6s
+EVT priming 48/143  34%  elapsed=3s  eta=5s
+EVT priming 56/143  39%  elapsed=3s  eta=5s
+EVT priming 64/143  45%  elapsed=4s  eta=4s
+EVT priming 72/143  50%  elapsed=4s  eta=4s
+EVT priming 80/143  56%  elapsed=5s  eta=4s
+EVT priming 88/143  62%  elapsed=5s  eta=3s
+EVT priming 96/143  67%  elapsed=5s  eta=3s
+EVT priming 104/143  73%  elapsed=6s  eta=2s
+EVT priming 112/143  78%  elapsed=6s  eta=2s
+EVT priming 120/143  84%  elapsed=7s  eta=1s
+EVT priming 128/143  90%  elapsed=7s  eta=1s
+EVT priming 136/143  95%  elapsed=8s  eta=0s
+EVT priming 143/143  100%  elapsed=8s  eta=0s
+EVT prefix tokens=143 ms=8163 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=18s
+EVT priming 16/213  8%  elapsed=1s  eta=14s
+EVT priming 24/213  11%  elapsed=2s  eta=12s
+EVT priming 32/213  15%  elapsed=2s  eta=11s
+EVT priming 40/213  19%  elapsed=2s  eta=10s
+EVT priming 48/213  23%  elapsed=3s  eta=10s
+EVT priming 56/213  26%  elapsed=3s  eta=9s
+EVT priming 64/213  30%  elapsed=4s  eta=9s
+EVT priming 72/213  34%  elapsed=4s  eta=8s
+EVT priming 80/213  38%  elapsed=5s  eta=8s
+EVT priming 88/213  41%  elapsed=5s  eta=7s
+EVT priming 96/213  45%  elapsed=6s  eta=7s
+EVT priming 104/213  49%  elapsed=6s  eta=6s
+EVT priming 112/213  53%  elapsed=6s  eta=6s
+EVT priming 120/213  56%  elapsed=7s  eta=5s
+EVT priming 128/213  60%  elapsed=7s  eta=5s
+EVT priming 136/213  64%  elapsed=8s  eta=4s
+EVT priming 144/213  68%  elapsed=8s  eta=4s
+EVT priming 152/213  71%  elapsed=9s  eta=4s
+EVT priming 160/213  75%  elapsed=9s  eta=3s
+EVT priming 168/213  79%  elapsed=10s  eta=3s
+EVT priming 176/213  83%  elapsed=10s  eta=2s
+EVT priming 184/213  86%  elapsed=11s  eta=2s
+EVT priming 192/213  90%  elapsed=11s  eta=1s
+EVT priming 200/213  94%  elapsed=12s  eta=1s
+EVT priming 208/213  98%  elapsed=12s  eta=0s
+EVT priming 213/213  100%  elapsed=12s  eta=0s
+EVT prefix tokens=213 ms=12485 sink=213 (cached for all requests)
+EVTEVT bench tokens=6 ms=371 ms_per_tok=62 tps=16.173
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21901,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+ATTACH_DEVICE path=/dev/needle-pi/board2-console real=/dev/needle-pi/board2-console rdev=166.3
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21935,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current3 sampling5 exact=0 prefill_tps=16.91 decode_tps=15.24 tokens=19
+CASE current3 timer60 exact=0 prefill_tps=16.94 decode_tps=15.38 tokens=19
+CASE current3 status_heap exact=0 prefill_tps=16.92 decode_tps=15.32 tokens=19
+CASE current3 batch exact=0 prefill_tps=16.89 decode_tps=15.26 tokens=18
+CASE current3 heldout_timer45 exact=0 prefill_tps=16.93 decode_tps=15.37 tokens=19
+WARN drained 3 stale line(s) before the think toggle
+EVT priming 40/143  28%  elapsed=2s  eta=6s
+EVT priming 48/143  34%  elapsed=3s  eta=5s
+EVT priming 56/143  39%  elapsed=3s  eta=5s
+EVT priming 64/143  45%  elapsed=4s  eta=4s
+EVT priming 72/143  50%  elapsed=4s  eta=4s
+EVT priming 80/143  56%  elapsed=5s  eta=4s
+EVT priming 88/143  62%  elapsed=5s  eta=3s
+EVT priming 96/143  67%  elapsed=5s  eta=3s
+EVT priming 104/143  73%  elapsed=6s  eta=2s
+EVT priming 112/143  78%  elapsed=6s  eta=2s
+EVT priming 120/143  84%  elapsed=7s  eta=1s
+EVT priming 128/143  90%  elapsed=7s  eta=1s
+EVT priming 136/143  95%  elapsed=8s  eta=0s
+EVT priming 143/143  100%  elapsed=8s  eta=0s
+EVT prefix tokens=143 ms=8163 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=18s
+EVT priming 16/213  8%  elapsed=1s  eta=14s
+EVT priming 24/213  11%  elapsed=2s  eta=12s
+EVT priming 32/213  15%  elapsed=2s  eta=11s
+EVT priming 40/213  19%  elapsed=2s  eta=10s
+EVT priming 48/213  23%  elapsed=3s  eta=10s
+EVT priming 56/213  26%  elapsed=3s  eta=9s
+EVT priming 64/213  30%  elapsed=4s  eta=9s
+EVT priming 72/213  34%  elapsed=4s  eta=8s
+EVT priming 80/213  38%  elapsed=5s  eta=8s
+EVT priming 88/213  41%  elapsed=5s  eta=7s
+EVT priming 96/213  45%  elapsed=6s  eta=7s
+EVT priming 104/213  49%  elapsed=6s  eta=6s
+EVT priming 112/213  53%  elapsed=6s  eta=6s
+EVT priming 120/213  56%  elapsed=7s  eta=5s
+EVT priming 128/213  60%  elapsed=7s  eta=5s
+EVT priming 136/213  64%  elapsed=8s  eta=4s
+EVT priming 144/213  68%  elapsed=8s  eta=4s
+EVT priming 152/213  71%  elapsed=9s  eta=4s
+EVT priming 160/213  75%  elapsed=9s  eta=3s
+EVT priming 168/213  79%  elapsed=10s  eta=3s
+EVT priming 176/213  83%  elapsed=10s  eta=2s
+EVT priming 184/213  86%  elapsed=11s  eta=2s
+EVT priming 192/213  90%  elapsed=11s  eta=1s
+EVT priming 200/213  94%  elapsed=12s  eta=1s
+EVT priming 208/213  98%  elapsed=12s  eta=0s
+EVT priming 213/213  100%  elapsed=12s  eta=0s
+EVT prefix tokens=213 ms=12485 sink=213 (cached for all requests)
+EVTEVT bench tokens=6 ms=371 ms_per_tok=62 tps=16.173
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21901,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current3 route_translate exact=1 prefill_tps=16.17 decode_tps=14.3 tokens=14
+WARN drained 3 stale line(s) before the think toggle
+EVT priming 40/143  28%  elapsed=2s  eta=6s
+EVT priming 48/143  34%  elapsed=3s  eta=5s
+EVT priming 56/143  39%  elapsed=3s  eta=5s
+EVT priming 64/143  45%  elapsed=4s  eta=4s
+EVT priming 72/143  50%  elapsed=4s  eta=4s
+EVT priming 80/143  56%  elapsed=5s  eta=4s
+EVT priming 88/143  62%  elapsed=5s  eta=3s
+EVT priming 96/143  67%  elapsed=5s  eta=3s
+EVT priming 104/143  73%  elapsed=6s  eta=2s
+EVT priming 112/143  78%  elapsed=6s  eta=2s
+EVT priming 120/143  84%  elapsed=7s  eta=1s
+EVT priming 128/143  90%  elapsed=7s  eta=1s
+EVT priming 136/143  95%  elapsed=8s  eta=0s
+EVT priming 143/143  100%  elapsed=8s  eta=0s
+EVT prefix tokens=143 ms=8163 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=18s
+EVT priming 16/213  8%  elapsed=1s  eta=14s
+EVT priming 24/213  11%  elapsed=2s  eta=12s
+EVT priming 32/213  15%  elapsed=2s  eta=11s
+EVT priming 40/213  19%  elapsed=2s  eta=10s
+EVT priming 48/213  23%  elapsed=3s  eta=10s
+EVT priming 56/213  26%  elapsed=3s  eta=9s
+EVT priming 64/213  30%  elapsed=4s  eta=9s
+EVT priming 72/213  34%  elapsed=4s  eta=8s
+EVT priming 80/213  38%  elapsed=5s  eta=8s
+EVT priming 88/213  41%  elapsed=5s  eta=7s
+EVT priming 96/213  45%  elapsed=6s  eta=7s
+EVT priming 104/213  49%  elapsed=6s  eta=6s
+EVT priming 112/213  53%  elapsed=6s  eta=6s
+EVT priming 120/213  56%  elapsed=7s  eta=5s
+EVT priming 128/213  60%  elapsed=7s  eta=5s
+EVT priming 136/213  64%  elapsed=8s  eta=4s
+EVT priming 144/213  68%  elapsed=8s  eta=4s
+EVT priming 152/213  71%  elapsed=9s  eta=4s
+EVT priming 160/213  75%  elapsed=9s  eta=3s
+EVT priming 168/213  79%  elapsed=10s  eta=3s
+EVT priming 176/213  83%  elapsed=10s  eta=2s
+EVT priming 184/213  86%  elapsed=11s  eta=2s
+EVT priming 192/213  90%  elapsed=11s  eta=1s
+EVT priming 200/213  94%  elapsed=12s  eta=1s
+EVT priming 208/213  98%  elapsed=12s  eta=0s
+EVT priming 213/213  100%  elapsed=12s  eta=0s
+EVT prefix tokens=213 ms=12484 sink=213 (cached for all requests)
+EVTEVT bench tokens=6 ms=371 ms_per_tok=62 tps=16.172
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21901,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current3 heldout_sampling15 exact=1 prefill_tps=16.92 decode_tps=15.24 tokens=19
+CASE current3 heldout_batch exact=0 prefill_tps=16.87 decode_tps=15.28 tokens=19
+WARN drained 3 stale line(s) before the think toggle
+EVT priming 40/143  28%  elapsed=2s  eta=6s
+EVT priming 48/143  34%  elapsed=3s  eta=5s
+EVT priming 56/143  39%  elapsed=3s  eta=5s
+EVT priming 64/143  45%  elapsed=4s  eta=4s
+EVT priming 72/143  50%  elapsed=4s  eta=4s
+EVT priming 80/143  56%  elapsed=5s  eta=4s
+EVT priming 88/143  62%  elapsed=5s  eta=3s
+EVT priming 96/143  67%  elapsed=5s  eta=3s
+EVT priming 104/143  73%  elapsed=6s  eta=2s
+EVT priming 112/143  78%  elapsed=6s  eta=2s
+EVT priming 120/143  84%  elapsed=7s  eta=1s
+EVT priming 128/143  90%  elapsed=7s  eta=1s
+EVT priming 136/143  95%  elapsed=8s  eta=0s
+EVT priming 143/143  100%  elapsed=8s  eta=0s
+EVT prefix tokens=143 ms=8163 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=18s
+EVT priming 16/213  8%  elapsed=1s  eta=14s
+EVT priming 24/213  11%  elapsed=2s  eta=12s
+EVT priming 32/213  15%  elapsed=2s  eta=11s
+EVT priming 40/213  19%  elapsed=2s  eta=10s
+EVT priming 48/213  23%  elapsed=3s  eta=10s
+EVT priming 56/213  26%  elapsed=3s  eta=9s
+EVT priming 64/213  30%  elapsed=4s  eta=9s
+EVT priming 72/213  34%  elapsed=4s  eta=8s
+EVT priming 80/213  38%  elapsed=5s  eta=8s
+EVT priming 88/213  41%  elapsed=5s  eta=7s
+EVT priming 96/213  45%  elapsed=6s  eta=7s
+EVT priming 104/213  49%  elapsed=6s  eta=6s
+EVT priming 112/213  53%  elapsed=6s  eta=6s
+EVT priming 120/213  56%  elapsed=7s  eta=5s
+EVT priming 128/213  60%  elapsed=7s  eta=5s
+EVT priming 136/213  64%  elapsed=8s  eta=4s
+EVT priming 144/213  68%  elapsed=8s  eta=4s
+EVT priming 152/213  71%  elapsed=9s  eta=4s
+EVT priming 160/213  75%  elapsed=9s  eta=3s
+EVT priming 168/213  79%  elapsed=10s  eta=3s
+EVT priming 176/213  83%  elapsed=10s  eta=2s
+EVT priming 184/213  86%  elapsed=11s  eta=2s
+EVT priming 192/213  90%  elapsed=11s  eta=1s
+EVT priming 200/213  94%  elapsed=12s  eta=1s
+EVT priming 208/213  98%  elapsed=12s  eta=0s
+EVT priming 213/213  100%  elapsed=12s  eta=0s
+EVT prefix tokens=213 ms=12484 sink=213 (cached for all requests)
+EVTEVT bench tokens=6 ms=371 ms_per_tok=62 tps=16.172
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21901,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current3 route_code exact=0 prefill_tps=16.14 decode_tps=14.3 tokens=15
+CASE current3 heldout_route_timer exact=0 prefill_tps=16.18 decode_tps=14.49 tokens=15
+CASE current3 heldout_route_research exact=1 prefill_tps=16.12 decode_tps=14.25 tokens=13
+WARN drained 3 stale line(s) before the think toggle
+EVT priming 40/143  28%  elapsed=2s  eta=6s
+EVT priming 48/143  34%  elapsed=3s  eta=5s
+EVT priming 56/143  39%  elapsed=3s  eta=5s
+EVT priming 64/143  45%  elapsed=4s  eta=4s
+EVT priming 72/143  50%  elapsed=4s  eta=4s
+EVT priming 80/143  56%  elapsed=5s  eta=4s
+EVT priming 88/143  62%  elapsed=5s  eta=3s
+EVT priming 96/143  67%  elapsed=5s  eta=3s
+EVT priming 104/143  73%  elapsed=6s  eta=2s
+EVT priming 112/143  78%  elapsed=6s  eta=2s
+EVT priming 120/143  84%  elapsed=7s  eta=1s
+EVT priming 128/143  90%  elapsed=7s  eta=1s
+EVT priming 136/143  95%  elapsed=8s  eta=0s
+EVT priming 143/143  100%  elapsed=8s  eta=0s
+EVT prefix tokens=143 ms=8163 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=18s
+EVT priming 16/213  8%  elapsed=1s  eta=14s
+EVT priming 24/213  11%  elapsed=2s  eta=12s
+EVT priming 32/213  15%  elapsed=2s  eta=11s
+EVT priming 40/213  19%  elapsed=2s  eta=10s
+EVT priming 48/213  23%  elapsed=3s  eta=10s
+EVT priming 56/213  26%  elapsed=3s  eta=9s
+EVT priming 64/213  30%  elapsed=4s  eta=9s
+EVT priming 72/213  34%  elapsed=4s  eta=8s
+EVT priming 80/213  38%  elapsed=5s  eta=8s
+EVT priming 88/213  41%  elapsed=5s  eta=7s
+EVT priming 96/213  45%  elapsed=6s  eta=7s
+EVT priming 104/213  49%  elapsed=6s  eta=6s
+EVT priming 112/213  53%  elapsed=6s  eta=6s
+EVT priming 120/213  56%  elapsed=7s  eta=5s
+EVT priming 128/213  60%  elapsed=7s  eta=5s
+EVT priming 136/213  64%  elapsed=8s  eta=4s
+EVT priming 144/213  68%  elapsed=8s  eta=4s
+EVT priming 152/213  71%  elapsed=9s  eta=4s
+EVT priming 160/213  75%  elapsed=9s  eta=3s
+EVT priming 168/213  79%  elapsed=10s  eta=3s
+EVT priming 176/213  83%  elapsed=10s  eta=2s
+EVT priming 184/213  86%  elapsed=11s  eta=2s
+EVT priming 192/213  90%  elapsed=11s  eta=1s
+EVT priming 200/213  94%  elapsed=12s  eta=1s
+EVT priming 208/213  98%  elapsed=12s  eta=0s
+EVT priming 213/213  100%  elapsed=12s  eta=0s
+EVT prefix tokens=213 ms=12484 sink=213 (cached for all requests)
+EVTEVT bench tokens=6 ms=371 ms_per_tok=62 tps=16.174
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":3,"model_bytes":9184276,"uptime_ms":21901,"free_internal_bytes":8503,"free_psram_bytes":9308524,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":21493,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current3 heldout_free_describe exact=0 prefill_tps=16.91 decode_tps=15.23 tokens=19
+COMPLETE current3 {'cases': 12, 'success': 12, 'scored_cases': 12, 'exact_calls': 3, 'decode_tps_mean': 14.9717, 'prefill_tps_mean': 16.6583, 'decode_timed_cases': 12, 'prefill_timed_cases': 12, 'decode_ms_mean': 1154.0833, 'prefill_ms_mean': 922.0833, 'latency_ms_mean': 2385.7417, 'decode_tokens_sum': 208, 'retried': 0}
+FLASH /opt/esp/python_env/idf5.5_py3.12_env/bin/python -m esptool --chip esp32s3 --port /dev/needle-pi/board2-flash --baud 921600 --before default_reset --after hard_reset write_flash --flash_mode dout --flash_size 32MB --flash_freq 80m 0x0 /workspace/esp32-needle-3/benchmarks/assets/bootloader-current.bin 0x8000 /workspace/esp32-needle-3/benchmarks/assets/partition-table.bin 0x10000 /workspace/esp32-needle-3/benchmarks/assets/needle-matrix.bin 0x210000 /workspace/esp32-needle-3/.runtime/benchmarks/models/depth-05.cact
+esptool.py v4.11.dev1
+Serial port /dev/needle-pi/board2-flash
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 16MB (AP_1v8)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: 90:e5:b1:d1:be:b8
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 921600
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x00010000 to 0x0005cfff...
+Flash will be erased from 0x00210000 to 0x00becfff...
+SHA digest in image updated
+Compressed 21520 bytes to 13703...
+Writing at 0x00000000... (100 %)
+Wrote 21520 bytes (13703 compressed) at 0x00000000 in 0.3 seconds (effective 592.9 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 120...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (120 compressed) at 0x00008000 in 0.0 seconds (effective 649.9 kbit/s)...
+Hash of data verified.
+Compressed 312880 bytes to 188970...
+Writing at 0x00010000... (8 %)
+Writing at 0x0001bcdc... (16 %)
+Writing at 0x00023e95... (25 %)
+Writing at 0x000299ed... (33 %)
+Writing at 0x0002ee78... (41 %)
+Writing at 0x00034042... (50 %)
+Writing at 0x00039595... (58 %)
+Writing at 0x0003fdfc... (66 %)
+Writing at 0x00047ec6... (75 %)
+Writing at 0x0004d5c9... (83 %)
+Writing at 0x00053345... (91 %)
+Writing at 0x0005913d... (100 %)
+Wrote 312880 bytes (188970 compressed) at 0x00010000 in 2.8 seconds (effective 887.0 kbit/s)...
+Hash of data verified.
+Compressed 10340948 bytes to 9709178...
+Writing at 0x00210000... (0 %)
+Writing at 0x0021a09f... (0 %)
+Writing at 0x002231c7... (0 %)
+Writing at 0x0022777c... (0 %)
+Writing at 0x0022c6be... (0 %)
+Writing at 0x00230a12... (1 %)
+Writing at 0x00234d70... (1 %)
+Writing at 0x002390de... (1 %)
+Writing at 0x0023d450... (1 %)
+Writing at 0x0024176d... (1 %)
+Writing at 0x00245ac6... (1 %)
+Writing at 0x00249e2a... (2 %)
+Writing at 0x0024e19c... (2 %)
+Writing at 0x00252500... (2 %)
+Writing at 0x0025686c... (2 %)
+Writing at 0x0025abd4... (2 %)
+Writing at 0x0025ef43... (2 %)
+Writing at 0x002632a6... (3 %)
+Writing at 0x00267608... (3 %)
+Writing at 0x0026b965... (3 %)
+Writing at 0x0026fcd1... (3 %)
+Writing at 0x0027402a... (3 %)
+Writing at 0x0027838d... (3 %)
+Writing at 0x0027c6fd... (4 %)
+Writing at 0x00280a5a... (4 %)
+Writing at 0x00284dbd... (4 %)
+Writing at 0x0028911e... (4 %)
+Writing at 0x0028d482... (4 %)
+Writing at 0x002917eb... (4 %)
+Writing at 0x00295af3... (5 %)
+Writing at 0x00299e60... (5 %)
+Writing at 0x0029e1c4... (5 %)
+Writing at 0x002a252d... (5 %)
+Writing at 0x002a6899... (5 %)
+Writing at 0x002aac03... (5 %)
+Writing at 0x002aef70... (6 %)
+Writing at 0x002b32c8... (6 %)
+Writing at 0x002b7629... (6 %)
+Writing at 0x002bb991... (6 %)
+Writing at 0x002bfd09... (6 %)
+Writing at 0x002c406e... (6 %)
+Writing at 0x002c83d6... (7 %)
+Writing at 0x002cc731... (7 %)
+Writing at 0x002d0a92... (7 %)
+Writing at 0x002d4e01... (7 %)
+Writing at 0x002d915d... (7 %)
+Writing at 0x002dd4c4... (7 %)
+Writing at 0x002e181e... (8 %)
+Writing at 0x002e5b85... (8 %)
+Writing at 0x002e9e89... (8 %)
+Writing at 0x002ee1ea... (8 %)
+Writing at 0x002f254f... (8 %)
+Writing at 0x002f68b9... (8 %)
+Writing at 0x002fac28... (9 %)
+Writing at 0x002fef8a... (9 %)
+Writing at 0x003032fa... (9 %)
+Writing at 0x00307660... (9 %)
+Writing at 0x0030b9d2... (9 %)
+Writing at 0x0030fd3d... (9 %)
+Writing at 0x003140a5... (10 %)
+Writing at 0x00318412... (10 %)
+Writing at 0x0031c76d... (10 %)
+Writing at 0x00320ae0... (10 %)
+Writing at 0x00324e46... (10 %)
+Writing at 0x003291af... (10 %)
+Writing at 0x0032d50d... (11 %)
+Writing at 0x00331878... (11 %)
+Writing at 0x00335be8... (11 %)
+Writing at 0x00339f4d... (11 %)
+Writing at 0x0033e241... (11 %)
+Writing at 0x003425ae... (11 %)
+Writing at 0x0034690d... (12 %)
+Writing at 0x0034ac70... (12 %)
+Writing at 0x0034efd7... (12 %)
+Writing at 0x00353334... (12 %)
+Writing at 0x00357698... (12 %)
+Writing at 0x0035ba04... (12 %)
+Writing at 0x0035fd68... (13 %)
+Writing at 0x003640d4... (13 %)
+Writing at 0x00368445... (13 %)
+Writing at 0x0036c7b6... (13 %)
+Writing at 0x00370b20... (13 %)
+Writing at 0x00374e85... (13 %)
+Writing at 0x003791f5... (14 %)
+Writing at 0x0037d55f... (14 %)
+Writing at 0x003818ba... (14 %)
+Writing at 0x00385c1b... (14 %)
+Writing at 0x00389f81... (14 %)
+Writing at 0x0038e2b0... (15 %)
+Writing at 0x003925ee... (15 %)
+Writing at 0x00396949... (15 %)
+Writing at 0x0039acab... (15 %)
+Writing at 0x0039f016... (15 %)
+Writing at 0x003a3379... (15 %)
+Writing at 0x003a76e8... (16 %)
+Writing at 0x003aba5b... (16 %)
+Writing at 0x003afdc2... (16 %)
+Writing at 0x003b4132... (16 %)
+Writing at 0x003b8492... (16 %)
+Writing at 0x003bc7ff... (16 %)
+Writing at 0x003c0b5c... (17 %)
+Writing at 0x003c4ec8... (17 %)
+Writing at 0x003c9224... (17 %)
+Writing at 0x003cd58d... (17 %)
+Writing at 0x003d18e8... (17 %)
+Writing at 0x003d5c5e... (17 %)
+Writing at 0x003d9fc0... (18 %)
+Writing at 0x003de327... (18 %)
+Writing at 0x003e2630... (18 %)
+Writing at 0x003e6995... (18 %)
+Writing at 0x003eacfd... (18 %)
+Writing at 0x003ef060... (18 %)
+Writing at 0x003f33c0... (19 %)
+Writing at 0x003f7729... (19 %)
+Writing at 0x003fba97... (19 %)
+Writing at 0x003ffe04... (19 %)
+Writing at 0x0040416e... (19 %)
+Writing at 0x004084d8... (19 %)
+Writing at 0x0040c83a... (20 %)
+Writing at 0x00410b9c... (20 %)
+Writing at 0x00414eef... (20 %)
+Writing at 0x00419250... (20 %)
+Writing at 0x0041d5c1... (20 %)
+Writing at 0x0042191b... (20 %)
+Writing at 0x00425c88... (21 %)
+Writing at 0x00429fea... (21 %)
+Writing at 0x0042e34d... (21 %)
+Writing at 0x004326b3... (21 %)
+Writing at 0x004369a8... (21 %)
+Writing at 0x0043ad15... (21 %)
+Writing at 0x0043f07d... (22 %)
+Writing at 0x004433e5... (22 %)
+Writing at 0x00447753... (22 %)
+Writing at 0x0044bab7... (22 %)
+Writing at 0x0044fe2a... (22 %)
+Writing at 0x00454198... (22 %)
+Writing at 0x00458500... (23 %)
+Writing at 0x0045c86c... (23 %)
+Writing at 0x00460bcd... (23 %)
+Writing at 0x00464f32... (23 %)
+Writing at 0x0046929e... (23 %)
+Writing at 0x0046d60f... (23 %)
+Writing at 0x00471971... (24 %)
+Writing at 0x00475cd4... (24 %)
+Writing at 0x0047a04d... (24 %)
+Writing at 0x0047e3b1... (24 %)
+Writing at 0x00482713... (24 %)
+Writing at 0x00486a7d... (24 %)
+Writing at 0x0048ad88... (25 %)
+Writing at 0x0048f0ef... (25 %)
+Writing at 0x00493452... (25 %)
+Writing at 0x004977ba... (25 %)
+Writing at 0x0049bb1a... (25 %)
+Writing at 0x0049fe82... (25 %)
+Writing at 0x004a41ef... (26 %)
+Writing at 0x004a8555... (26 %)
+Writing at 0x004ac8c1... (26 %)
+Writing at 0x004b0c36... (26 %)
+Writing at 0x004b4f99... (26 %)
+Writing at 0x004b92fd... (26 %)
+Writing at 0x004bd66c... (27 %)
+Writing at 0x004c19c9... (27 %)
+Writing at 0x004c5d33... (27 %)
+Writing at 0x004ca0a4... (27 %)
+Writing at 0x004ce40e... (27 %)
+Writing at 0x004d2776... (27 %)
+Writing at 0x004d6adc... (28 %)
+Writing at 0x004dade5... (28 %)
+Writing at 0x004df151... (28 %)
+Writing at 0x004e34b8... (28 %)
+Writing at 0x004e7824... (28 %)
+Writing at 0x004ebb88... (29 %)
+Writing at 0x004efef4... (29 %)
+Writing at 0x004f425e... (29 %)
+Writing at 0x004f85c4... (29 %)
+Writing at 0x004fc92c... (29 %)
+Writing at 0x00500c9b... (29 %)
+Writing at 0x00505003... (30 %)
+Writing at 0x00509365... (30 %)
+Writing at 0x0050d6ce... (30 %)
+Writing at 0x00511924... (30 %)
+Writing at 0x00516e4b... (30 %)
+Writing at 0x0051c7ae... (30 %)
+Writing at 0x005221e4... (31 %)
+Writing at 0x00527bc9... (31 %)
+Writing at 0x0052c6f5... (31 %)
+Writing at 0x0053092b... (31 %)
+Writing at 0x00534b6f... (31 %)
+Writing at 0x00538d8d... (31 %)
+Writing at 0x0053cfc4... (32 %)
+Writing at 0x005411fe... (32 %)
+Writing at 0x005452f2... (32 %)
+Writing at 0x005498b8... (32 %)
+Writing at 0x0054dac9... (32 %)
+Writing at 0x00551c9f... (32 %)
+Writing at 0x00555e10... (33 %)
+Writing at 0x0055a038... (33 %)
+Writing at 0x0055e26d... (33 %)
+Writing at 0x005624b4... (33 %)
+Writing at 0x005666d2... (33 %)
+Writing at 0x0056a909... (33 %)
+Writing at 0x0056eb3b... (34 %)
+Writing at 0x00572d71... (34 %)
+Writing at 0x00576faa... (34 %)
+Writing at 0x0057b6e2... (34 %)
+Writing at 0x0057f8fd... (34 %)
+Writing at 0x00583af6... (34 %)
+Writing at 0x00587d1f... (35 %)
+Writing at 0x0058bf6a... (35 %)
+Writing at 0x00590190... (35 %)
+Writing at 0x005943c1... (35 %)
+Writing at 0x00598603... (35 %)
+Writing at 0x0059c7a5... (35 %)
+Writing at 0x005a135a... (36 %)
+Writing at 0x005a5e51... (36 %)
+Writing at 0x005aa2ed... (36 %)
+Writing at 0x005ae776... (36 %)
+Writing at 0x005b29a5... (36 %)
+Writing at 0x005b6bdf... (36 %)
+Writing at 0x005bae01... (37 %)
+Writing at 0x005bf039... (37 %)
+Writing at 0x005c327b... (37 %)
+Writing at 0x005c7422... (37 %)
+Writing at 0x005cb8ca... (37 %)
+Writing at 0x005cfad9... (37 %)
+Writing at 0x005d3cbf... (38 %)
+Writing at 0x005d7e70... (38 %)
+Writing at 0x005dc074... (38 %)
+Writing at 0x005e02a4... (38 %)
+Writing at 0x005e44d8... (38 %)
+Writing at 0x005e8703... (38 %)
+Writing at 0x005ec954... (39 %)
+Writing at 0x005f0b8d... (39 %)
+Writing at 0x005f4dbc... (39 %)
+Writing at 0x005f8ffe... (39 %)
+Writing at 0x005fd85e... (39 %)
+Writing at 0x006019d2... (39 %)
+Writing at 0x00605c1a... (40 %)
+Writing at 0x00609e39... (40 %)
+Writing at 0x0060e07a... (40 %)
+Writing at 0x006122b1... (40 %)
+Writing at 0x006164e4... (40 %)
+Writing at 0x0061a71e... (40 %)
+Writing at 0x0061e95e... (41 %)
+Writing at 0x006231a0... (41 %)
+Writing at 0x00627d23... (41 %)
+Writing at 0x0062c2f4... (41 %)
+Writing at 0x00630865... (41 %)
+Writing at 0x00634a87... (41 %)
+Writing at 0x00638cc9... (42 %)
+Writing at 0x0063cefd... (42 %)
+Writing at 0x00641131... (42 %)
+Writing at 0x00645358... (42 %)
+Writing at 0x00649560... (42 %)
+Writing at 0x0064da04... (43 %)
+Writing at 0x00651bb0... (43 %)
+Writing at 0x00655dde... (43 %)
+Writing at 0x00659f62... (43 %)
+Writing at 0x0065e13c... (43 %)
+Writing at 0x00662384... (43 %)
+Writing at 0x006665a9... (44 %)
+Writing at 0x0066a7e2... (44 %)
+Writing at 0x0066ea10... (44 %)
+Writing at 0x00672c49... (44 %)
+Writing at 0x00676e84... (44 %)
+Writing at 0x0067b0b3... (44 %)
+Writing at 0x0067f7bb... (45 %)
+Writing at 0x00683a5f... (45 %)
+Writing at 0x00687c82... (45 %)
+Writing at 0x0068bed5... (45 %)
+Writing at 0x00690117... (45 %)
+Writing at 0x0069436e... (45 %)
+Writing at 0x006985c1... (46 %)
+Writing at 0x0069c7f2... (46 %)
+Writing at 0x006a0a4b... (46 %)
+Writing at 0x006a4e5d... (46 %)
+Writing at 0x006a9cc5... (46 %)
+Writing at 0x006ae4df... (46 %)
+Writing at 0x006b296d... (47 %)
+Writing at 0x006b6ccb... (47 %)
+Writing at 0x006baeee... (47 %)
+Writing at 0x006bf140... (47 %)
+Writing at 0x006c337a... (47 %)
+Writing at 0x006c75b5... (47 %)
+Writing at 0x006cb7ed... (48 %)
+Writing at 0x006cfa6e... (48 %)
+Writing at 0x006d3e32... (48 %)
+Writing at 0x006d7fe4... (48 %)
+Writing at 0x006dc1b6... (48 %)
+Writing at 0x006e0349... (48 %)
+Writing at 0x006e456d... (49 %)
+Writing at 0x006e87b2... (49 %)
+Writing at 0x006ec9e5... (49 %)
+Writing at 0x006f0c1d... (49 %)
+Writing at 0x006f4e5e... (49 %)
+Writing at 0x006f90aa... (49 %)
+Writing at 0x006fd305... (50 %)
+Writing at 0x0070161e... (50 %)
+Writing at 0x00705ca9... (50 %)
+Writing at 0x00709ef6... (50 %)
+Writing at 0x0070e146... (50 %)
+Writing at 0x0071237c... (50 %)
+Writing at 0x007165ac... (51 %)
+Writing at 0x0071a7f2... (51 %)
+Writing at 0x0071ea44... (51 %)
+Writing at 0x00722c91... (51 %)
+Writing at 0x00726da6... (51 %)
+Writing at 0x0072bade... (51 %)
+Writing at 0x0073052c... (52 %)
+Writing at 0x00734a2f... (52 %)
+Writing at 0x00738dbc... (52 %)
+Writing at 0x0073cfb7... (52 %)
+Writing at 0x007411e7... (52 %)
+Writing at 0x00745422... (52 %)
+Writing at 0x00749663... (53 %)
+Writing at 0x0074d893... (53 %)
+Writing at 0x00751a97... (53 %)
+Writing at 0x00755ec2... (53 %)
+Writing at 0x0075a0ab... (53 %)
+Writing at 0x0075e2de... (53 %)
+Writing at 0x0076246a... (54 %)
+Writing at 0x00766683... (54 %)
+Writing at 0x0076a8ca... (54 %)
+Writing at 0x0076eb13... (54 %)
+Writing at 0x00772d64... (54 %)
+Writing at 0x00776f5d... (54 %)
+Writing at 0x0077b19f... (55 %)
+Writing at 0x0077f402... (55 %)
+Writing at 0x00783606... (55 %)
+Writing at 0x00787d59... (55 %)
+Writing at 0x0078bfbb... (55 %)
+Writing at 0x00790209... (55 %)
+Writing at 0x00794457... (56 %)
+Writing at 0x007986ac... (56 %)
+Writing at 0x0079c8e6... (56 %)
+Writing at 0x007a0b50... (56 %)
+Writing at 0x007a4d8e... (56 %)
+Writing at 0x007a8f78... (56 %)
+Writing at 0x007ad99a... (57 %)
+Writing at 0x007b2628... (57 %)
+Writing at 0x007b6b37... (57 %)
+Writing at 0x007bbc8f... (57 %)
+Writing at 0x007bff55... (57 %)
+Writing at 0x007c526e... (58 %)
+Writing at 0x007c9597... (58 %)
+Writing at 0x007d16d4... (58 %)
+Writing at 0x007d5a2e... (58 %)
+Writing at 0x007d9d98... (58 %)
+Writing at 0x007de0ff... (58 %)
+Writing at 0x007e2467... (59 %)
+Writing at 0x007e67cd... (59 %)
+Writing at 0x007eb725... (59 %)
+Writing at 0x007ef862... (59 %)
+Writing at 0x007f3a8f... (59 %)
+Writing at 0x007f7cce... (59 %)
+Writing at 0x007fbf00... (60 %)
+Writing at 0x0080013d... (60 %)
+Writing at 0x00804371... (60 %)
+Writing at 0x008085a0... (60 %)
+Writing at 0x0080c7bc... (60 %)
+Writing at 0x008109ed... (60 %)
+Writing at 0x00814c35... (61 %)
+Writing at 0x00818e2b... (61 %)
+Writing at 0x0081d035... (61 %)
+Writing at 0x0082126c... (61 %)
+Writing at 0x008254b9... (61 %)
+Writing at 0x008296c7... (61 %)
+Writing at 0x0082d8f7... (62 %)
+Writing at 0x00831b2e... (62 %)
+Writing at 0x00835d53... (62 %)
+Writing at 0x00839f75... (62 %)
+Writing at 0x0083e1a0... (62 %)
+Writing at 0x008423e6... (62 %)
+Writing at 0x00846616... (63 %)
+Writing at 0x0084a83a... (63 %)
+Writing at 0x0084ea50... (63 %)
+Writing at 0x00852c7b... (63 %)
+Writing at 0x00856e93... (63 %)
+Writing at 0x0085b0a5... (63 %)
+Writing at 0x0085f2d7... (64 %)
+Writing at 0x00863505... (64 %)
+Writing at 0x0086773f... (64 %)
+Writing at 0x0086b978... (64 %)
+Writing at 0x0086fb93... (64 %)
+Writing at 0x00873ddf... (64 %)
+Writing at 0x00878000... (65 %)
+Writing at 0x0087c239... (65 %)
+Writing at 0x00880475... (65 %)
+Writing at 0x008846a2... (65 %)
+Writing at 0x008888d1... (65 %)
+Writing at 0x0088cafe... (65 %)
+Writing at 0x00890d29... (66 %)
+Writing at 0x00894f61... (66 %)
+Writing at 0x00899197... (66 %)
+Writing at 0x0089d372... (66 %)
+Writing at 0x008a159f... (66 %)
+Writing at 0x008a57cb... (66 %)
+Writing at 0x008a9a03... (67 %)
+Writing at 0x008adc38... (67 %)
+Writing at 0x008b1e6d... (67 %)
+Writing at 0x008b60a9... (67 %)
+Writing at 0x008ba2cb... (67 %)
+Writing at 0x008be4ec... (67 %)
+Writing at 0x008c2712... (68 %)
+Writing at 0x008c693c... (68 %)
+Writing at 0x008cab7c... (68 %)
+Writing at 0x008cedb7... (68 %)
+Writing at 0x008d2fef... (68 %)
+Writing at 0x008d7248... (68 %)
+Writing at 0x008db481... (69 %)
+Writing at 0x008df6bc... (69 %)
+Writing at 0x008e38ee... (69 %)
+Writing at 0x008e7b1a... (69 %)
+Writing at 0x008ebd3f... (69 %)
+Writing at 0x008eff77... (69 %)
+Writing at 0x008f41b6... (70 %)
+Writing at 0x008f83ea... (70 %)
+Writing at 0x008fc625... (70 %)
+Writing at 0x00900874... (70 %)
+Writing at 0x00904ab1... (70 %)
+Writing at 0x00908cee... (70 %)
+Writing at 0x0090cf2d... (71 %)
+Writing at 0x00911160... (71 %)
+Writing at 0x0091538d... (71 %)
+Writing at 0x009195bd... (71 %)
+Writing at 0x0091d7a8... (71 %)
+Writing at 0x009219d6... (72 %)
+Writing at 0x00925c26... (72 %)
+Writing at 0x00929e61... (72 %)
+Writing at 0x0092e0a1... (72 %)
+Writing at 0x009322f1... (72 %)
+Writing at 0x0093653a... (72 %)
+Writing at 0x0093a770... (73 %)
+Writing at 0x0093e99e... (73 %)
+Writing at 0x00942bf6... (73 %)
+Writing at 0x00946e2d... (73 %)
+Writing at 0x0094b066... (73 %)
+Writing at 0x0094f2b4... (73 %)
+Writing at 0x009534f6... (74 %)
+Writing at 0x0095772e... (74 %)
+Writing at 0x0095b98a... (74 %)
+Writing at 0x0095fbca... (74 %)
+Writing at 0x00963de8... (74 %)
+Writing at 0x0096802c... (74 %)
+Writing at 0x0096c25a... (75 %)
+Writing at 0x0097047b... (75 %)
+Writing at 0x009746ab... (75 %)
+Writing at 0x009788e9... (75 %)
+Writing at 0x0097cb16... (75 %)
+Writing at 0x00980d5a... (75 %)
+Writing at 0x00984f83... (76 %)
+Writing at 0x009891be... (76 %)
+Writing at 0x0098d416... (76 %)
+Writing at 0x00991659... (76 %)
+Writing at 0x00995894... (76 %)
+Writing at 0x00999a51... (76 %)
+Writing at 0x0099dc91... (77 %)
+Writing at 0x009a1ecf... (77 %)
+Writing at 0x009a60f4... (77 %)
+Writing at 0x009aa335... (77 %)
+Writing at 0x009ae57e... (77 %)
+Writing at 0x009b27a7... (77 %)
+Writing at 0x009b69e0... (78 %)
+Writing at 0x009bac17... (78 %)
+Writing at 0x009bee5d... (78 %)
+Writing at 0x009c307d... (78 %)
+Writing at 0x009c72bd... (78 %)
+Writing at 0x009cb4fe... (78 %)
+Writing at 0x009cf737... (79 %)
+Writing at 0x009d397a... (79 %)
+Writing at 0x009d7bb3... (79 %)
+Writing at 0x009dbded... (79 %)
+Writing at 0x009e0021... (79 %)
+Writing at 0x009e4251... (79 %)
+Writing at 0x009e8493... (80 %)
+Writing at 0x009ec6d9... (80 %)
+Writing at 0x009f0917... (80 %)
+Writing at 0x009f4b3e... (80 %)
+Writing at 0x009f8d84... (80 %)
+Writing at 0x009fcfcd... (80 %)
+Writing at 0x00a011ec... (81 %)
+Writing at 0x00a05424... (81 %)
+Writing at 0x00a09642... (81 %)
+Writing at 0x00a0d86b... (81 %)
+Writing at 0x00a11aa5... (81 %)
+Writing at 0x00a15cdc... (81 %)
+Writing at 0x00a19e92... (82 %)
+Writing at 0x00a1e0db... (82 %)
+Writing at 0x00a22311... (82 %)
+Writing at 0x00a26548... (82 %)
+Writing at 0x00a2a779... (82 %)
+Writing at 0x00a2e9a8... (82 %)
+Writing at 0x00a32be8... (83 %)
+Writing at 0x00a36e2e... (83 %)
+Writing at 0x00a3b05f... (83 %)
+Writing at 0x00a3f296... (83 %)
+Writing at 0x00a434e6... (83 %)
+Writing at 0x00a4771c... (83 %)
+Writing at 0x00a4b95a... (84 %)
+Writing at 0x00a4fb91... (84 %)
+Writing at 0x00a53dd7... (84 %)
+Writing at 0x00a5801e... (84 %)
+Writing at 0x00a5c259... (84 %)
+Writing at 0x00a6048b... (84 %)
+Writing at 0x00a646d7... (85 %)
+Writing at 0x00a6891a... (85 %)
+Writing at 0x00a6cb55... (85 %)
+Writing at 0x00a70d89... (85 %)
+Writing at 0x00a74fc5... (85 %)
+Writing at 0x00a79212... (86 %)
+Writing at 0x00a7d459... (86 %)
+Writing at 0x00a816ae... (86 %)
+Writing at 0x00a858fc... (86 %)
+Writing at 0x00a89b38... (86 %)
+Writing at 0x00a8dd79... (86 %)
+Writing at 0x00a91fc1... (87 %)
+Writing at 0x00a9617f... (87 %)
+Writing at 0x00a9a3b5... (87 %)
+Writing at 0x00a9e5f9... (87 %)
+Writing at 0x00aa2825... (87 %)
+Writing at 0x00aa6a5d... (87 %)
+Writing at 0x00aaac8f... (88 %)
+Writing at 0x00aaeecd... (88 %)
+Writing at 0x00ab311d... (88 %)
+Writing at 0x00ab7364... (88 %)
+Writing at 0x00abb5a5... (88 %)
+Writing at 0x00abf7f4... (88 %)
+Writing at 0x00ac3a17... (89 %)
+Writing at 0x00ac7c5e... (89 %)
+Writing at 0x00acbe92... (89 %)
+Writing at 0x00ad00c3... (89 %)
+Writing at 0x00ad42f5... (89 %)
+Writing at 0x00ad8513... (89 %)
+Writing at 0x00adc747... (90 %)
+Writing at 0x00ae0969... (90 %)
+Writing at 0x00ae4b9b... (90 %)
+Writing at 0x00ae8db0... (90 %)
+Writing at 0x00aecfe2... (90 %)
+Writing at 0x00af1211... (90 %)
+Writing at 0x00af544c... (91 %)
+Writing at 0x00af968c... (91 %)
+Writing at 0x00afd8c8... (91 %)
+Writing at 0x00b01afe... (91 %)
+Writing at 0x00b05d32... (91 %)
+Writing at 0x00b09f4f... (91 %)
+Writing at 0x00b0e17f... (92 %)
+Writing at 0x00b123a6... (92 %)
+Writing at 0x00b16585... (92 %)
+Writing at 0x00b1a7a1... (92 %)
+Writing at 0x00b1e9d0... (92 %)
+Writing at 0x00b22c06... (92 %)
+Writing at 0x00b26e3c... (93 %)
+Writing at 0x00b2b07a... (93 %)
+Writing at 0x00b2f2d0... (93 %)
+Writing at 0x00b33512... (93 %)
+Writing at 0x00b3773f... (93 %)
+Writing at 0x00b3b981... (93 %)
+Writing at 0x00b3fbca... (94 %)
+Writing at 0x00b43dfb... (94 %)
+Writing at 0x00b4802d... (94 %)
+Writing at 0x00b4c8e9... (94 %)
+Writing at 0x00b51aba... (94 %)
+Writing at 0x00b56c7a... (94 %)
+Writing at 0x00b5be16... (95 %)
+Writing at 0x00b60fdb... (95 %)
+Writing at 0x00b661d0... (95 %)
+Writing at 0x00b6b9c9... (95 %)
+Writing at 0x00b71162... (95 %)
+Writing at 0x00b7691a... (95 %)
+Writing at 0x00b7c0ad... (96 %)
+Writing at 0x00b81289... (96 %)
+Writing at 0x00b854d0... (96 %)
+Writing at 0x00b89701... (96 %)
+Writing at 0x00b8d936... (96 %)
+Writing at 0x00b91b6b... (96 %)
+Writing at 0x00b95d8a... (97 %)
+Writing at 0x00b99fbf... (97 %)
+Writing at 0x00b9e1ec... (97 %)
+Writing at 0x00ba23fa... (97 %)
+Writing at 0x00ba6b1c... (97 %)
+Writing at 0x00baac55... (97 %)
+Writing at 0x00baee8c... (98 %)
+Writing at 0x00bb30d3... (98 %)
+Writing at 0x00bb7310... (98 %)
+Writing at 0x00bbb557... (98 %)
+Writing at 0x00bbf77e... (98 %)
+Writing at 0x00bc39c3... (98 %)
+Writing at 0x00bc7bfa... (99 %)
+Writing at 0x00bcc116... (99 %)
+Writing at 0x00bd04bb... (99 %)
+Writing at 0x00bd720a... (99 %)
+Writing at 0x00bdf72a... (99 %)
+Writing at 0x00be7b29... (100 %)
+Wrote 10340948 bytes (9709178 compressed) at 0x00210000 in 98.1 seconds (effective 843.2 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+Octal Flash Mode Enabled
+For OPI Flash, Use Default Flash Boot Mode
+mode:SLOW_RD, clock div:1
+load:0x3fce2820,len:0x15bc
+load:0x403c8700,len:0xe2c
+load:0x403cb700,len:0x2fcc
+entry 0x403c8944
+I (32) boot: ESP-IDF v5.5.2 2nd stage bootloader
+I (33) boot: compile time Sep 23 2026 00:49:23
+I (33) boot: Multicore bootloader
+I (33) boot: chip revision: v0.2
+I (36) boot: efuse block revision: v1.3
+I (39) boot.esp32s3: Boot SPI Speed : 80MHz
+I (43) boot.esp32s3: SPI Mode       : SLOW READ
+I (47) boot.esp32s3: SPI Flash Size : 32MB
+I (51) boot: Enabling RNG early entropy source...
+I (56) boot: Partition Table:
+I (58) boot: ## Label            Usage          Type ST Offset   Length
+I (65) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (78) boot:  2 factory          factory app      00 00 00010000 00200000
+I (84) boot:  3 model            Unknown data     01 40 00210000 01df0000
+I (91) boot: End of partition table
+I (94) esp_image: segment 0: paddr=00010020 vaddr=3c030020 size=0cd3ch ( 52540) map
+I (114) esp_image: segment 1: paddr=0001cd64 vaddr=3fc9c600 size=02f10h ( 12048) load
+I (118) esp_image: segment 2: paddr=0001fc7c vaddr=40378000 size=0039ch (   924) load
+I (118) esp_image: segment 3: paddr=00020020 vaddr=42000020 size=283dch (164828) map
+I (165) esp_image: segment 4: paddr=00048404 vaddr=4037839c size=141d8h ( 82392) load
+I (189) esp_image: segment 5: paddr=0005c5e4 vaddr=50000000 size=00020h (    32) load
+I (197) boot: Loaded app from partition at offset 0x10000
+I (197) boot: Disabling RNG early entropy source...
+I (208) MSPI Timing: Enter flash timing tuning
+I (209) octal_psram: vendor id    : 0x0d (AP)
+I (209) octal_psram: dev id       : 0x03 (generation 4)
+I (210) octal_psram: density      : 0x05 (128 Mbit)
+I (214) octal_psram: good-die     : 0x01 (Pass)
+I (219) octal_psram: Latency      : 0x01 (Fixed)
+I (224) octal_psram: VCC          : 0x00 (1.8V)
+I (227) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (232) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (237) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (242) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (247) octal_psram: DriveStrength: 0x00 (1/1)
+I (251) MSPI Timing: Enter psram timing tuning
+I (256) esp_psram: Found 16MB PSRAM device
+I (259) esp_psram: Speed: 80MHz
+I (262) cpu_start: Multicore app
+I (829) esp_psram: SPI SRAM memory test OK
+I (837) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (842) cpu_start: Pro cpu start user code
+I (842) cpu_start: cpu freq: 240000000 Hz
+I (844) app_init: Application information:
+I (848) app_init: Project name:     needle_demo
+I (852) app_init: App version:      7cf8a6f-dirty
+I (857) app_init: Compile time:     Sep 25 2026 15:54:41
+I (862) app_init: ELF file SHA256:  8b0e5a483...
+I (866) app_init: ESP-IDF:          v5.5.2
+I (870) efuse_init: Min chip rev:     v0.0
+I (874) efuse_init: Max chip rev:     v0.99 
+I (878) efuse_init: Chip rev:         v0.2
+I (881) heap_init: Initializing. RAM available for dynamic allocation:
+I (888) heap_init: At 3FCC9C38 len 0001FAD8 (126 KiB): RAM
+I (893) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (898) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (903) esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+I (910) spi_flash: detected chip: mxic (opi)
+I (914) spi_flash: flash io: opi_dtr
+I (917) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (924) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (930) main_task: Started on CPU0
+I (960) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (960) main_task: Calling app_main()
+EVT mapped model=10340948 bytes at 0x3d040000
+WARN drained 77 stale line(s) before the think toggle
+EG2 ok=0 found=0 bytes=0
+LSXCOST fixture_bad=0 cpwA=34 cpwB=25 ratioB_x100=73
+LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000
+PV8W selftest trials=128 bad=0 canaries=ok
+KRON1W selftest trials=64 bad=0
+LANEMIX selftest trials=64 bad=0
+LANEMIXROW selftest trials=64 bad=0
+LANEPRE selftest trials=64 bad=0
+KRON1W pool_align=0 kron1=1 lanemix=1 lanemix_row=1 lanepre=1
+EVT ready model=needle3 layers=5 d_model=768 vocab=8192 window=384 tools=3 psram_free=8177824 internal_free=9335
+EVT priming tokens=143 (one-time; every later request reuses this)
+EVT priming 8/143  6%  elapsed=1s  eta=14s
+EVT priming 16/143  11%  elapsed=1s  eta=12s
+EVT priming 24/143  17%  elapsed=2s  eta=11s
+EVT priming 32/143  22%  elapsed=3s  eta=10s
+EVT priming 40/143  28%  elapsed=4s  eta=9s
+EVT priming 48/143  34%  elapsed=4s  eta=8s
+EVT priming 56/143  39%  elapsed=5s  eta=8s
+EVT priming 64/143  45%  elapsed=6s  eta=7s
+EVT priming 72/143  50%  elapsed=6s  eta=6s
+EVT priming 80/143  56%  elapsed=7s  eta=6s
+EVT priming 88/143  62%  elapsed=8s  eta=5s
+EVT priming 96/143  67%  elapsed=8s  eta=4s
+EVT priming 104/143  73%  elapsed=9s  eta=3s
+EVT priming 112/143  78%  elapsed=10s  eta=3s
+EVT priming 120/143  84%  elapsed=11s  eta=2s
+EVT priming 128/143  90%  elapsed=11s  eta=1s
+EVT priming 136/143  95%  elapsed=12s  eta=1s
+EVT priming 143/143  100%  elapsed=13s  eta=0s
+EVT prefix tokens=143 ms=12747 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=24s
+EVT priming 16/213  8%  elapsed=2s  eta=20s
+EVT priming 24/213  11%  elapsed=2s  eta=18s
+EVT priming 32/213  15%  elapsed=3s  eta=17s
+EVT priming 40/213  19%  elapsed=4s  eta=16s
+EVT priming 48/213  23%  elapsed=4s  eta=15s
+EVT priming 56/213  26%  elapsed=5s  eta=14s
+EVT priming 64/213  30%  elapsed=6s  eta=13s
+EVT priming 72/213  34%  elapsed=6s  eta=13s
+EVT priming 80/213  38%  elapsed=7s  eta=12s
+EVT priming 88/213  41%  elapsed=8s  eta=11s
+EVT priming 96/213  45%  elapsed=9s  eta=10s
+EVT priming 104/213  49%  elapsed=9s  eta=10s
+EVT priming 112/213  53%  elapsed=10s  eta=9s
+EVT priming 120/213  56%  elapsed=11s  eta=8s
+EVT priming 128/213  60%  elapsed=11s  eta=8s
+EVT priming 136/213  64%  elapsed=12s  eta=7s
+EVT priming 144/213  68%  elapsed=13s  eta=6s
+EVT priming 152/213  71%  elapsed=14s  eta=5s
+EVT priming 160/213  75%  elapsed=14s  eta=5s
+EVT priming 168/213  79%  elapsed=15s  eta=4s
+EVT priming 176/213  83%  elapsed=16s  eta=3s
+EVT priming 184/213  86%  elapsed=17s  eta=3s
+EVT priming 192/213  90%  elapsed=17s  eta=2s
+EVT priming 200/213  94%  elapsed=18s  eta=1s
+EVT priming 208/213  98%  elapsed=19s  eta=0s
+EVT priming 213/213  100%  elapsed=20s  eta=0s
+EVT prefix tokens=213 ms=19504 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=585 ms_per_tok=97 tps=10.262
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":33784,"free_internal_bytes":8503,"free_psram_bytes":7447340,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+ATTACH_DEVICE path=/dev/needle-pi/board2-console real=/dev/needle-pi/board2-console rdev=166.3
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":33817,"free_internal_bytes":8503,"free_psram_bytes":7447340,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current5 sampling5 exact=1 prefill_tps=10.73 decode_tps=9.95 tokens=18
+CASE current5 timer60 exact=1 prefill_tps=10.74 decode_tps=9.9 tokens=14
+CASE current5 status_heap exact=1 prefill_tps=10.73 decode_tps=9.66 tokens=10
+CASE current5 batch exact=0 prefill_tps=10.71 decode_tps=10.08 tokens=24
+CASE current5 heldout_timer45 exact=1 prefill_tps=10.74 decode_tps=9.89 tokens=14
+WARN drained 2 stale line(s) before the think toggle
+EVT priming 32/143  22%  elapsed=3s  eta=10s
+EVT priming 40/143  28%  elapsed=4s  eta=9s
+EVT priming 48/143  34%  elapsed=4s  eta=8s
+EVT priming 56/143  39%  elapsed=5s  eta=8s
+EVT priming 64/143  45%  elapsed=6s  eta=7s
+EVT priming 72/143  50%  elapsed=6s  eta=6s
+EVT priming 80/143  56%  elapsed=7s  eta=6s
+EVT priming 88/143  62%  elapsed=8s  eta=5s
+EVT priming 96/143  67%  elapsed=8s  eta=4s
+EVT priming 104/143  73%  elapsed=9s  eta=3s
+EVT priming 112/143  78%  elapsed=10s  eta=3s
+EVT priming 120/143  84%  elapsed=11s  eta=2s
+EVT priming 128/143  90%  elapsed=11s  eta=1s
+EVT priming 136/143  95%  elapsed=12s  eta=1s
+EVT priming 143/143  100%  elapsed=13s  eta=0s
+EVT prefix tokens=143 ms=12747 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=24s
+EVT priming 16/213  8%  elapsed=2s  eta=20s
+EVT priming 24/213  11%  elapsed=2s  eta=18s
+EVT priming 32/213  15%  elapsed=3s  eta=17s
+EVT priming 40/213  19%  elapsed=4s  eta=16s
+EVT priming 48/213  23%  elapsed=4s  eta=15s
+EVT priming 56/213  26%  elapsed=5s  eta=14s
+EVT priming 64/213  30%  elapsed=6s  eta=13s
+EVT priming 72/213  34%  elapsed=6s  eta=13s
+EVT priming 80/213  38%  elapsed=7s  eta=12s
+EVT priming 88/213  41%  elapsed=8s  eta=11s
+EVT priming 96/213  45%  elapsed=9s  eta=10s
+EVT priming 104/213  49%  elapsed=9s  eta=10s
+EVT priming 112/213  53%  elapsed=10s  eta=9s
+EVT priming 120/213  56%  elapsed=11s  eta=8s
+EVT priming 128/213  60%  elapsed=11s  eta=8s
+EVT priming 136/213  64%  elapsed=12s  eta=7s
+EVT priming 144/213  68%  elapsed=13s  eta=6s
+EVT priming 152/213  71%  elapsed=14s  eta=5s
+EVT priming 160/213  75%  elapsed=14s  eta=5s
+EVT priming 168/213  79%  elapsed=15s  eta=4s
+EVT priming 176/213  83%  elapsed=16s  eta=3s
+EVT priming 184/213  86%  elapsed=17s  eta=3s
+EVT priming 192/213  90%  elapsed=17s  eta=2s
+EVT priming 200/213  94%  elapsed=18s  eta=1s
+EVT priming 208/213  98%  elapsed=19s  eta=0s
+EVT priming 213/213  100%  elapsed=20s  eta=0s
+EVT prefix tokens=213 ms=19504 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=585 ms_per_tok=97 tps=10.262
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":33784,"free_internal_bytes":8503,"free_psram_bytes":7447340,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current5 route_translate exact=1 prefill_tps=10.24 decode_tps=9.41 tokens=14
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":40073,"free_internal_bytes":8503,"free_psram_bytes":7429416,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current5 heldout_sampling15 exact=1 prefill_tps=10.73 decode_tps=10.02 tokens=19
+CASE current5 heldout_batch exact=1 prefill_tps=10.7 decode_tps=10.11 tokens=31
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":53363,"free_internal_bytes":8503,"free_psram_bytes":7429416,"sample_period_s":7,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"running","timer_remaining_ms":117870,"timer_fired_count":0}
+CASE current5 route_code exact=0 prefill_tps=10.21 decode_tps=9.37 tokens=13
+CASE current5 heldout_route_timer exact=1 prefill_tps=10.24 decode_tps=9.26 tokens=10
+CASE current5 heldout_route_research exact=1 prefill_tps=10.21 decode_tps=9.37 tokens=13
+WARN drained 2 stale line(s) before the think toggle
+EVT priming 32/143  22%  elapsed=3s  eta=10s
+EVT priming 40/143  28%  elapsed=4s  eta=9s
+EVT priming 48/143  34%  elapsed=4s  eta=8s
+EVT priming 56/143  39%  elapsed=5s  eta=8s
+EVT priming 64/143  45%  elapsed=6s  eta=7s
+EVT priming 72/143  50%  elapsed=6s  eta=6s
+EVT priming 80/143  56%  elapsed=7s  eta=6s
+EVT priming 88/143  62%  elapsed=8s  eta=5s
+EVT priming 96/143  67%  elapsed=8s  eta=4s
+EVT priming 104/143  73%  elapsed=9s  eta=3s
+EVT priming 112/143  78%  elapsed=10s  eta=3s
+EVT priming 120/143  84%  elapsed=11s  eta=2s
+EVT priming 128/143  90%  elapsed=11s  eta=1s
+EVT priming 136/143  95%  elapsed=12s  eta=1s
+EVT priming 143/143  100%  elapsed=13s  eta=0s
+EVT prefix tokens=143 ms=12747 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=24s
+EVT priming 16/213  8%  elapsed=2s  eta=20s
+EVT priming 24/213  11%  elapsed=2s  eta=18s
+EVT priming 32/213  15%  elapsed=3s  eta=17s
+EVT priming 40/213  19%  elapsed=4s  eta=16s
+EVT priming 48/213  23%  elapsed=4s  eta=15s
+EVT priming 56/213  26%  elapsed=5s  eta=14s
+EVT priming 64/213  30%  elapsed=6s  eta=13s
+EVT priming 72/213  34%  elapsed=6s  eta=13s
+EVT priming 80/213  38%  elapsed=7s  eta=12s
+EVT priming 88/213  41%  elapsed=8s  eta=11s
+EVT priming 96/213  45%  elapsed=9s  eta=10s
+EVT priming 104/213  49%  elapsed=9s  eta=10s
+EVT priming 112/213  53%  elapsed=10s  eta=9s
+EVT priming 120/213  56%  elapsed=11s  eta=8s
+EVT priming 128/213  60%  elapsed=11s  eta=8s
+EVT priming 136/213  64%  elapsed=12s  eta=7s
+EVT priming 144/213  68%  elapsed=13s  eta=6s
+EVT priming 152/213  71%  elapsed=14s  eta=5s
+EVT priming 160/213  75%  elapsed=14s  eta=5s
+EVT priming 168/213  79%  elapsed=15s  eta=4s
+EVT priming 176/213  83%  elapsed=16s  eta=3s
+EVT priming 184/213  86%  elapsed=17s  eta=3s
+EVT priming 192/213  90%  elapsed=17s  eta=2s
+EVT priming 200/213  94%  elapsed=18s  eta=1s
+EVT priming 208/213  98%  elapsed=19s  eta=0s
+EVT priming 213/213  100%  elapsed=20s  eta=0s
+EVT prefix tokens=213 ms=19504 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=585 ms_per_tok=97 tps=10.262
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":5,"model_bytes":10340948,"uptime_ms":33784,"free_internal_bytes":8503,"free_psram_bytes":7447340,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":33161,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current5 heldout_free_describe exact=0 prefill_tps=10.72 decode_tps=9.58 tokens=10
+COMPLETE current5 {'cases': 12, 'success': 12, 'scored_cases': 12, 'exact_calls': 9, 'decode_tps_mean': 9.7167, 'prefill_tps_mean': 10.5583, 'decode_timed_cases': 12, 'prefill_timed_cases': 12, 'decode_ms_mean': 1616.9167, 'prefill_ms_mean': 1455.0, 'latency_ms_mean': 3529.4667, 'decode_tokens_sum': 190, 'retried': 0}
+FLASH /opt/esp/python_env/idf5.5_py3.12_env/bin/python -m esptool --chip esp32s3 --port /dev/needle-pi/board2-flash --baud 921600 --before default_reset --after hard_reset write_flash --flash_mode dout --flash_size 32MB --flash_freq 80m 0x0 /workspace/esp32-needle-3/benchmarks/assets/bootloader-current.bin 0x8000 /workspace/esp32-needle-3/benchmarks/assets/partition-table.bin 0x10000 /workspace/esp32-needle-3/benchmarks/assets/needle-matrix.bin 0x210000 /workspace/esp32-needle-3/.runtime/benchmarks/models/depth-07.cact
+esptool.py v4.11.dev1
+Serial port /dev/needle-pi/board2-flash
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 16MB (AP_1v8)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: 90:e5:b1:d1:be:b8
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 921600
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x00010000 to 0x0005cfff...
+Flash will be erased from 0x00210000 to 0x010ebfff...
+SHA digest in image updated
+Compressed 21520 bytes to 13703...
+Writing at 0x00000000... (100 %)
+Wrote 21520 bytes (13703 compressed) at 0x00000000 in 0.3 seconds (effective 589.8 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 120...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (120 compressed) at 0x00008000 in 0.0 seconds (effective 650.1 kbit/s)...
+Hash of data verified.
+Compressed 312880 bytes to 188970...
+Writing at 0x00010000... (8 %)
+Writing at 0x0001bcdc... (16 %)
+Writing at 0x00023e95... (25 %)
+Writing at 0x000299ed... (33 %)
+Writing at 0x0002ee78... (41 %)
+Writing at 0x00034042... (50 %)
+Writing at 0x00039595... (58 %)
+Writing at 0x0003fdfc... (66 %)
+Writing at 0x00047ec6... (75 %)
+Writing at 0x0004d5c9... (83 %)
+Writing at 0x00053345... (91 %)
+Writing at 0x0005913d... (100 %)
+Wrote 312880 bytes (188970 compressed) at 0x00010000 in 2.8 seconds (effective 889.7 kbit/s)...
+Hash of data verified.
+Compressed 15577364 bytes to 14706902...
+Writing at 0x00210000... (0 %)
+Writing at 0x0021a4a7... (0 %)
+Writing at 0x00223aba... (0 %)
+Writing at 0x0022806d... (0 %)
+Writing at 0x0022cc99... (0 %)
+Writing at 0x00231305... (0 %)
+Writing at 0x00235662... (0 %)
+Writing at 0x002399ce... (0 %)
+Writing at 0x0023dd3f... (1 %)
+Writing at 0x002420b0... (1 %)
+Writing at 0x002463b3... (1 %)
+Writing at 0x0024a71a... (1 %)
+Writing at 0x0024ea8b... (1 %)
+Writing at 0x00252dee... (1 %)
+Writing at 0x0025715b... (1 %)
+Writing at 0x0025b4c0... (1 %)
+Writing at 0x0025f82e... (1 %)
+Writing at 0x00263b90... (2 %)
+Writing at 0x00267ef4... (2 %)
+Writing at 0x0026c24e... (2 %)
+Writing at 0x002705bd... (2 %)
+Writing at 0x00274915... (2 %)
+Writing at 0x00278c7a... (2 %)
+Writing at 0x0027cfe8... (2 %)
+Writing at 0x00281346... (2 %)
+Writing at 0x002856aa... (2 %)
+Writing at 0x00289a08... (3 %)
+Writing at 0x0028dd6e... (3 %)
+Writing at 0x002920d3... (3 %)
+Writing at 0x002963dc... (3 %)
+Writing at 0x0029a748... (3 %)
+Writing at 0x0029eaaf... (3 %)
+Writing at 0x002a2e1a... (3 %)
+Writing at 0x002a7183... (3 %)
+Writing at 0x002ab4eb... (3 %)
+Writing at 0x002af859... (4 %)
+Writing at 0x002b3bb1... (4 %)
+Writing at 0x002b7f13... (4 %)
+Writing at 0x002bc27a... (4 %)
+Writing at 0x002c05ef... (4 %)
+Writing at 0x002c4957... (4 %)
+Writing at 0x002c8cbe... (4 %)
+Writing at 0x002cd01a... (4 %)
+Writing at 0x002d1380... (4 %)
+Writing at 0x002d56eb... (5 %)
+Writing at 0x002d9a4a... (5 %)
+Writing at 0x002dddb0... (5 %)
+Writing at 0x002e210b... (5 %)
+Writing at 0x002e6474... (5 %)
+Writing at 0x002ea775... (5 %)
+Writing at 0x002eead8... (5 %)
+Writing at 0x002f2e3e... (5 %)
+Writing at 0x002f71a6... (5 %)
+Writing at 0x002fb519... (6 %)
+Writing at 0x002ff87a... (6 %)
+Writing at 0x00303beb... (6 %)
+Writing at 0x00307f54... (6 %)
+Writing at 0x0030c2c5... (6 %)
+Writing at 0x00310630... (6 %)
+Writing at 0x00314996... (6 %)
+Writing at 0x00318d03... (6 %)
+Writing at 0x0031d05e... (6 %)
+Writing at 0x003213d3... (7 %)
+Writing at 0x00325739... (7 %)
+Writing at 0x00329aa2... (7 %)
+Writing at 0x0032ddff... (7 %)
+Writing at 0x0033216b... (7 %)
+Writing at 0x003364d9... (7 %)
+Writing at 0x0033a843... (7 %)
+Writing at 0x0033eb3b... (7 %)
+Writing at 0x00342ea7... (7 %)
+Writing at 0x00347206... (8 %)
+Writing at 0x0034b569... (8 %)
+Writing at 0x0034f8d0... (8 %)
+Writing at 0x00353c2f... (8 %)
+Writing at 0x00357f94... (8 %)
+Writing at 0x0035c2ff... (8 %)
+Writing at 0x0036065e... (8 %)
+Writing at 0x003649cc... (8 %)
+Writing at 0x00368d39... (8 %)
+Writing at 0x0036d0aa... (9 %)
+Writing at 0x00371416... (9 %)
+Writing at 0x0037577b... (9 %)
+Writing at 0x00379ae6... (9 %)
+Writing at 0x0037de53... (9 %)
+Writing at 0x003821af... (9 %)
+Writing at 0x00386510... (9 %)
+Writing at 0x0038a877... (9 %)
+Writing at 0x0038ebe0... (9 %)
+Writing at 0x00392ee3... (10 %)
+Writing at 0x00397240... (10 %)
+Writing at 0x0039b5a3... (10 %)
+Writing at 0x0039f90c... (10 %)
+Writing at 0x003a3c71... (10 %)
+Writing at 0x003a7fdf... (10 %)
+Writing at 0x003ac351... (10 %)
+Writing at 0x003b06bb... (10 %)
+Writing at 0x003b4a24... (10 %)
+Writing at 0x003b8d87... (11 %)
+Writing at 0x003bd0f2... (11 %)
+Writing at 0x003c144d... (11 %)
+Writing at 0x003c57b8... (11 %)
+Writing at 0x003c9b18... (11 %)
+Writing at 0x003cde7d... (11 %)
+Writing at 0x003d21da... (11 %)
+Writing at 0x003d654b... (11 %)
+Writing at 0x003da8ac... (11 %)
+Writing at 0x003dec15... (12 %)
+Writing at 0x003e2f1f... (12 %)
+Writing at 0x003e7282... (12 %)
+Writing at 0x003eb5ea... (12 %)
+Writing at 0x003ef94a... (12 %)
+Writing at 0x003f3cae... (12 %)
+Writing at 0x003f8016... (12 %)
+Writing at 0x003fc383... (12 %)
+Writing at 0x004006f1... (12 %)
+Writing at 0x00404a5b... (13 %)
+Writing at 0x00408dc3... (13 %)
+Writing at 0x0040d125... (13 %)
+Writing at 0x00411484... (13 %)
+Writing at 0x004157da... (13 %)
+Writing at 0x00419b3a... (13 %)
+Writing at 0x0041deab... (13 %)
+Writing at 0x00422205... (13 %)
+Writing at 0x00426572... (13 %)
+Writing at 0x0042a8d5... (14 %)
+Writing at 0x0042ec36... (14 %)
+Writing at 0x00432f9e... (14 %)
+Writing at 0x00437290... (14 %)
+Writing at 0x0043b5fc... (14 %)
+Writing at 0x0043f962... (14 %)
+Writing at 0x00443cca... (14 %)
+Writing at 0x00448037... (14 %)
+Writing at 0x0044c39a... (14 %)
+Writing at 0x0045070f... (15 %)
+Writing at 0x00454a7b... (15 %)
+Writing at 0x00458de1... (15 %)
+Writing at 0x0045d14f... (15 %)
+Writing at 0x004614af... (15 %)
+Writing at 0x00465816... (15 %)
+Writing at 0x00469b81... (15 %)
+Writing at 0x0046def0... (15 %)
+Writing at 0x00472253... (15 %)
+Writing at 0x004765b4... (16 %)
+Writing at 0x0047a92d... (16 %)
+Writing at 0x0047ec90... (16 %)
+Writing at 0x00482ff3... (16 %)
+Writing at 0x00487361... (16 %)
+Writing at 0x0048b669... (16 %)
+Writing at 0x0048f9d0... (16 %)
+Writing at 0x00493d35... (16 %)
+Writing at 0x0049809c... (16 %)
+Writing at 0x0049c3fc... (17 %)
+Writing at 0x004a0764... (17 %)
+Writing at 0x004a4ad0... (17 %)
+Writing at 0x004a8e36... (17 %)
+Writing at 0x004ad19f... (17 %)
+Writing at 0x004b1516... (17 %)
+Writing at 0x004b5879... (17 %)
+Writing at 0x004b9bdd... (17 %)
+Writing at 0x004bdf4a... (17 %)
+Writing at 0x004c22a4... (18 %)
+Writing at 0x004c6610... (18 %)
+Writing at 0x004ca984... (18 %)
+Writing at 0x004cecf1... (18 %)
+Writing at 0x004d3059... (18 %)
+Writing at 0x004d73bd... (18 %)
+Writing at 0x004db6fb... (18 %)
+Writing at 0x004dfa33... (18 %)
+Writing at 0x004e3d99... (18 %)
+Writing at 0x004e8104... (19 %)
+Writing at 0x004ec46e... (19 %)
+Writing at 0x004f07da... (19 %)
+Writing at 0x004f4b3f... (19 %)
+Writing at 0x004f8ea9... (19 %)
+Writing at 0x004fd210... (19 %)
+Writing at 0x0050157b... (19 %)
+Writing at 0x005058e4... (19 %)
+Writing at 0x00509c47... (19 %)
+Writing at 0x0050dfad... (20 %)
+Writing at 0x0051220b... (20 %)
+Writing at 0x005176e3... (20 %)
+Writing at 0x0051d040... (20 %)
+Writing at 0x00522a70... (20 %)
+Writing at 0x0052845d... (20 %)
+Writing at 0x0052cff9... (20 %)
+Writing at 0x00531231... (20 %)
+Writing at 0x00535474... (20 %)
+Writing at 0x0053968e... (21 %)
+Writing at 0x0053d8c5... (21 %)
+Writing at 0x00541afd... (21 %)
+Writing at 0x00545bfa... (21 %)
+Writing at 0x0054a1a8... (21 %)
+Writing at 0x0054e3ba... (21 %)
+Writing at 0x00552586... (21 %)
+Writing at 0x005566f5... (21 %)
+Writing at 0x0055a920... (21 %)
+Writing at 0x0055eb51... (22 %)
+Writing at 0x00562d96... (22 %)
+Writing at 0x00566fbc... (22 %)
+Writing at 0x0056b1f5... (22 %)
+Writing at 0x0056f422... (22 %)
+Writing at 0x0057365c... (22 %)
+Writing at 0x0057788f... (22 %)
+Writing at 0x0057bfcd... (22 %)
+Writing at 0x005801e3... (22 %)
+Writing at 0x00584425... (23 %)
+Writing at 0x00588607... (23 %)
+Writing at 0x0058c852... (23 %)
+Writing at 0x00590a7a... (23 %)
+Writing at 0x00594caf... (23 %)
+Writing at 0x00598ef3... (23 %)
+Writing at 0x0059d095... (23 %)
+Writing at 0x005a1c2c... (23 %)
+Writing at 0x005a672f... (23 %)
+Writing at 0x005aabd5... (24 %)
+Writing at 0x005af06a... (24 %)
+Writing at 0x005b3292... (24 %)
+Writing at 0x005b74cc... (24 %)
+Writing at 0x005bb6f1... (24 %)
+Writing at 0x005bf928... (24 %)
+Writing at 0x005c3b67... (24 %)
+Writing at 0x005c7d13... (24 %)
+Writing at 0x005cc1b1... (24 %)
+Writing at 0x005d03bf... (25 %)
+Writing at 0x005d45ac... (25 %)
+Writing at 0x005d8757... (25 %)
+Writing at 0x005dc95a... (25 %)
+Writing at 0x005e0b8c... (25 %)
+Writing at 0x005e4dbb... (25 %)
+Writing at 0x005e8fe6... (25 %)
+Writing at 0x005ed23a... (25 %)
+Writing at 0x005f1478... (25 %)
+Writing at 0x005f56a8... (26 %)
+Writing at 0x005f98e9... (26 %)
+Writing at 0x005fe14f... (26 %)
+Writing at 0x006022b8... (26 %)
+Writing at 0x00606500... (26 %)
+Writing at 0x0060a725... (26 %)
+Writing at 0x0060e962... (26 %)
+Writing at 0x00612b9b... (26 %)
+Writing at 0x00616dcf... (26 %)
+Writing at 0x0061b008... (27 %)
+Writing at 0x0061f245... (27 %)
+Writing at 0x00623a7c... (27 %)
+Writing at 0x006285fd... (27 %)
+Writing at 0x0062cc19... (27 %)
+Writing at 0x006310e5... (27 %)
+Writing at 0x00635331... (27 %)
+Writing at 0x00639568... (27 %)
+Writing at 0x0063d7a2... (27 %)
+Writing at 0x006419e8... (28 %)
+Writing at 0x00645c43... (28 %)
+Writing at 0x00649e69... (28 %)
+Writing at 0x0064e327... (28 %)
+Writing at 0x006524e2... (28 %)
+Writing at 0x006566e3... (28 %)
+Writing at 0x0065a8b0... (28 %)
+Writing at 0x0065ea75... (28 %)
+Writing at 0x00662cb3... (28 %)
+Writing at 0x00666eed... (29 %)
+Writing at 0x0066b10a... (29 %)
+Writing at 0x0066f351... (29 %)
+Writing at 0x0067359d... (29 %)
+Writing at 0x006777dd... (29 %)
+Writing at 0x0067ba26... (29 %)
+Writing at 0x0068028e... (29 %)
+Writing at 0x00684507... (29 %)
+Writing at 0x00688745... (29 %)
+Writing at 0x0068c979... (30 %)
+Writing at 0x00690bc9... (30 %)
+Writing at 0x00694e21... (30 %)
+Writing at 0x0069904b... (30 %)
+Writing at 0x0069d276... (30 %)
+Writing at 0x006a14ad... (30 %)
+Writing at 0x006a58bc... (30 %)
+Writing at 0x006aa6f2... (30 %)
+Writing at 0x006aef02... (30 %)
+Writing at 0x006b336d... (31 %)
+Writing at 0x006b76df... (31 %)
+Writing at 0x006bb908... (31 %)
+Writing at 0x006bfb3a... (31 %)
+Writing at 0x006c3d79... (31 %)
+Writing at 0x006c7f94... (31 %)
+Writing at 0x006cc1d2... (31 %)
+Writing at 0x006d04e3... (31 %)
+Writing at 0x006d4815... (31 %)
+Writing at 0x006d8a3f... (32 %)
+Writing at 0x006dcc03... (32 %)
+Writing at 0x006e0d21... (32 %)
+Writing at 0x006e4f5f... (32 %)
+Writing at 0x006e9189... (32 %)
+Writing at 0x006ed3b9... (32 %)
+Writing at 0x006f15de... (32 %)
+Writing at 0x006f5824... (32 %)
+Writing at 0x006f9a6b... (32 %)
+Writing at 0x006fdc86... (33 %)
+Writing at 0x00701fae... (33 %)
+Writing at 0x0070663f... (33 %)
+Writing at 0x0070a87c... (33 %)
+Writing at 0x0070eab2... (33 %)
+Writing at 0x00712cf4... (33 %)
+Writing at 0x00716f40... (33 %)
+Writing at 0x0071b19c... (33 %)
+Writing at 0x0071f3d7... (33 %)
+Writing at 0x00723628... (34 %)
+Writing at 0x0072773e... (34 %)
+Writing at 0x0072c622... (34 %)
+Writing at 0x00731052... (34 %)
+Writing at 0x007354d0... (34 %)
+Writing at 0x00739907... (34 %)
+Writing at 0x0073db37... (34 %)
+Writing at 0x00741d84... (34 %)
+Writing at 0x00745fb0... (34 %)
+Writing at 0x0074a1d9... (35 %)
+Writing at 0x0074e421... (35 %)
+Writing at 0x0075259c... (35 %)
+Writing at 0x00756abe... (35 %)
+Writing at 0x0075acc4... (35 %)
+Writing at 0x0075ee68... (35 %)
+Writing at 0x0076304d... (35 %)
+Writing at 0x00767261... (35 %)
+Writing at 0x0076b4ad... (35 %)
+Writing at 0x0076f6df... (36 %)
+Writing at 0x00773925... (36 %)
+Writing at 0x00777b80... (36 %)
+Writing at 0x0077bdcb... (36 %)
+Writing at 0x0078000b... (36 %)
+Writing at 0x007841e1... (36 %)
+Writing at 0x007889af... (36 %)
+Writing at 0x0078cbdf... (36 %)
+Writing at 0x00790dbb... (36 %)
+Writing at 0x00794ffa... (37 %)
+Writing at 0x00799239... (37 %)
+Writing at 0x0079d47b... (37 %)
+Writing at 0x007a16b0... (37 %)
+Writing at 0x007a58e3... (37 %)
+Writing at 0x007a9a9c... (37 %)
+Writing at 0x007ae5bc... (37 %)
+Writing at 0x007b3288... (37 %)
+Writing at 0x007b7790... (37 %)
+Writing at 0x007bbd63... (38 %)
+Writing at 0x007bff60... (38 %)
+Writing at 0x007c41a2... (38 %)
+Writing at 0x007c83ec... (38 %)
+Writing at 0x007cc629... (38 %)
+Writing at 0x007d086d... (38 %)
+Writing at 0x007d4a3d... (38 %)
+Writing at 0x007d8eed... (38 %)
+Writing at 0x007dd0d5... (38 %)
+Writing at 0x007e12ad... (39 %)
+Writing at 0x007e5452... (39 %)
+Writing at 0x007e9654... (39 %)
+Writing at 0x007ed883... (39 %)
+Writing at 0x007f1abe... (39 %)
+Writing at 0x007f5ce5... (39 %)
+Writing at 0x007f9f2b... (39 %)
+Writing at 0x007fe177... (39 %)
+Writing at 0x008023c0... (39 %)
+Writing at 0x00806613... (40 %)
+Writing at 0x0080adf7... (40 %)
+Writing at 0x0080efbe... (40 %)
+Writing at 0x00813206... (40 %)
+Writing at 0x00817431... (40 %)
+Writing at 0x0081b66e... (40 %)
+Writing at 0x0081f8b2... (40 %)
+Writing at 0x00823af3... (40 %)
+Writing at 0x00827d4a... (40 %)
+Writing at 0x0082bf98... (41 %)
+Writing at 0x008306b3... (41 %)
+Writing at 0x008352a9... (41 %)
+Writing at 0x00839923... (41 %)
+Writing at 0x0083ddfb... (41 %)
+Writing at 0x0084205e... (41 %)
+Writing at 0x00846291... (41 %)
+Writing at 0x0084a4cf... (41 %)
+Writing at 0x0084e703... (41 %)
+Writing at 0x00852934... (42 %)
+Writing at 0x00856b58... (42 %)
+Writing at 0x0085afdd... (42 %)
+Writing at 0x0085f160... (42 %)
+Writing at 0x0086336a... (42 %)
+Writing at 0x0086758c... (42 %)
+Writing at 0x0086b71c... (42 %)
+Writing at 0x0086f957... (42 %)
+Writing at 0x00873ba2... (42 %)
+Writing at 0x00877df1... (43 %)
+Writing at 0x0087c04a... (43 %)
+Writing at 0x0088028d... (43 %)
+Writing at 0x008844ec... (43 %)
+Writing at 0x0088872b... (43 %)
+Writing at 0x0088cd27... (43 %)
+Writing at 0x008910a7... (43 %)
+Writing at 0x008952f0... (43 %)
+Writing at 0x0089954a... (43 %)
+Writing at 0x0089d79c... (44 %)
+Writing at 0x008a19ec... (44 %)
+Writing at 0x008a5c38... (44 %)
+Writing at 0x008a9e82... (44 %)
+Writing at 0x008ae0db... (44 %)
+Writing at 0x008b23b3... (44 %)
+Writing at 0x008b72a0... (44 %)
+Writing at 0x008bbaea... (44 %)
+Writing at 0x008bff4e... (44 %)
+Writing at 0x008c4fe2... (45 %)
+Writing at 0x008c932d... (45 %)
+Writing at 0x008ce5d5... (45 %)
+Writing at 0x008d2937... (45 %)
+Writing at 0x008d6cd1... (45 %)
+Writing at 0x008dede1... (45 %)
+Writing at 0x008e3148... (45 %)
+Writing at 0x008e74b1... (45 %)
+Writing at 0x008eb81f... (45 %)
+Writing at 0x008efb87... (46 %)
+Writing at 0x008f3eec... (46 %)
+Writing at 0x008f8252... (46 %)
+Writing at 0x008fc5bd... (46 %)
+Writing at 0x0090077c... (46 %)
+Writing at 0x009057e5... (46 %)
+Writing at 0x00909a05... (46 %)
+Writing at 0x0090dc45... (46 %)
+Writing at 0x00911e86... (46 %)
+Writing at 0x009160b7... (47 %)
+Writing at 0x0091a2d6... (47 %)
+Writing at 0x0091e506... (47 %)
+Writing at 0x0092273e... (47 %)
+Writing at 0x00926973... (47 %)
+Writing at 0x0092ab95... (47 %)
+Writing at 0x0092edc1... (47 %)
+Writing at 0x00932fed... (47 %)
+Writing at 0x00937202... (47 %)
+Writing at 0x0093b442... (48 %)
+Writing at 0x0093f685... (48 %)
+Writing at 0x009438a7... (48 %)
+Writing at 0x00947ace... (48 %)
+Writing at 0x0094bd0e... (48 %)
+Writing at 0x0094ff52... (48 %)
+Writing at 0x00954191... (48 %)
+Writing at 0x0095836f... (48 %)
+Writing at 0x0095c599... (48 %)
+Writing at 0x009607da... (49 %)
+Writing at 0x00964a10... (49 %)
+Writing at 0x00968c32... (49 %)
+Writing at 0x0096ce59... (49 %)
+Writing at 0x00971099... (49 %)
+Writing at 0x009752dd... (49 %)
+Writing at 0x00979517... (49 %)
+Writing at 0x0097d756... (49 %)
+Writing at 0x0098197d... (50 %)
+Writing at 0x00985ba5... (50 %)
+Writing at 0x00989de2... (50 %)
+Writing at 0x0098e006... (50 %)
+Writing at 0x00992239... (50 %)
+Writing at 0x00996475... (50 %)
+Writing at 0x0099a68f... (50 %)
+Writing at 0x0099e8b6... (50 %)
+Writing at 0x009a2ae7... (50 %)
+Writing at 0x009a6d1a... (51 %)
+Writing at 0x009aaf42... (51 %)
+Writing at 0x009af178... (51 %)
+Writing at 0x009b33a7... (51 %)
+Writing at 0x009b75d1... (51 %)
+Writing at 0x009bb807... (51 %)
+Writing at 0x009bfa39... (51 %)
+Writing at 0x009c3c6f... (51 %)
+Writing at 0x009c7e9e... (51 %)
+Writing at 0x009cc0c0... (52 %)
+Writing at 0x009d02e4... (52 %)
+Writing at 0x009d4521... (52 %)
+Writing at 0x009d872c... (52 %)
+Writing at 0x009dc92f... (52 %)
+Writing at 0x009e0b5d... (52 %)
+Writing at 0x009e4d83... (52 %)
+Writing at 0x009e8fc7... (52 %)
+Writing at 0x009ed1f5... (52 %)
+Writing at 0x009f140a... (53 %)
+Writing at 0x009f5645... (53 %)
+Writing at 0x009f986e... (53 %)
+Writing at 0x009fdaa2... (53 %)
+Writing at 0x00a01cc2... (53 %)
+Writing at 0x00a05f01... (53 %)
+Writing at 0x00a0a12c... (53 %)
+Writing at 0x00a0e369... (53 %)
+Writing at 0x00a1259b... (53 %)
+Writing at 0x00a167e6... (54 %)
+Writing at 0x00a1aa21... (54 %)
+Writing at 0x00a1ec43... (54 %)
+Writing at 0x00a22e82... (54 %)
+Writing at 0x00a270d7... (54 %)
+Writing at 0x00a2b301... (54 %)
+Writing at 0x00a2f554... (54 %)
+Writing at 0x00a33777... (54 %)
+Writing at 0x00a379a9... (54 %)
+Writing at 0x00a3bbe5... (55 %)
+Writing at 0x00a3fdfa... (55 %)
+Writing at 0x00a44038... (55 %)
+Writing at 0x00a48265... (55 %)
+Writing at 0x00a4c4b4... (55 %)
+Writing at 0x00a506da... (55 %)
+Writing at 0x00a54918... (55 %)
+Writing at 0x00a58afa... (55 %)
+Writing at 0x00a5cd01... (55 %)
+Writing at 0x00a60f24... (56 %)
+Writing at 0x00a6515a... (56 %)
+Writing at 0x00a69397... (56 %)
+Writing at 0x00a6d5de... (56 %)
+Writing at 0x00a71812... (56 %)
+Writing at 0x00a75a4b... (56 %)
+Writing at 0x00a79c82... (56 %)
+Writing at 0x00a7deaa... (56 %)
+Writing at 0x00a820d5... (56 %)
+Writing at 0x00a862f6... (57 %)
+Writing at 0x00a8a545... (57 %)
+Writing at 0x00a8e76c... (57 %)
+Writing at 0x00a929a1... (57 %)
+Writing at 0x00a96bbe... (57 %)
+Writing at 0x00a9ae05... (57 %)
+Writing at 0x00a9f042... (57 %)
+Writing at 0x00aa326c... (57 %)
+Writing at 0x00aa74b6... (57 %)
+Writing at 0x00aab6da... (58 %)
+Writing at 0x00aaf90d... (58 %)
+Writing at 0x00ab3b31... (58 %)
+Writing at 0x00ab7d5e... (58 %)
+Writing at 0x00abbf9b... (58 %)
+Writing at 0x00ac01d7... (58 %)
+Writing at 0x00ac43f6... (58 %)
+Writing at 0x00ac862d... (58 %)
+Writing at 0x00acc873... (58 %)
+Writing at 0x00ad0ab4... (59 %)
+Writing at 0x00ad4ce8... (59 %)
+Writing at 0x00ad8eb8... (59 %)
+Writing at 0x00add0e5... (59 %)
+Writing at 0x00ae1344... (59 %)
+Writing at 0x00ae558b... (59 %)
+Writing at 0x00ae97ea... (59 %)
+Writing at 0x00aeda27... (59 %)
+Writing at 0x00af1c6e... (59 %)
+Writing at 0x00af5ea2... (60 %)
+Writing at 0x00afa0eb... (60 %)
+Writing at 0x00afe333... (60 %)
+Writing at 0x00b02574... (60 %)
+Writing at 0x00b067a6... (60 %)
+Writing at 0x00b0a9e1... (60 %)
+Writing at 0x00b0ebff... (60 %)
+Writing at 0x00b12e3e... (60 %)
+Writing at 0x00b17066... (60 %)
+Writing at 0x00b1b2a8... (61 %)
+Writing at 0x00b1f4ec... (61 %)
+Writing at 0x00b2373d... (61 %)
+Writing at 0x00b27965... (61 %)
+Writing at 0x00b2bbaf... (61 %)
+Writing at 0x00b2fe06... (61 %)
+Writing at 0x00b34042... (61 %)
+Writing at 0x00b38284... (61 %)
+Writing at 0x00b3c4c2... (61 %)
+Writing at 0x00b40708... (62 %)
+Writing at 0x00b4493c... (62 %)
+Writing at 0x00b48b73... (62 %)
+Writing at 0x00b4cd98... (62 %)
+Writing at 0x00b50fe2... (62 %)
+Writing at 0x00b5521e... (62 %)
+Writing at 0x00b593fc... (62 %)
+Writing at 0x00b5d634... (62 %)
+Writing at 0x00b61860... (62 %)
+Writing at 0x00b65a9b... (63 %)
+Writing at 0x00b69cc8... (63 %)
+Writing at 0x00b6df02... (63 %)
+Writing at 0x00b72165... (63 %)
+Writing at 0x00b7638b... (63 %)
+Writing at 0x00b7a5c3... (63 %)
+Writing at 0x00b7e7fe... (63 %)
+Writing at 0x00b82a2f... (63 %)
+Writing at 0x00b86c75... (63 %)
+Writing at 0x00b8aeae... (64 %)
+Writing at 0x00b8f0ce... (64 %)
+Writing at 0x00b932f5... (64 %)
+Writing at 0x00b97520... (64 %)
+Writing at 0x00b9b762... (64 %)
+Writing at 0x00b9f980... (64 %)
+Writing at 0x00ba3bce... (64 %)
+Writing at 0x00ba7e28... (64 %)
+Writing at 0x00bac060... (64 %)
+Writing at 0x00bb0292... (65 %)
+Writing at 0x00bb44c2... (65 %)
+Writing at 0x00bb86f3... (65 %)
+Writing at 0x00bbc91a... (65 %)
+Writing at 0x00bc0b58... (65 %)
+Writing at 0x00bc4d8d... (65 %)
+Writing at 0x00bc8fc8... (65 %)
+Writing at 0x00bcd200... (65 %)
+Writing at 0x00bd1431... (65 %)
+Writing at 0x00bd5604... (66 %)
+Writing at 0x00bd982d... (66 %)
+Writing at 0x00bdda6b... (66 %)
+Writing at 0x00be1cac... (66 %)
+Writing at 0x00be5ef0... (66 %)
+Writing at 0x00bea12b... (66 %)
+Writing at 0x00bee350... (66 %)
+Writing at 0x00bf2588... (66 %)
+Writing at 0x00bf67cb... (66 %)
+Writing at 0x00bfa9fd... (67 %)
+Writing at 0x00bfec33... (67 %)
+Writing at 0x00c02e68... (67 %)
+Writing at 0x00c070a3... (67 %)
+Writing at 0x00c0b2c5... (67 %)
+Writing at 0x00c0f4f7... (67 %)
+Writing at 0x00c13732... (67 %)
+Writing at 0x00c17970... (67 %)
+Writing at 0x00c1bb9f... (67 %)
+Writing at 0x00c1fde6... (68 %)
+Writing at 0x00c24017... (68 %)
+Writing at 0x00c2823c... (68 %)
+Writing at 0x00c2c464... (68 %)
+Writing at 0x00c306a9... (68 %)
+Writing at 0x00c348e2... (68 %)
+Writing at 0x00c38b15... (68 %)
+Writing at 0x00c3cd48... (68 %)
+Writing at 0x00c40f62... (68 %)
+Writing at 0x00c45191... (69 %)
+Writing at 0x00c493bd... (69 %)
+Writing at 0x00c4d5ec... (69 %)
+Writing at 0x00c51823... (69 %)
+Writing at 0x00c55a0a... (69 %)
+Writing at 0x00c59c5b... (69 %)
+Writing at 0x00c5de94... (69 %)
+Writing at 0x00c620af... (69 %)
+Writing at 0x00c667ba... (69 %)
+Writing at 0x00c6b899... (70 %)
+Writing at 0x00c709a1... (70 %)
+Writing at 0x00c75aad... (70 %)
+Writing at 0x00c7abbc... (70 %)
+Writing at 0x00c7fd1d... (70 %)
+Writing at 0x00c85392... (70 %)
+Writing at 0x00c8a9b8... (70 %)
+Writing at 0x00c8ffd8... (70 %)
+Writing at 0x00c955f1... (70 %)
+Writing at 0x00c9a8ee... (71 %)
+Writing at 0x00c9eb0d... (71 %)
+Writing at 0x00ca2d4a... (71 %)
+Writing at 0x00ca6f88... (71 %)
+Writing at 0x00cab1c1... (71 %)
+Writing at 0x00caf3fd... (71 %)
+Writing at 0x00cb3624... (71 %)
+Writing at 0x00cb7856... (71 %)
+Writing at 0x00cbba79... (71 %)
+Writing at 0x00cc027a... (72 %)
+Writing at 0x00cc440b... (72 %)
+Writing at 0x00cc8642... (72 %)
+Writing at 0x00ccc85d... (72 %)
+Writing at 0x00cd0a9f... (72 %)
+Writing at 0x00cd4cca... (72 %)
+Writing at 0x00cd8f10... (72 %)
+Writing at 0x00cdd14e... (72 %)
+Writing at 0x00ce138b... (72 %)
+Writing at 0x00ce57af... (73 %)
+Writing at 0x00ce9cdb... (73 %)
+Writing at 0x00cedef8... (73 %)
+Writing at 0x00cf212a... (73 %)
+Writing at 0x00cf636a... (73 %)
+Writing at 0x00cfa598... (73 %)
+Writing at 0x00cfe7d4... (73 %)
+Writing at 0x00d02a0c... (73 %)
+Writing at 0x00d06c36... (73 %)
+Writing at 0x00d0ae5b... (74 %)
+Writing at 0x00d0f094... (74 %)
+Writing at 0x00d132dc... (74 %)
+Writing at 0x00d1750e... (74 %)
+Writing at 0x00d1b73f... (74 %)
+Writing at 0x00d1f914... (74 %)
+Writing at 0x00d23b54... (74 %)
+Writing at 0x00d27d66... (74 %)
+Writing at 0x00d2bf98... (74 %)
+Writing at 0x00d301d2... (75 %)
+Writing at 0x00d343f5... (75 %)
+Writing at 0x00d38627... (75 %)
+Writing at 0x00d3c850... (75 %)
+Writing at 0x00d40a7e... (75 %)
+Writing at 0x00d44ca8... (75 %)
+Writing at 0x00d48ec0... (75 %)
+Writing at 0x00d4d0df... (75 %)
+Writing at 0x00d5130f... (75 %)
+Writing at 0x00d55519... (76 %)
+Writing at 0x00d59734... (76 %)
+Writing at 0x00d5d96a... (76 %)
+Writing at 0x00d61b99... (76 %)
+Writing at 0x00d65dc8... (76 %)
+Writing at 0x00d69fff... (76 %)
+Writing at 0x00d6e227... (76 %)
+Writing at 0x00d72463... (76 %)
+Writing at 0x00d76695... (76 %)
+Writing at 0x00d7a8cd... (77 %)
+Writing at 0x00d7eb07... (77 %)
+Writing at 0x00d82d39... (77 %)
+Writing at 0x00d86f63... (77 %)
+Writing at 0x00d8b18b... (77 %)
+Writing at 0x00d8f3c8... (77 %)
+Writing at 0x00d9360f... (77 %)
+Writing at 0x00d97841... (77 %)
+Writing at 0x00d9ba7d... (77 %)
+Writing at 0x00d9fc34... (78 %)
+Writing at 0x00da3e64... (78 %)
+Writing at 0x00da8095... (78 %)
+Writing at 0x00dac2d4... (78 %)
+Writing at 0x00db0505... (78 %)
+Writing at 0x00db473d... (78 %)
+Writing at 0x00db8967... (78 %)
+Writing at 0x00dbcb8a... (78 %)
+Writing at 0x00dc0db2... (78 %)
+Writing at 0x00dc4fd4... (79 %)
+Writing at 0x00dc9218... (79 %)
+Writing at 0x00dcd44b... (79 %)
+Writing at 0x00dd1682... (79 %)
+Writing at 0x00dd58cd... (79 %)
+Writing at 0x00dd9b15... (79 %)
+Writing at 0x00dddd4d... (79 %)
+Writing at 0x00de1f7a... (79 %)
+Writing at 0x00de61ac... (79 %)
+Writing at 0x00dea3e2... (80 %)
+Writing at 0x00dee61d... (80 %)
+Writing at 0x00df2848... (80 %)
+Writing at 0x00df6a8b... (80 %)
+Writing at 0x00dfacc3... (80 %)
+Writing at 0x00dfef02... (80 %)
+Writing at 0x00e03136... (80 %)
+Writing at 0x00e07386... (80 %)
+Writing at 0x00e0b5c6... (80 %)
+Writing at 0x00e0f7f7... (81 %)
+Writing at 0x00e13a23... (81 %)
+Writing at 0x00e17c65... (81 %)
+Writing at 0x00e1beaf... (81 %)
+Writing at 0x00e2007f... (81 %)
+Writing at 0x00e242d5... (81 %)
+Writing at 0x00e2850e... (81 %)
+Writing at 0x00e2c74d... (81 %)
+Writing at 0x00e3099f... (81 %)
+Writing at 0x00e34bd4... (82 %)
+Writing at 0x00e38e06... (82 %)
+Writing at 0x00e3d048... (82 %)
+Writing at 0x00e41295... (82 %)
+Writing at 0x00e454cb... (82 %)
+Writing at 0x00e496fb... (82 %)
+Writing at 0x00e4d945... (82 %)
+Writing at 0x00e51b85... (82 %)
+Writing at 0x00e55dca... (82 %)
+Writing at 0x00e5a021... (83 %)
+Writing at 0x00e5e255... (83 %)
+Writing at 0x00e62483... (83 %)
+Writing at 0x00e666ba... (83 %)
+Writing at 0x00e6a8e4... (83 %)
+Writing at 0x00e6eb0b... (83 %)
+Writing at 0x00e72d40... (83 %)
+Writing at 0x00e76f77... (83 %)
+Writing at 0x00e7b1a4... (83 %)
+Writing at 0x00e7f3e6... (84 %)
+Writing at 0x00e83615... (84 %)
+Writing at 0x00e87854... (84 %)
+Writing at 0x00e8baa0... (84 %)
+Writing at 0x00e8fce9... (84 %)
+Writing at 0x00e93f07... (84 %)
+Writing at 0x00e98144... (84 %)
+Writing at 0x00e9c33d... (84 %)
+Writing at 0x00ea0548... (84 %)
+Writing at 0x00ea476f... (85 %)
+Writing at 0x00ea89b3... (85 %)
+Writing at 0x00eacc01... (85 %)
+Writing at 0x00eb0e28... (85 %)
+Writing at 0x00eb5059... (85 %)
+Writing at 0x00eb929a... (85 %)
+Writing at 0x00ebd4e3... (85 %)
+Writing at 0x00ec1713... (85 %)
+Writing at 0x00ec595d... (85 %)
+Writing at 0x00ec9ba3... (86 %)
+Writing at 0x00ecdde9... (86 %)
+Writing at 0x00ed2020... (86 %)
+Writing at 0x00ed6252... (86 %)
+Writing at 0x00eda493... (86 %)
+Writing at 0x00ede6b9... (86 %)
+Writing at 0x00ee28ff... (86 %)
+Writing at 0x00ee6b3a... (86 %)
+Writing at 0x00eead8d... (86 %)
+Writing at 0x00eeefbd... (87 %)
+Writing at 0x00ef31f3... (87 %)
+Writing at 0x00ef7432... (87 %)
+Writing at 0x00efb67c... (87 %)
+Writing at 0x00eff8a6... (87 %)
+Writing at 0x00f03ad3... (87 %)
+Writing at 0x00f07ce9... (87 %)
+Writing at 0x00f0bf1d... (87 %)
+Writing at 0x00f10152... (87 %)
+Writing at 0x00f14381... (88 %)
+Writing at 0x00f185a3... (88 %)
+Writing at 0x00f1c793... (88 %)
+Writing at 0x00f209bd... (88 %)
+Writing at 0x00f24c04... (88 %)
+Writing at 0x00f28e38... (88 %)
+Writing at 0x00f2d067... (88 %)
+Writing at 0x00f312a6... (88 %)
+Writing at 0x00f354f3... (88 %)
+Writing at 0x00f39732... (89 %)
+Writing at 0x00f3d95c... (89 %)
+Writing at 0x00f41b9c... (89 %)
+Writing at 0x00f45dd9... (89 %)
+Writing at 0x00f4a016... (89 %)
+Writing at 0x00f4e258... (89 %)
+Writing at 0x00f524ab... (89 %)
+Writing at 0x00f566ee... (89 %)
+Writing at 0x00f5a92f... (89 %)
+Writing at 0x00f5eb5a... (90 %)
+Writing at 0x00f62db2... (90 %)
+Writing at 0x00f66fef... (90 %)
+Writing at 0x00f6b227... (90 %)
+Writing at 0x00f6f461... (90 %)
+Writing at 0x00f736a4... (90 %)
+Writing at 0x00f778f4... (90 %)
+Writing at 0x00f7bb3d... (90 %)
+Writing at 0x00f7fd8d... (90 %)
+Writing at 0x00f83fd8... (91 %)
+Writing at 0x00f8820d... (91 %)
+Writing at 0x00f8c451... (91 %)
+Writing at 0x00f9068a... (91 %)
+Writing at 0x00f948bb... (91 %)
+Writing at 0x00f98a99... (91 %)
+Writing at 0x00f9ccb3... (91 %)
+Writing at 0x00fa0eea... (91 %)
+Writing at 0x00fa5128... (91 %)
+Writing at 0x00fa935a... (92 %)
+Writing at 0x00fad59f... (92 %)
+Writing at 0x00fb17dc... (92 %)
+Writing at 0x00fb5a27... (92 %)
+Writing at 0x00fb9c71... (92 %)
+Writing at 0x00fbdec0... (92 %)
+Writing at 0x00fc20e4... (92 %)
+Writing at 0x00fc6322... (92 %)
+Writing at 0x00fca558... (92 %)
+Writing at 0x00fce799... (93 %)
+Writing at 0x00fd29bb... (93 %)
+Writing at 0x00fd6be6... (93 %)
+Writing at 0x00fdae09... (93 %)
+Writing at 0x00fdf03e... (93 %)
+Writing at 0x00fe326a... (93 %)
+Writing at 0x00fe7480... (93 %)
+Writing at 0x00feb6b9... (93 %)
+Writing at 0x00fef8fb... (93 %)
+Writing at 0x00ff3b2f... (94 %)
+Writing at 0x00ff7d6d... (94 %)
+Writing at 0x00ffbfb8... (94 %)
+Writing at 0x010001e7... (94 %)
+Writing at 0x01004413... (94 %)
+Writing at 0x0100862e... (94 %)
+Writing at 0x0100c85c... (94 %)
+Writing at 0x01010a86... (94 %)
+Writing at 0x01014cd1... (94 %)
+Writing at 0x01018e9e... (95 %)
+Writing at 0x0101d0ba... (95 %)
+Writing at 0x010212f1... (95 %)
+Writing at 0x0102551b... (95 %)
+Writing at 0x01029762... (95 %)
+Writing at 0x0102d9b0... (95 %)
+Writing at 0x01031be2... (95 %)
+Writing at 0x01035e1c... (95 %)
+Writing at 0x0103a056... (95 %)
+Writing at 0x0103e2a1... (96 %)
+Writing at 0x010424e1... (96 %)
+Writing at 0x010466b6... (96 %)
+Writing at 0x0104b068... (96 %)
+Writing at 0x01050230... (96 %)
+Writing at 0x010553e1... (96 %)
+Writing at 0x0105a590... (96 %)
+Writing at 0x0105f73e... (96 %)
+Writing at 0x01064a11... (96 %)
+Writing at 0x0106a202... (97 %)
+Writing at 0x0106f99b... (97 %)
+Writing at 0x01075151... (97 %)
+Writing at 0x0107a899... (97 %)
+Writing at 0x0107f692... (97 %)
+Writing at 0x01083899... (97 %)
+Writing at 0x01087acc... (97 %)
+Writing at 0x0108bca1... (97 %)
+Writing at 0x0108feda... (97 %)
+Writing at 0x010940f0... (98 %)
+Writing at 0x01098323... (98 %)
+Writing at 0x0109c55e... (98 %)
+Writing at 0x010a0753... (98 %)
+Writing at 0x010a4eff... (98 %)
+Writing at 0x010a913a... (98 %)
+Writing at 0x010ad36d... (98 %)
+Writing at 0x010b15b0... (98 %)
+Writing at 0x010b57f8... (98 %)
+Writing at 0x010b9a45... (99 %)
+Writing at 0x010bdc6c... (99 %)
+Writing at 0x010c1eb2... (99 %)
+Writing at 0x010c60ea... (99 %)
+Writing at 0x010ca8a4... (99 %)
+Writing at 0x010ce9ae... (99 %)
+Writing at 0x010d53fa... (99 %)
+Writing at 0x010dd8a1... (99 %)
+Writing at 0x010e5cd7... (100 %)
+Wrote 15577364 bytes (14706902 compressed) at 0x00210000 in 148.3 seconds (effective 840.4 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+I (168) esp_image: segment 4: paddr=00048404 vaddr=4037839c size=141d8h ( 82392) load
+I (196) esp_image: segment 5: paddr=0005c5e4 vaddr=50000000 size=00020h (    32) load
+I (204) boot: Loaded app from partition at offset 0x10000
+I (204) boot: Disabling RNG early entropy source...
+I (215) MSPI Timing: Enter flash timing tuning
+I (216) octal_psram: vendor id    : 0x0d (AP)
+I (216) octal_psram: dev id       : 0x03 (generation 4)
+I (217) octal_psram: density      : 0x05 (128 Mbit)
+I (222) octal_psram: good-die     : 0x01 (Pass)
+I (226) octal_psram: Latency      : 0x01 (Fixed)
+I (230) octal_psram: VCC          : 0x00 (1.8V)
+I (235) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (240) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (244) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (249) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (254) octal_psram: DriveStrength: 0x00 (1/1)
+I (258) MSPI Timing: Enter psram timing tuning
+I (263) esp_psram: Found 16MB PSRAM device
+I (266) esp_psram: Speed: 80MHz
+I (269) cpu_start: Multicore app
+I (836) esp_psram: SPI SRAM memory test OK
+I (844) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+I (844) cpu_start: Pro cpu start user code
+I (845) cpu_start: cpu freq: 240000000 Hz
+I (846) app_init: Application information:
+I (850) app_init: Project name:     needle_demo
+I (855) app_init: App version:      7cf8a6f-dirty
+I (859) app_init: Compile time:     Sep 25 2026 15:54:41
+I (864) app_init: ELF file SHA256:  8b0e5a483...
+I (868) app_init: ESP-IDF:          v5.5.2
+I (872) efuse_init: Min chip rev:     v0.0
+I (876) efuse_init: Max chip rev:     v0.99 
+I (880) efuse_init: Chip rev:         v0.2
+I (884) heap_init: Initializing. RAM available for dynamic allocation:
+I (890) heap_init: At 3FCC9C38 len 0001FAD8 (126 KiB): RAM
+I (895) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (900) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+I (906) esp_psram: Adding pool of 16384K of PSRAM memory to heap allocator
+I (913) spi_flash: detected chip: mxic (opi)
+I (916) spi_flash: flash io: opi_dtr
+I (920) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (926) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (933) main_task: Started on CPU0
+I (963) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (963) main_task: Calling app_main()
+EVT mapped model=15577364 bytes at 0x3d040000
+WARN drained 46 stale line(s) before the think toggle
+EG2 ok=0 found=0 bytes=0
+LSXCOST fixture_bad=0 cpwA=34 cpwB=25 ratioB_x100=73
+LSX2 mask=1f vals=11.000,22.000,33.000,55.000,66.000
+PV8W selftest trials=128 bad=0 canaries=ok
+KRON1W selftest trials=64 bad=0
+LANEMIX selftest trials=64 bad=0
+LANEMIXROW selftest trials=64 bad=0
+LANEPRE selftest trials=64 bad=0
+KRON1W pool_align=0 kron1=1 lanemix=1 lanemix_row=1 lanepre=1
+EVT ready model=needle3 layers=7 d_model=768 vocab=8192 window=384 tools=3 psram_free=2286364 internal_free=9335
+EVT priming tokens=143 (one-time; every later request reuses this)
+EVT priming 8/143  6%  elapsed=1s  eta=19s
+EVT priming 16/143  11%  elapsed=2s  eta=17s
+EVT priming 24/143  17%  elapsed=3s  eta=15s
+EVT priming 32/143  22%  elapsed=4s  eta=14s
+EVT priming 40/143  28%  elapsed=5s  eta=13s
+EVT priming 48/143  34%  elapsed=6s  eta=12s
+EVT priming 56/143  39%  elapsed=7s  eta=11s
+EVT priming 64/143  45%  elapsed=8s  eta=10s
+EVT priming 72/143  50%  elapsed=9s  eta=9s
+EVT priming 80/143  56%  elapsed=10s  eta=8s
+EVT priming 88/143  62%  elapsed=11s  eta=7s
+EVT priming 96/143  67%  elapsed=12s  eta=6s
+EVT priming 104/143  73%  elapsed=13s  eta=5s
+EVT priming 112/143  78%  elapsed=14s  eta=4s
+EVT priming 120/143  84%  elapsed=15s  eta=3s
+EVT priming 128/143  90%  elapsed=16s  eta=2s
+EVT priming 136/143  95%  elapsed=17s  eta=1s
+EVT priming 143/143  100%  elapsed=18s  eta=0s
+EVT prefix tokens=143 ms=18304 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=31s
+EVT priming 16/213  8%  elapsed=2s  eta=27s
+EVT priming 24/213  11%  elapsed=3s  eta=25s
+EVT priming 32/213  15%  elapsed=4s  eta=23s
+EVT priming 40/213  19%  elapsed=5s  eta=22s
+EVT priming 48/213  23%  elapsed=6s  eta=21s
+EVT priming 56/213  26%  elapsed=7s  eta=20s
+EVT priming 64/213  30%  elapsed=8s  eta=19s
+EVT priming 72/213  34%  elapsed=9s  eta=18s
+EVT priming 80/213  38%  elapsed=10s  eta=17s
+EVT priming 88/213  41%  elapsed=11s  eta=16s
+EVT priming 96/213  45%  elapsed=12s  eta=15s
+EVT priming 104/213  49%  elapsed=13s  eta=14s
+EVT priming 112/213  53%  elapsed=14s  eta=13s
+EVT priming 120/213  56%  elapsed=15s  eta=12s
+EVT priming 128/213  60%  elapsed=16s  eta=11s
+EVT priming 136/213  64%  elapsed=17s  eta=10s
+EVT priming 144/213  68%  elapsed=19s  eta=9s
+EVT priming 152/213  71%  elapsed=20s  eta=8s
+EVT priming 160/213  75%  elapsed=21s  eta=7s
+EVT priming 168/213  79%  elapsed=22s  eta=6s
+EVT priming 176/213  83%  elapsed=23s  eta=5s
+EVT priming 184/213  86%  elapsed=24s  eta=4s
+EVT priming 192/213  90%  elapsed=25s  eta=3s
+EVT priming 200/213  94%  elapsed=26s  eta=2s
+EVT priming 208/213  98%  elapsed=27s  eta=1s
+EVT priming 213/213  100%  elapsed=28s  eta=0s
+EVT prefix tokens=213 ms=27961 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=840 ms_per_tok=140 tps=7.145
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":48261,"free_internal_bytes":8503,"free_psram_bytes":1167528,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":47382,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+ATTACH_DEVICE path=/dev/needle-pi/board2-console real=/dev/needle-pi/board2-console rdev=166.3
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":48295,"free_internal_bytes":8503,"free_psram_bytes":1167528,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":47382,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current7 sampling5 exact=0 prefill_tps=7.46 decode_tps=7.07 tokens=20
+CASE current7 timer60 exact=1 prefill_tps=7.46 decode_tps=7.02 tokens=14
+CASE current7 status_heap exact=1 prefill_tps=7.45 decode_tps=6.9 tokens=10
+CASE current7 batch exact=0 prefill_tps=7.45 decode_tps=7.12 tokens=29
+CASE current7 heldout_timer45 exact=1 prefill_tps=7.46 decode_tps=7.03 tokens=14
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":80015,"free_internal_bytes":8503,"free_psram_bytes":1149604,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":47382,"last_sample_free_internal_bytes":9263,"timer_status":"running","timer_remaining_ms":42896,"timer_fired_count":0}
+CASE current7 route_translate exact=1 prefill_tps=7.12 decode_tps=6.72 tokens=14
+WARN drained 4 stale line(s) before the think toggle
+EVT priming 16/143  11%  elapsed=2s  eta=17s
+EVT priming 24/143  17%  elapsed=3s  eta=15s
+EVT priming 32/143  22%  elapsed=4s  eta=14s
+EVT priming 40/143  28%  elapsed=5s  eta=13s
+EVT priming 48/143  34%  elapsed=6s  eta=12s
+EVT priming 56/143  39%  elapsed=7s  eta=11s
+EVT priming 64/143  45%  elapsed=8s  eta=10s
+EVT priming 72/143  50%  elapsed=9s  eta=9s
+EVT priming 80/143  56%  elapsed=10s  eta=8s
+EVT priming 88/143  62%  elapsed=11s  eta=7s
+EVT priming 96/143  67%  elapsed=12s  eta=6s
+EVT priming 104/143  73%  elapsed=13s  eta=5s
+EVT priming 112/143  78%  elapsed=14s  eta=4s
+EVT priming 120/143  84%  elapsed=15s  eta=3s
+EVT priming 128/143  90%  elapsed=16s  eta=2s
+EVT priming 136/143  95%  elapsed=17s  eta=1s
+EVT priming 143/143  100%  elapsed=18s  eta=0s
+EVT prefix tokens=143 ms=18304 sink=143 (cached for all requests)
+EVT priming tokens=213 (one-time; every later request reuses this)
+EVT priming 8/213  4%  elapsed=1s  eta=31s
+EVT priming 16/213  8%  elapsed=2s  eta=27s
+EVT priming 24/213  11%  elapsed=3s  eta=25s
+EVT priming 32/213  15%  elapsed=4s  eta=23s
+EVT priming 40/213  19%  elapsed=5s  eta=22s
+EVT priming 48/213  23%  elapsed=6s  eta=21s
+EVT priming 56/213  26%  elapsed=7s  eta=20s
+EVT priming 64/213  30%  elapsed=8s  eta=19s
+EVT priming 72/213  34%  elapsed=9s  eta=18s
+EVT priming 80/213  38%  elapsed=10s  eta=17s
+EVT priming 88/213  41%  elapsed=11s  eta=16s
+EVT priming 96/213  45%  elapsed=12s  eta=15s
+EVT priming 104/213  49%  elapsed=13s  eta=14s
+EVT priming 112/213  53%  elapsed=14s  eta=13s
+EVT priming 120/213  56%  elapsed=15s  eta=12s
+EVT priming 128/213  60%  elapsed=16s  eta=11s
+EVT priming 136/213  64%  elapsed=17s  eta=10s
+EVT priming 144/213  68%  elapsed=19s  eta=9s
+EVT priming 152/213  71%  elapsed=20s  eta=8s
+EVT priming 160/213  75%  elapsed=21s  eta=7s
+EVT priming 168/213  79%  elapsed=22s  eta=6s
+EVT priming 176/213  83%  elapsed=23s  eta=5s
+EVT priming 184/213  86%  elapsed=24s  eta=4s
+EVT priming 192/213  90%  elapsed=25s  eta=3s
+EVT priming 200/213  94%  elapsed=26s  eta=2s
+EVT priming 208/213  98%  elapsed=27s  eta=1s
+EVT priming 213/213  100%  elapsed=28s  eta=0s
+EVT prefix tokens=213 ms=27961 sink=213 (cached for all requests)
+EVT cEVT bench tokens=6 ms=840 ms_per_tok=140 tps=7.145
+EVT ==================================================
+EVT  READY - type a request and press enter
+EVT  e.g. "Sample telemetry every 5 seconds"
+EVT  commands: !think (toggle reasoning), !status, !route <request>
+EVT ==================================================
+WARN drained 3 stale line(s) before the think toggle
+EVT think=0
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":48262,"free_internal_bytes":8503,"free_psram_bytes":1167528,"sample_period_s":30,"samples":1,"last_sample_uptime_ms":47382,"last_sample_free_internal_bytes":9263,"timer_status":"idle","timer_remaining_ms":0,"timer_fired_count":0}
+CASE current7 heldout_sampling15 exact=1 prefill_tps=7.46 decode_tps=7.06 tokens=19
+CASE current7 heldout_batch exact=1 prefill_tps=7.44 decode_tps=7.11 tokens=31
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":65416,"free_internal_bytes":8503,"free_psram_bytes":1149604,"sample_period_s":7,"samples":1,"last_sample_uptime_ms":47382,"last_sample_free_internal_bytes":9263,"timer_status":"running","timer_remaining_ms":117870,"timer_fired_count":0}
+CASE current7 route_code exact=0 prefill_tps=7.11 decode_tps=6.67 tokens=13
+CASE current7 heldout_route_timer exact=1 prefill_tps=7.13 decode_tps=6.62 tokens=10
+CASE current7 heldout_route_research exact=1 prefill_tps=7.11 decode_tps=6.67 tokens=13
+EVT think=0
+STATE {"device":"esp32-s3","schema":"agent-watch-v2","layers":7,"model_bytes":15577364,"uptime_ms":85105,"free_internal_bytes":8503,"free_psram_bytes":1149604,"sample_period_s":7,"samples":4,"last_sample_uptime_ms":84286,"last_sample_free_internal_bytes":8919,"timer_status":"running","timer_remaining_ms":98181,"timer_fired_count":0}
+CASE current7 heldout_free_describe exact=0 prefill_tps=7.45 decode_tps=6.9 tokens=10
+COMPLETE current7 {'cases': 12, 'success': 12, 'scored_cases': 12, 'exact_calls': 8, 'decode_tps_mean': 6.9075, 'prefill_tps_mean': 7.3417, 'decode_timed_cases': 12, 'prefill_timed_cases': 12, 'decode_ms_mean': 2361.0833, 'prefill_ms_mean': 2092.0, 'latency_ms_mean': 5085.0417, 'decode_tokens_sum': 197, 'retried': 0}
+Traceback (most recent call last):
+  File "/workspace/esp32-needle-3/benchmarks/run_matrix.py", line 443, in <module>
+    summary.add_argument("--run-id", required=True)
+    ^^^^^^
+  File "/workspace/esp32-needle-3/benchmarks/run_matrix.py", line 437, in main
+    worker.add_argument("--run-id", required=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/esp32-needle-3/benchmarks/run_matrix.py", line 319, in run_board
+    print("CONTINUE after requested 1-layer diagnostic failure", flush=True)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: board 2 finished with one or more failed jobs
